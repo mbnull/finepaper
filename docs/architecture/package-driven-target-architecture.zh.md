@@ -1085,6 +1085,7 @@ NoC Workbench
 ├── Left Dock: Package 安装、已加载 Package、Endpoint Palette
 ├── Center View Tabs
 │   ├── NoC NodeEditor（默认且常驻的核心编辑页）
+│   ├── Domain Configuration（Package 驱动的完整五段配置工作区）
 │   ├── Performance Analysis
 │   ├── Problem Report
 │   └── Package 提供的受控分析/报告页
@@ -1099,7 +1100,7 @@ NoC Workbench
 
 Activity Bar 始终保留一组紧凑图标，用于独立收折或展开左侧 Package、右侧 Inspector 和底部 Diagnostics 面板。它与 Dock 标题栏关闭按钮、View 菜单和快捷键复用同一个显示状态；默认快捷键为 `Ctrl+B`、`Ctrl+Shift+B` 和 `Ctrl+J`。当三个面板全部收折时，NodeEditor 自动占满工作区。
 
-中央视图由一个小型 `WorkbenchViewRegistry` 集中管理。NodeEditor 是不可移除的默认视图；性能分析、问题报告和未来 Package 视图按实际能力注册。第一阶段 Registry 只管理页面身份、标题、实例和顺序；图标、延迟创建或可见性只有出现真实需求时再加入，不发展为通用插件框架。
+中央视图由一个小型 `WorkbenchViewRegistry` 集中管理。NodeEditor 是不可移除的默认视图；Domain Configuration、性能分析、问题报告和未来 Package 视图按实际能力注册。第一阶段 Registry 只管理页面身份、标题、实例和顺序；图标、延迟创建或可见性只有出现真实需求时再加入，不发展为通用插件框架。
 
 底部区域使用固定的结果分类：DRC Problems 展示结构化诊断并可定位到 NodeEditor 元素；Activity Log 展示运行过程和用户操作；Generation Outputs 展示本次运行目录、stdout/stderr 与 artifact 清单。三者不混成一个纯文本日志框。
 
@@ -1434,17 +1435,21 @@ src/
 │   ├── package_json
 │   └── result_json
 ├── gui/
-│   ├── workspace
-│   ├── pages
-│   ├── topology
-│   └── main_window
+│   ├── main_window            # GUI shell 与功能装配
+│   └── workbench_registry
+├── ui/
+│   └── common/                # 无业务语义的跨 feature Qt 控件
+├── features/
+│   ├── domain/                # Domain Workspace、Manager 与 presentation
+│   ├── endpoint/              # 随复杂度增长再迁入
+│   └── topology/              # 随复杂度增长再迁入
 ├── cli/
 │   └── main
 └── api/
     └── adapter                # 未来
 ~~~
 
-这是一张职责图，不是必须创建同名文件、类或库的 contract。阶段一可以把紧密相关的小结构放在同一模块中；只有代码出现真实的独立变化原因时才拆分。package_page_host 在阶段五出现真实需求前不创建。
+这是一张职责图，不是必须创建同名文件、类或库的 contract。`gui` 只保留 Shell、画布和功能装配，复杂交互按 `features/<name>` 形成纵向切片；feature 可以依赖 application 和 `ui/common` 中无业务语义的共享 Qt 控件，不能反向依赖 `gui`，也不能把业务规则塞回 MainWindow。阶段一可以把紧密相关的小结构放在同一模块中；只有代码出现真实的独立变化原因时才拆分。package_page_host 在阶段五出现真实需求前不创建。
 
 建议构建产物：
 

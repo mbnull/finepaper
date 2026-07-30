@@ -1,4 +1,4 @@
-#include "gui/domain_property_form.h"
+#include "features/domain/domain_property_form.h"
 
 #include <QApplication>
 #include <QCheckBox>

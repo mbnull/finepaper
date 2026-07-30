@@ -14,10 +14,15 @@ The target architecture is described in
 - `finepaper.noc` Package with a real Ruby RTL generator, isolated behind the
   Package process boundary.
 - Shared C++ application layer for the CLI and the Qt Widgets GUI.
-- Deterministic Mesh projection and Endpoint-to-Router attachment only.
+- Deterministic Mesh projection with Router topology kept closed, plus editable
+  Endpoint-to-Router attachments.
+- Package-defined Domain instances, memberships, relations, crossing policies
+  and per-edge overrides, with explicit runtime-consumption capabilities.
 - CLI for CI/scripts: Package list/check, design create/validate/generate, and
   one-shot `run`.
-- GUI pages for Start, Overview, Topology, Parameters, Validate and Generate.
+- A dockable NoC Workbench with the NodeEditor, Inspector, Domain Manager,
+  persistent five-section Domain Configuration Workspace, DRC and generation
+  outputs.
 
 ## Build and try it
 
@@ -43,3 +48,10 @@ directory for later GUI sessions.
 Every generation creates a separate `runs/op-*` directory below the chosen
 output root. The input design is copied and normalized there; the generator may
 not modify the original design.
+
+The bundled V3 Package also emits a deterministic
+`*_domain_constraints.json` artifact compiled from Package-defined Domain
+intent and Mesh-derived crossings. It is currently an explicit downstream
+constraint handoff; the legacy RTL backend does not yet instantiate CDC or
+power-crossing cells from it. Router creation, deletion and arbitrary Router
+rewiring remain outside the product boundary.

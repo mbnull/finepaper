@@ -1,7 +1,7 @@
-#include "gui/domain_configuration_dialog.h"
+#include "features/domain/domain_configuration_dialog.h"
 
 #include "application/domain_configuration_draft.h"
-#include "gui/domain_property_form.h"
+#include "features/domain/domain_property_form.h"
 
 #include <QAbstractItemView>
 #include <QComboBox>
@@ -20,6 +20,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSet>
+#include <QSizePolicy>
 #include <QStandardItemModel>
 #include <QTableWidget>
 #include <QTabWidget>
@@ -379,16 +380,27 @@ DomainConfigurationDialog::DomainConfigurationDialog(
     PackageDefinition package,
     DomainConfiguration configuration,
     DomainConfigurationValidator validator,
-    QWidget* parent)
+    QWidget* parent,
+    DomainConfigurationPresentation presentation)
     : QDialog(parent),
       m_baseDesign(std::move(baseDesign)),
       m_package(std::move(package)),
       m_initialConfiguration(configuration),
       m_validator(std::move(validator)),
+      m_presentation(presentation),
       m_impl(new Impl(configuration)) {
-    setObjectName(QStringLiteral("finepaper.domainConfigurationDialog"));
+    const bool embedded = m_presentation
+        == DomainConfigurationPresentation::EmbeddedWorkspace;
+    setObjectName(embedded
+                      ? QStringLiteral(
+                            "finepaper.domainConfigurationWorkspace.editor")
+                      : QStringLiteral("finepaper.domainConfigurationDialog"));
     setWindowTitle(QStringLiteral("Complete Domain Configuration"));
-    setModal(true);
+    setModal(!embedded);
+    if (embedded) {
+        setWindowFlags(Qt::Widget);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    }
     resize(1120, 780);
 
     auto* root = new QVBoxLayout(this);
@@ -495,7 +507,7 @@ DomainConfigurationDialog::DomainConfigurationDialog(
         createPage(m_policies, m_impl->policyActions,
                    QStringLiteral("policies"),
                    {QStringLiteral("ID"), QStringLiteral("Domain Type"),
-                    QStringLiteral("Directed Pair"), QStringLiteral("Properties")}),
+                    QStringLiteral("Boundary Orientation"), QStringLiteral("Properties")}),
         QStringLiteral("Crossing Policies"));
     m_tabs->addTab(
         createPage(m_overrides, m_impl->overrideActions,
@@ -512,13 +524,18 @@ DomainConfigurationDialog::DomainConfigurationDialog(
     m_diagnostics->setMaximumHeight(150);
     root->addWidget(m_diagnostics);
 
-    m_buttons = new QDialogButtonBox(QDialogButtonBox::Ok
-                                      | QDialogButtonBox::Cancel
-                                      | QDialogButtonBox::Reset,
-                                      this);
+    const QDialogButtonBox::StandardButtons standardButtons = embedded
+        ? QDialogButtonBox::Reset
+        : QDialogButtonBox::Ok | QDialogButtonBox::Cancel
+              | QDialogButtonBox::Reset;
+    m_buttons = new QDialogButtonBox(standardButtons, this);
     m_buttons->setObjectName(
         QStringLiteral("finepaper.domainConfiguration.buttons"));
-    m_apply = m_buttons->button(QDialogButtonBox::Ok);
+    m_apply = embedded
+        ? m_buttons->addButton(
+              QStringLiteral("Apply complete configuration"),
+              QDialogButtonBox::AcceptRole)
+        : m_buttons->button(QDialogButtonBox::Ok);
     m_apply->setText(QStringLiteral("Apply complete configuration"));
     m_apply->setObjectName(
         QStringLiteral("finepaper.domainConfiguration.apply"));
@@ -535,8 +552,10 @@ DomainConfigurationDialog::DomainConfigurationDialog(
             this, [this] { updateValidation(true); });
     connect(m_buttons, &QDialogButtonBox::accepted,
             this, [this] { accept(); });
-    connect(m_buttons, &QDialogButtonBox::rejected,
-            this, &QDialog::reject);
+    if (!embedded) {
+        connect(m_buttons, &QDialogButtonBox::rejected,
+                this, &QDialog::reject);
+    }
     connect(m_revert, &QPushButton::clicked,
             this, [this] { revertDraft(); });
 
@@ -1094,9 +1113,11 @@ public:
         auto* root = new QVBoxLayout(this);
         auto* note = new QLabel(
             QStringLiteral("A crossing policy is the single default for one "
-                           "directed Domain pair (from → to). Mesh link direction "
-                           "is canonical west→east or north→south; endpoint "
-                           "attachments are Router→Endpoint."), this);
+                           "canonically oriented Domain boundary (from → to). "
+                           "The physical boundary is bidirectional; this stable "
+                           "orientation is west→east or north→south for Mesh "
+                           "Links and Router→Endpoint for attachments, not a "
+                           "one-way traffic direction."), this);
         note->setWordWrap(true);
         root->addWidget(note);
 
@@ -1259,7 +1280,7 @@ private:
         const QStringList errors = localErrors();
         diagnostics_->setText(errors.isEmpty()
                                   ? QStringLiteral("Local fields are valid. Policy ID and "
-                                                   "directed-pair uniqueness are checked "
+                                                   "canonical boundary-orientation uniqueness are checked "
                                                    "for the complete draft.")
                                   : dialogErrorsText(errors).join(QLatin1Char('\n')));
         ok_->setEnabled(errors.isEmpty());
@@ -1300,11 +1321,12 @@ public:
 
         auto* root = new QVBoxLayout(this);
         auto* note = new QLabel(
-            QStringLiteral("Overrides are exceptions on actual directed crossings. "
-                           "Router Links and their west→east / north→south direction "
-                           "come from the Mesh; endpoint attachments use "
-                           "Router→Endpoint direction. Set-valued crossings remain "
-                           "visible but cannot be overridden."), this);
+            QStringLiteral("Overrides are exceptions on actual oriented, "
+                           "bidirectional physical boundaries. Mesh Links use a "
+                           "stable west→east / north→south orientation and endpoint "
+                           "attachments use Router→Endpoint; neither denotes "
+                           "one-way traffic. Set-valued crossings remain visible "
+                           "but cannot be overridden."), this);
         note->setWordWrap(true);
         root->addWidget(note);
 
@@ -1483,7 +1505,7 @@ private:
         QStringList errors;
         if (!selectedChoice()) {
             errors.append(QStringLiteral(
-                "Choose a singleton crossing with exactly one matching directed default policy."));
+                "Choose a singleton crossing with exactly one matching canonically oriented default policy."));
         }
         errors += properties_->localErrors();
         return errors;
@@ -1531,6 +1553,7 @@ void DomainConfigurationDialog::wireActions() {
     const auto changed = [this] {
         rebuildAll();
         scheduleValidation();
+        notifyDraftStateChanged();
     };
 
     connect(m_impl->domainActions.add, &QPushButton::clicked, this, [this, changed] {
@@ -1705,17 +1728,121 @@ DomainConfiguration DomainConfigurationDialog::configuration() const {
     return m_impl ? m_impl->draft.configuration() : DomainConfiguration{};
 }
 
+bool DomainConfigurationDialog::hasPendingChanges() const {
+    return configuration() != m_initialConfiguration
+        || m_pendingAuthoritativeConfiguration.has_value();
+}
+
+void DomainConfigurationDialog::synchronizeContext(
+    NocDesign baseDesign,
+    PackageDefinition package,
+    DomainConfigurationValidator validator) {
+    if (!m_impl) {
+        return;
+    }
+    if (m_validationTimer) {
+        m_validationTimer->stop();
+    }
+
+    const DomainConfiguration incoming =
+        domain_configuration::fromDesign(baseDesign);
+    const bool hadPendingChanges = hasPendingChanges();
+    const DomainConfiguration currentDraft = configuration();
+    m_baseDesign = std::move(baseDesign);
+    m_package = std::move(package);
+    m_validator = std::move(validator);
+
+    // Normal topology/Endpoint refreshes keep the five-array draft intact.
+    // This Workspace's own Apply is recognized when the incoming authoritative
+    // value equals its draft. Any other Domain change while a draft exists is
+    // an invariant violation: preserve the user's draft, disable Apply, and
+    // require an explicit discard instead of silently swallowing either side.
+    if (!hadPendingChanges || incoming == currentDraft) {
+        m_initialConfiguration = incoming;
+        m_pendingAuthoritativeConfiguration.reset();
+        m_impl->draft.reset(incoming);
+        rebuildAll();
+        notifyDraftStateChanged();
+    } else if (incoming == m_initialConfiguration) {
+        m_pendingAuthoritativeConfiguration.reset();
+    } else {
+        m_pendingAuthoritativeConfiguration = incoming;
+    }
+    updateValidation(true);
+}
+
+void DomainConfigurationDialog::discardDraft() {
+    if (!m_impl || !hasPendingChanges()) {
+        return;
+    }
+    if (m_validationTimer) {
+        m_validationTimer->stop();
+    }
+    if (m_pendingAuthoritativeConfiguration) {
+        m_initialConfiguration = *m_pendingAuthoritativeConfiguration;
+        m_pendingAuthoritativeConfiguration.reset();
+    }
+    m_impl->draft.reset(m_initialConfiguration);
+    rebuildAll();
+    updateValidation(true);
+    notifyDraftStateChanged();
+}
+
+void DomainConfigurationDialog::setBusy(bool busy) {
+    if (m_busy == busy) {
+        return;
+    }
+    m_busy = busy;
+    if (m_tabs) {
+        m_tabs->setEnabled(!m_busy);
+    }
+    if (m_apply) {
+        m_apply->setEnabled(!m_busy && m_validatedResult.success);
+    }
+    if (m_revert) {
+        m_revert->setEnabled(!m_busy && hasPendingChanges());
+    }
+}
+
 void DomainConfigurationDialog::accept() {
+    if (m_busy) {
+        return;
+    }
     if (m_validationTimer) {
         m_validationTimer->stop();
     }
     updateValidation(true);
-    if (m_validatedResult.success) {
+    if (!m_validatedResult.success) {
+        return;
+    }
+    if (m_presentation == DomainConfigurationPresentation::ModalDialog) {
         QDialog::accept();
+        return;
+    }
+
+    if (!workspaceApplyRequested) {
+        m_diagnostics->setPlainText(QStringLiteral(
+            "The Domain Configuration Workspace has no Application Apply "
+            "handler. The validated draft remains unapplied."));
+        return;
+    }
+    const DesignResult result = m_validatedResult;
+    if (workspaceApplyRequested(result)) {
+        m_baseDesign = result.design;
+        m_initialConfiguration = domain_configuration::fromDesign(result.design);
+        m_pendingAuthoritativeConfiguration.reset();
+        m_impl->draft.reset(m_initialConfiguration);
+        rebuildAll();
+        updateValidation(true);
+        notifyDraftStateChanged();
     }
 }
 
 void DomainConfigurationDialog::reject() {
+    if (m_presentation
+        == DomainConfigurationPresentation::EmbeddedWorkspace) {
+        return;
+    }
     if (!m_discardConfirmed
         && !confirmDiscardDraft(QStringLiteral("Closing the complete editor"))) {
         return;
@@ -1727,6 +1854,11 @@ void DomainConfigurationDialog::reject() {
 }
 
 void DomainConfigurationDialog::closeEvent(QCloseEvent* event) {
+    if (m_presentation
+        == DomainConfigurationPresentation::EmbeddedWorkspace) {
+        event->ignore();
+        return;
+    }
     if (m_discardConfirmed || configuration() == m_initialConfiguration) {
         QDialog::closeEvent(event);
         return;
@@ -1875,7 +2007,7 @@ void DomainConfigurationDialog::rebuildAll() {
             .arg(m_overrides->rowCount())
             .arg(m_baseDesign.topology.rows)
             .arg(m_baseDesign.topology.columns));
-    m_revert->setEnabled(configuration() != m_initialConfiguration);
+    m_revert->setEnabled(!m_busy && hasPendingChanges());
 
     m_domains->resizeColumnsToContents();
     m_memberships->resizeColumnsToContents();
@@ -1919,6 +2051,18 @@ void DomainConfigurationDialog::updateValidation(bool authoritative) {
             QStringLiteral("/domainConfiguration"),
             QStringLiteral("finepaper")});
     }
+    if (m_pendingAuthoritativeConfiguration) {
+        m_validatedResult.success = false;
+        m_validatedResult.diagnostics.prepend(Diagnostic{
+            QStringLiteral("error"),
+            QStringLiteral("domain_configuration.external_change_conflict"),
+            QStringLiteral(
+                "The durable Domain configuration changed while this Workspace "
+                "still had an unapplied draft. The draft was preserved. Discard "
+                "it explicitly to load the authoritative configuration."),
+            QStringLiteral("/domainConfiguration"),
+            QStringLiteral("finepaper")});
+    }
     const QString text = diagnosticsText(m_validatedResult.diagnostics);
     if (text.isEmpty()) {
         m_diagnostics->setPlainText(
@@ -1932,25 +2076,36 @@ void DomainConfigurationDialog::updateValidation(bool authoritative) {
         "validationState",
         m_validatedResult.success ? QStringLiteral("valid")
                                   : QStringLiteral("invalid"));
-    m_apply->setEnabled(m_validatedResult.success);
-    m_revert->setEnabled(configuration() != m_initialConfiguration);
+    m_apply->setEnabled(!m_busy && m_validatedResult.success);
+    m_revert->setEnabled(!m_busy && hasPendingChanges());
 }
 
 void DomainConfigurationDialog::revertDraft() {
     if (!m_impl) {
         return;
     }
-    if (configuration() != m_initialConfiguration
+    if (hasPendingChanges()
         && !confirmDiscardDraft(QStringLiteral("Reverting the complete draft"))) {
         return;
+    }
+    if (m_pendingAuthoritativeConfiguration) {
+        m_initialConfiguration = *m_pendingAuthoritativeConfiguration;
+        m_pendingAuthoritativeConfiguration.reset();
     }
     m_impl->draft.reset(m_initialConfiguration);
     rebuildAll();
     updateValidation(true);
+    notifyDraftStateChanged();
+}
+
+void DomainConfigurationDialog::notifyDraftStateChanged() {
+    if (draftStateChanged) {
+        draftStateChanged(hasPendingChanges());
+    }
 }
 
 bool DomainConfigurationDialog::confirmDiscardDraft(const QString& action) {
-    if (configuration() == m_initialConfiguration) {
+    if (!hasPendingChanges()) {
         return true;
     }
 

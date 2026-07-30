@@ -31,6 +31,7 @@ class QWidget;
 namespace finepaper {
 
 class EndpointPaletteList;
+class DomainConfigurationWorkspace;
 class DomainManagerPanel;
 class ElementConfigurationPanel;
 class EndpointConfigurationPanel;
@@ -78,7 +79,10 @@ private:
     void updateUiState();
     void setOperationBusy(bool busy, const QString& message = {});
     void setDirty(bool dirty);
-    bool confirmDiscardPendingDomainAssignments(const QString& action);
+    bool confirmDiscardPendingDomainChanges(const QString& action);
+    bool confirmDiscardPendingDomainWorkspace(const QString& action);
+    void discardPendingDomainChanges();
+    void discardPendingDomainWorkspace();
     bool confirmDiscardPendingEndpointDrafts(const QString& action);
     void discardPendingEndpointDrafts();
     bool canSaveDetachedEndpointDrafts();
@@ -117,7 +121,7 @@ private:
                          bool modalOnError = true);
     void appendActivity(const QString& message);
     void selectCenterView(const QString& id);
-    void beginEndpointDraftDesignSession();
+    void beginDesignSession();
 
     const PackageDefinition* packageByKey(const QString& key) const;
     const PackageDefinition* packageForDesign() const;
@@ -136,8 +140,8 @@ private:
     QString m_designPath;
     bool m_dirty = false;
     bool m_operationBusy = false;
-    quint64 m_endpointDraftDesignSerial = 0;
-    QString m_endpointDraftDesignIdentity;
+    quint64 m_designSessionSerial = 0;
+    QString m_designSessionIdentity;
     QSet<QString> m_runtimeAvailablePackageKeys;
     std::optional<RouterPosition> m_selectedRouter;
     NocEditorSelectionSet m_editorSelection;
@@ -163,6 +167,7 @@ private:
     QTabWidget* m_centerViews = nullptr;
     std::optional<WorkbenchViewRegistry> m_viewRegistry;
     NocNodeEditor* m_nodeEditor = nullptr;
+    DomainConfigurationWorkspace* m_domainConfigurationWorkspace = nullptr;
     QLabel* m_performanceSummary = nullptr;
     QPlainTextEdit* m_problemReport = nullptr;
 

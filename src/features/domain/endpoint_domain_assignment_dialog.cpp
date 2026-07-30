@@ -1,4 +1,4 @@
-#include "gui/endpoint_domain_assignment_dialog.h"
+#include "features/domain/endpoint_domain_assignment_dialog.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>

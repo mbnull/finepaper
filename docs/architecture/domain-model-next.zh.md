@@ -23,7 +23,7 @@ Domain 数据属于 `NocDesign`，参与 dirty、undo、save、validate 和 gene
 1. `domains`：Domain 实例；
 2. `domainMemberships`：Router/Endpoint 的归属；
 3. `domainRelations`：实例之间的 typed 关系；
-4. `crossingPolicies`：同一 Type 两个实例之间的默认 crossing 策略；策略 `id` 全局唯一，且有向 `(domainType, from, to)` 实例对只能有一个默认策略；
+4. `crossingPolicies`：同一 Type 两个实例之间的默认 crossing 策略；策略 `id` 全局唯一，且规范朝向 `(domainType, from, to)` 实例对只能有一个默认策略；
 5. `edgeOverrides`：单条派生边的策略覆盖。
 
 对应公共结构：
@@ -198,6 +198,24 @@ Domain property 沿用基础 scalar 类型、枚举和数值范围，同时增�
 普通 Package 参数仍要求 default。Domain property 则允许没有 default，因为很多属性只能由用户或外部 Engine 决定。
 `referenceDomainType` 属性不能把设计内实例 ID 写成 Manifest default；Package 尚未声明实例，创建流程也不能用魔法字符串猜测引用目标。
 
+声明可编辑 schema 还不等于运行时真正消费这些数据。Package V2/V3 因此必须同时显式声明五个独立的运行时能力，不能用一个含糊的 `supportsDomains` 开关掩盖部分实现：
+
+~~~json
+{
+  "runtimeCapabilities": {
+    "domainConfiguration": {
+      "domains": true,
+      "memberships": true,
+      "relations": true,
+      "crossingPolicies": true,
+      "edgeOverrides": true
+    }
+  }
+}
+~~~
+
+五个字段都是必填 boolean，并采用严格未知字段检查。`memberships`、`relations` 和 `crossingPolicies` 依赖 `domains`；`edgeOverrides` 同时依赖 `domains`、`memberships` 与 `crossingPolicies`，因为 override 只能绑定由 assignment 推导出的 crossing。`false` 是明确的“不消费”承诺，而不是待猜测的默认值。设计中只要填充了对应数据面，执行级 Validate 与 Generate 就必须 fail closed；仅用于编辑草稿的结构校验仍可继续工作，让用户有机会修复或迁移配置。
+
 `defaultInstance` 只允许出现在 `required: true` 的 Domain Type 上，并且只在创建
 请求没有显式 `domainConfiguration` 时使用。它是一个严格对象，只允许 `id`、
 `name` 和 `properties`：
@@ -242,17 +260,21 @@ Finepaper Application 根据当前 Package 保证声明式约束：
 - Domain 是否必须矩形、连续或覆盖特定专有节点；
 - 厂商资源、credit、地址、QoS 和 RTL 映射。
 
+Application 在调用 Package 进程前核对 `runtimeCapabilities.domainConfiguration`。如果运行时没有声明能力，或某个已填充的数据面被明确声明为 `false`，Package Validate/Generate 都不会被调用，并返回定位到相应 Design/Manifest 路径的结构化诊断。这样 GUI 能展示完整可编辑模型，同时不会出现“界面保存成功、生成器静默忽略”的伪支持。
+
 ## 5. Crossing 是派生事实，策略是设计意图
 
 Router Link 和 Endpoint attachment 都由 Mesh 与挂载关系派生。对某一 Domain Type，如果边两端的 assignment 集合不同，则产生 crossing view。多归属 Type 比较规范化后的集合，而不是假设只有一个 Domain。
 
-`crossingPolicies` 表示两个 Domain 实例之间的默认实现意图；`edgeOverrides` 只在某条边需要不同处理时使用。策略 `id` 是全局稳定引用，同一有向 `(domainType, from, to)` 只能声明一个默认策略，反向实例对是另一个独立策略。这样无需给每条普通边持久化重复配置，同时仍能精确表达例外，也不会出现多个“默认值”之间的隐式优先级。
+`crossingPolicies` 表示两个 Domain 实例之间的默认实现意图；`edgeOverrides` 只在某条边需要不同处理时使用。策略 `id` 是全局稳定引用，同一规范朝向 `(domainType, from, to)` 只能声明一个默认策略。这里的 `from/to` 不是单向 traffic channel，而是派生物理边的稳定朝向：Router Link 使用 west→east 或 north→south，Endpoint Attachment 使用 Router→Endpoint。一个 policy/override 必须描述这条双向物理边界的完整处理；Package 若需要不同的正反向参数，应在自己的 crossing property schema 中显式声明两组属性。反向实例对只用于另一条规范朝向上 Domain 分布相反的物理边，不能被误解为同一条链路还必须再绑定第二个 policy。
 
 当前 `edgeOverrides` 只支持 singleton crossing：规范化后的 `fromDomains` 与 `toDomains` 必须各自恰好包含一个实例，所引用 policy 的 `from/to` 必须与这两个实例精确、同向匹配。`multiple` cardinality 仍可以产生并展示 set-valued crossing，但只要任一侧为空或包含多个实例，绑定 override 会以 `domain_edge_override.unsupported_set_crossing` 明确失败，Core/Application 不会从集合中猜选一个实例对。
 
 未来若要让 set-valued crossing 可配置，需要先定义无歧义的集合策略模型，例如显式的实例对矩阵、集合级 policy 或确定的组合/优先级规则，并通过相应的 Design 格式演进开放；不能复用当前单个 policy 引用来隐式代表整个集合关系。
 
-Generator/Engine 接收当前版本的完整 Design。Core 不把 clock、power 或厂商 Type 转成内部特例字段。
+Generator/Engine 接收当前版本的完整 Design。Core 不把 clock、power 或厂商 Type 转成内部特例字段。bundled V3 runtime 会把五组数据编译为确定排序的 `*_domain_constraints.json`：其中包含 Domain 实例、成员、关系、策略、单条边覆盖以及由固定 Mesh/Endpoint attachment 推导出的双向物理 crossing 与最终生效属性。Validate 与 Generate 复用同一编译路径；缺失策略、规范朝向不匹配、无效或未使用的 override 都必须在执行前失败，不能退化成 Design JSON 的原样复制。
+
+`runtimeCapabilities` 的 `true` 表示 Package 进程会校验并物化该数据面，物化目标可以是实现本身，也可以是 Package 明确声明的下游约束 artifact；它不自动等价于“主 RTL 已经插入 CDC/isolation 单元”。当前 bundled V3 的交付闭环止于 `*_domain_constraints.json`，legacy RTL 仍未实例化这些单元。下一阶段应让真正的 IP Engine 消费该 artifact，或者由 Generator 直接落实到 RTL，并用结构测试证明实现变化。
 
 ## 6. 应用层操作
 
@@ -310,6 +332,16 @@ required Type 可以在支持 Domain 的 Package 中用 `defaultInstance` 显式
 创建支持 Domain 的设计时，Application 可以按 Package schema 物化 required Type 的默认实例与归属，但不能按 `clock`、`power` 名称分支。Endpoint 删除应清理其 membership、attachment override 和 attachment element configuration。Mesh 缩小若会令 Endpoint 悬空必须作为硬阻塞；若会删除被裁剪 Router/RouterLink 的 membership、override 或 element configuration，则预览必须完整列出原记录，并要求调用方原样回传精确确认。缺失、额外或已陈旧的确认都应原子失败，不能使用宽泛的 `allowDataLoss` 开关，也不能静默丢数据。
 
 ## 7. GUI 交互目标
+
+Domain GUI 采用 feature slice，而不是继续堆入通用 `src/gui`：
+
+- `src/features/domain/` 保存完整 Workspace、Domain Manager、五页编辑器、schema 表单以及 presentation/projection；
+- `src/ui/common/` 保存跨 feature 与 GUI shell 复用、但不包含业务语义的 Qt 控件；
+- `src/gui/` 只保存 MainWindow、Workbench 注册、画布、主题和功能装配；
+- `src/application/` 保存不依赖 Qt Widgets 的草稿事务、操作和权威校验；
+- `src/noc/` 保存持久化模型与 Mesh 派生不变量。
+
+MainWindow 只负责注册和切换 Domain Workspace，不拥有五页编辑状态。后续 Endpoint、Topology、Package 等复杂能力可以沿用 `src/features/<name>`，避免重新形成一个巨型 GUI 目录。
 
 - Domain Manager 按 Package schema 创建、编辑和删除任意 Type 实例；
 - 完整配置工作台同时提供 Instances、Memberships、Relations、Crossing Policies、Edge Overrides 五个 section，并持续显示整份草稿的 DRC；
@@ -414,8 +446,8 @@ Router 和 RouterLink 仍不是持久化实体。它们的 ID 来自 Mesh 投影
 - Design V2 必须显式提供全部五组 Domain 数组，并拒绝 `elementConfigurations`；
 - Design V3 必须显式提供全部五组 Domain 数组和 `elementConfigurations`；
 - Package V1 不允许出现 `domainTypes` 或 `elementPropertySets`；
-- Package V2 必须显式提供 `domainTypes`，并拒绝 `elementPropertySets`；
-- Package V3 必须显式提供 `domainTypes` 与 `elementPropertySets`；
+- Package V2 必须显式提供 `domainTypes` 与五项 `runtimeCapabilities.domainConfiguration`，并拒绝 `elementPropertySets`；
+- Package V3 必须显式提供 `domainTypes`、五项 `runtimeCapabilities.domainConfiguration` 与 `elementPropertySets`；
 - `replaceDomainConfiguration` 与 create request 的 `domainConfiguration` 支持所有具备 Domain capability 的 Design/Package（当前为 V2/V3），且五个数组必须全部显式存在；
 - 未知更高版本必须失败关闭，不能读入后以旧版本覆盖保存。
 
@@ -438,3 +470,21 @@ V2 -> V3 迁移同样是显式操作：保留五组 Domain 数据，加入空 `e
 对 `/home/bnl/dev/some_else/ipcore` 的只读检查表明，复杂交付会同时记录 Router 的 clock、DTC、DN 等归属，在跨 clock Domain 的 Link 上配置同步/异步实现，并提供独立图层与分领域 DRC。Finepaper 因此需要通用的多 Domain、分层可视化、结构化诊断和进程外 Engine 边界。
 
 参考实现直接证明的是 clock、DTC、DN 等模型，并不等于 Finepaper 只能支持这些名称。power、security、voltage 以及其他 Package Type 必须由同一 schema 表达，也不能假称为对参考交付的原样复制。
+
+## 12. 硬编码边界
+
+减少硬编码不等于删除所有稳定协议字段。以下内容是 Finepaper 公共格式和当前产品边界，可以固定并由测试保护：
+
+- 五组 Domain 数据面的 JSON 字段名；
+- `router`、`endpoint`、`router-link`、`endpoint-attachment` 四种公共引用 kind；
+- 矩形 Mesh、Router/Link 稳定 ID 和派生规则；
+- Package process 的 validate/generate 输入输出协议。
+
+以下内容不得出现在 Core、Application 或通用 GUI 的条件分支中：
+
+- `clock`、`power`、`voltage`、`security` 等 Domain Type ID；
+- `frequencyMHz`、`isolation`、`levelShift` 等属性 ID；
+- 某个厂商节点、资源、crossing 实现或 DRC 的魔法字符串；
+- 根据特定 Package ID 改变通用编辑行为的例外路径。
+
+这些产品语义只能由 Package schema、Package Validator/Generator 或 IP Engine 拥有。bundled `finepaper-noc` runtime 中的参数映射可以是该 Package 的显式适配代码，因为它已经离开公共 Application 边界；如果多个 Package 反复出现同一映射，再把它提升为有版本的公共 schema，而不是先在 Application 中加临时分支。

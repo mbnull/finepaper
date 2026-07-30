@@ -1,4 +1,4 @@
-#include "gui/domain_manager_panel.h"
+#include "features/domain/domain_manager_panel.h"
 
 #include <QApplication>
 #include <QColor>

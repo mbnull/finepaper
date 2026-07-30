@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gui/domain_property_form.h"
+#include "features/domain/domain_property_form.h"
 #include "noc/model.h"
 #include "package/package.h"
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gui/domain_presentation.h"
+#include "features/domain/domain_presentation.h"
 #include "noc/model.h"
 
 #include <QtNodes/Definitions>

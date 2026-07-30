@@ -1,10 +1,10 @@
 #include "gui/main_window.h"
 #include "gui/animated_graphics_view.h"
-#include "gui/domain_manager_panel.h"
+#include "features/domain/domain_manager_panel.h"
 #include "gui/endpoint_configuration_panel.h"
 #include "gui/noc_editor_style.h"
 #include "gui/noc_node_editor.h"
-#include "gui/schema_value_editor.h"
+#include "ui/common/schema_value_editor.h"
 #include "gui/workbench_config.h"
 
 #include <QAction>
@@ -81,10 +81,13 @@ bool waitUntil(const std::function<bool()>& predicate, int timeoutMilliseconds =
 }
 
 class EndpointCreationAutoAccepter final : public QObject {
+public:
+    void setEnabled(bool enabled) { enabled_ = enabled; }
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override {
         auto* dialog = qobject_cast<QDialog*>(watched);
-        if (dialog && event->type() == QEvent::Show
+        if (enabled_ && dialog && event->type() == QEvent::Show
             && dialog->objectName()
                 == QStringLiteral("finepaper.endpointCreationDialog")) {
             QTimer::singleShot(0, dialog, [dialog] {
@@ -100,6 +103,9 @@ protected:
         }
         return QObject::eventFilter(watched, event);
     }
+
+private:
+    bool enabled_ = true;
 };
 
 QAction* actionWithText(QWidget& widget, const QString& text) {
@@ -529,6 +535,25 @@ void chooseMessageBoxButton(QMessageBox::StandardButton button, int attempts = 1
     });
 }
 
+void rejectEndpointCreationDialog(int attempts = 100) {
+    QTimer::singleShot(0, [attempts] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QDialog*>(widget);
+            if (!dialog
+                || dialog->objectName()
+                    != QStringLiteral("finepaper.endpointCreationDialog")) {
+                continue;
+            }
+            dialog->reject();
+            return;
+        }
+        if (attempts > 1) {
+            QTimer::singleShot(
+                10, [attempts] { rejectEndpointCreationDialog(attempts - 1); });
+        }
+    });
+}
+
 void respondToNewDesignDialog(
     const QString& packageKey = {},
     const QString& designName = {},
@@ -580,8 +605,11 @@ void respondToNewDesignDialog(
     });
 }
 
-void respondToMeshResizeDialog(bool accept = false) {
-    QTimer::singleShot(0, [accept] {
+void respondToMeshResizeDialog(
+    bool accept = false,
+    std::optional<int> rows = std::nullopt,
+    std::optional<int> columns = std::nullopt) {
+    QTimer::singleShot(0, [accept, rows, columns] {
         for (QWidget* widget : QApplication::topLevelWidgets()) {
             auto* dialog = qobject_cast<QDialog*>(widget);
             if (!dialog
@@ -603,6 +631,17 @@ void respondToMeshResizeDialog(bool accept = false) {
                               "finepaper.meshResize.removedEdgeOverrides")),
                   QStringLiteral(
                       "Mesh resize dialog exposes topology, assignment, and exact-impact controls"));
+            if (auto* rowEditor = dialog->findChild<QSpinBox*>(
+                    QStringLiteral("finepaper.meshResize.rows"));
+                rowEditor && rows) {
+                rowEditor->setValue(*rows);
+            }
+            if (auto* columnEditor = dialog->findChild<QSpinBox*>(
+                    QStringLiteral("finepaper.meshResize.columns"));
+                columnEditor && columns) {
+                columnEditor->setValue(*columns);
+            }
+            QApplication::processEvents();
             if (auto* buttons = dialog->findChild<QDialogButtonBox*>(
                     QStringLiteral("finepaper.meshResize.buttons"))) {
                 if (QAbstractButton* button = buttons->button(
@@ -724,6 +763,15 @@ bool createDomainPresentationPackage(const QString& sourceRoot,
             {QStringLiteral("crossingProperties"), QJsonArray{}}
         }
     });
+    package.insert(QStringLiteral("runtimeCapabilities"), QJsonObject{
+        {QStringLiteral("domainConfiguration"), QJsonObject{
+            {QStringLiteral("domains"), true},
+            {QStringLiteral("memberships"), true},
+            {QStringLiteral("relations"), true},
+            {QStringLiteral("crossingPolicies"), true},
+            {QStringLiteral("edgeOverrides"), true}
+        }}
+    });
 
     if (!QDir().mkpath(QDir(destinationRoot).filePath(QStringLiteral("runtime/bin")))) {
         return false;
@@ -794,6 +842,15 @@ bool createRequiredRelationPackage(const QString& sourceRoot,
             }},
             {QStringLiteral("crossingProperties"), QJsonArray{}}
         }
+    });
+    package.insert(QStringLiteral("runtimeCapabilities"), QJsonObject{
+        {QStringLiteral("domainConfiguration"), QJsonObject{
+            {QStringLiteral("domains"), true},
+            {QStringLiteral("memberships"), true},
+            {QStringLiteral("relations"), true},
+            {QStringLiteral("crossingPolicies"), true},
+            {QStringLiteral("edgeOverrides"), true}
+        }}
     });
 
     if (!QDir().mkpath(QDir(destinationRoot).filePath(QStringLiteral("runtime/bin")))) {
@@ -984,14 +1041,20 @@ int main(int argc, char** argv) {
     application.processEvents();
 
     auto* centerViews = qobject_cast<QTabWidget*>(window.centralWidget());
-    check(centerViews && centerViews->count() == 3,
-          QStringLiteral("central workbench exposes three switchable views"));
+    check(centerViews && centerViews->count() == 4,
+          QStringLiteral("central workbench exposes four switchable views"));
     if (centerViews) {
         check(centerViews->tabText(0) == QStringLiteral("NoC Editor"),
               QStringLiteral("NoC Editor is the default central view"));
-        check(centerViews->tabText(1) == QStringLiteral("Performance Analysis"),
+        check(centerViews->tabText(1) == QStringLiteral("Domain Configuration")
+                  && centerViews->widget(1)->objectName()
+                      == QStringLiteral(
+                          "finepaper.domainConfigurationWorkspace"),
+              QStringLiteral(
+                  "complete Domain configuration is a first-class persistent central Workspace"));
+        check(centerViews->tabText(2) == QStringLiteral("Performance Analysis"),
               QStringLiteral("performance analysis is a central view"));
-        check(centerViews->tabText(2) == QStringLiteral("Problem Report"),
+        check(centerViews->tabText(3) == QStringLiteral("Problem Report"),
               QStringLiteral("problem report is a central view"));
     }
 
@@ -2874,30 +2937,28 @@ int main(int argc, char** argv) {
               && requiredRelationWindow.isWindowModified(),
           QStringLiteral("New Design recovers Package-required Domain relations through the same atomic complete editor"));
 
-    bool recoveredRelationIsInActiveDesign = false;
-    QTimer::singleShot(0, [&] {
-        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
-        auto* relations = dialog ? dialog->findChild<QTableWidget*>(
-                                       QStringLiteral(
-                                           "finepaper.domainConfiguration.relations"))
-                                 : nullptr;
-        recoveredRelationIsInActiveDesign = dialog
-            && dialog->objectName()
-                == QStringLiteral("finepaper.domainConfigurationDialog")
-            && relations && relations->rowCount() == 1
-            && relations->item(0, 0)->text() == QStringLiteral("poweredBy");
-        if (dialog) {
-            dialog->reject();
-        }
-    });
     auto* requiredRelationComplete = requiredRelationWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.completeConfiguration"));
     if (requiredRelationComplete) {
         requiredRelationComplete->click();
         application.processEvents();
     }
-    check(requiredRelationComplete && recoveredRelationIsInActiveDesign,
-          QStringLiteral("the required relation accepted during creation becomes active Design data"));
+    auto* requiredRelationCenter = qobject_cast<QTabWidget*>(
+        requiredRelationWindow.centralWidget());
+    auto* requiredRelationWorkspace = requiredRelationWindow.findChild<QWidget*>(
+        QStringLiteral("finepaper.domainConfigurationWorkspace"));
+    auto* requiredRelations = requiredRelationWorkspace
+        ? requiredRelationWorkspace->findChild<QTableWidget*>(
+              QStringLiteral("finepaper.domainConfiguration.relations"))
+        : nullptr;
+    check(requiredRelationComplete && requiredRelationCenter
+              && requiredRelationCenter->currentWidget()
+                  == requiredRelationWorkspace
+              && requiredRelations && requiredRelations->rowCount() == 1
+              && requiredRelations->item(0, 0)->text()
+                  == QStringLiteral("poweredBy"),
+          QStringLiteral(
+              "the relation accepted during creation becomes active data in the persistent Domain Workspace"));
     closeDiscarding(requiredRelationWindow);
 
     QTemporaryDir domainPackageRoot(
@@ -3157,33 +3218,37 @@ int main(int argc, char** argv) {
 
     const int callbacksBeforeCompleteConfiguration =
         domainLayerSelectionCallbacks;
-    bool sawCancelledCompleteConfiguration = false;
-    QTimer::singleShot(0, [&] {
-        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
-        auto* domains = dialog ? dialog->findChild<QTableWidget*>(
-                                     QStringLiteral(
-                                         "finepaper.domainConfiguration.domains"))
-                               : nullptr;
-        sawCancelledCompleteConfiguration = dialog
-            && dialog->objectName()
-                == QStringLiteral("finepaper.domainConfigurationDialog")
-            && domains && domains->rowCount() == 3;
-        auto* buttons = dialog ? dialog->findChild<QDialogButtonBox*>(
-                                     QStringLiteral(
-                                         "finepaper.domainConfiguration.buttons"))
-                               : nullptr;
-        if (QAbstractButton* cancel = buttons
-                ? buttons->button(QDialogButtonBox::Cancel) : nullptr) {
-            cancel->click();
-        } else if (dialog) {
-            dialog->reject();
-        }
-    });
     if (domainCompleteConfiguration) {
         domainCompleteConfiguration->click();
         application.processEvents();
     }
-    check(domainCompleteConfiguration && sawCancelledCompleteConfiguration
+    auto* domainCenterViews = qobject_cast<QTabWidget*>(
+        domainWindow.centralWidget());
+    auto* domainConfigurationWorkspace = domainWindow.findChild<QWidget*>(
+        QStringLiteral("finepaper.domainConfigurationWorkspace"));
+    auto* domainWorkspaceDomains = domainConfigurationWorkspace
+        ? domainConfigurationWorkspace->findChild<QTableWidget*>(
+              QStringLiteral("finepaper.domainConfiguration.domains"))
+        : nullptr;
+    auto* domainWorkspaceTabs = domainConfigurationWorkspace
+        ? domainConfigurationWorkspace->findChild<QTabWidget*>(
+              QStringLiteral("finepaper.domainConfiguration.tabs"))
+        : nullptr;
+    auto* domainWorkspaceCapabilities = domainConfigurationWorkspace
+        ? domainConfigurationWorkspace->findChild<QLabel*>(
+              QStringLiteral(
+                  "finepaper.domainConfigurationWorkspace.runtimeCapabilities"))
+        : nullptr;
+    check(domainCompleteConfiguration && domainCenterViews
+              && domainCenterViews->currentWidget()
+                  == domainConfigurationWorkspace
+              && domainWorkspaceTabs && domainWorkspaceTabs->count() == 5
+              && domainWorkspaceDomains
+              && domainWorkspaceDomains->rowCount() == 3
+              && domainWorkspaceCapabilities
+              && domainWorkspaceCapabilities->text().contains(
+                  QStringLiteral("all five"))
+              && QApplication::activeModalWidget() == nullptr
               && !domainWindow.isWindowModified()
               && domainView && domainView->scene() == domainScene
               && domainScene && domainRouter
@@ -3194,18 +3259,18 @@ int main(int argc, char** argv) {
                   == callbacksBeforeCompleteConfiguration
               && domainManagerInstances
               && domainManagerInstances->rowCount() == 2,
-          QStringLiteral("Domain Manager opens the complete editor and Cancel preserves the design, scene, and selection"));
+          QStringLiteral(
+              "Domain Manager switches to the persistent five-page Workspace without mutating the design, scene, or selection"));
 
-    bool sawCompleteConfiguration = false;
+    bool sawCompleteConfiguration = domainConfigurationWorkspace
+        && domainCenterViews
+        && domainCenterViews->currentWidget() == domainConfigurationWorkspace;
     bool sawCompleteDomainEditor = false;
     bool submittedCompleteConfiguration = false;
     std::function<void(int)> applyCompleteConfigurationWhenReady;
     applyCompleteConfigurationWhenReady = [&](int attempts) {
-        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
-        auto* apply = dialog
-            && dialog->objectName()
-                == QStringLiteral("finepaper.domainConfigurationDialog")
-            ? dialog->findChild<QPushButton*>(
+        auto* apply = domainConfigurationWorkspace
+            ? domainConfigurationWorkspace->findChild<QPushButton*>(
                   QStringLiteral("finepaper.domainConfiguration.apply"))
             : nullptr;
         if (apply && apply->isEnabled()) {
@@ -3217,23 +3282,19 @@ int main(int argc, char** argv) {
             QTimer::singleShot(20, [&, attempts] {
                 applyCompleteConfigurationWhenReady(attempts - 1);
             });
-        } else if (dialog) {
-            dialog->reject();
         }
     };
     QTimer::singleShot(0, [&] {
-        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
-        sawCompleteConfiguration = dialog
-            && dialog->objectName()
-                == QStringLiteral("finepaper.domainConfigurationDialog");
-        auto* addDomain = dialog ? dialog->findChild<QPushButton*>(
-                                      QStringLiteral(
-                                          "finepaper.domainConfiguration.domains.add"))
-                                 : nullptr;
+        sawCompleteConfiguration = domainConfigurationWorkspace
+            && domainCenterViews
+            && domainCenterViews->currentWidget()
+                == domainConfigurationWorkspace;
+        auto* addDomain = domainConfigurationWorkspace
+            ? domainConfigurationWorkspace->findChild<QPushButton*>(
+                  QStringLiteral(
+                      "finepaper.domainConfiguration.domains.add"))
+            : nullptr;
         if (!addDomain) {
-            if (dialog) {
-                dialog->reject();
-            }
             return;
         }
         QTimer::singleShot(0, [&] {
@@ -3280,15 +3341,20 @@ int main(int argc, char** argv) {
     });
     if (domainCompleteConfiguration) {
         domainCompleteConfiguration->click();
-        application.processEvents();
+        waitUntil([&submittedCompleteConfiguration] {
+            return submittedCompleteConfiguration;
+        }, 4000);
         application.processEvents();
     }
 
     const int zoneCRow = domainInstanceRow(QStringLiteral("zone-c"));
-    check(sawCompleteConfiguration && sawCompleteDomainEditor
-              && submittedCompleteConfiguration
-              && domainWindow.isWindowModified()
-              && zoneCRow >= 0
+    check(sawCompleteConfiguration,
+          QStringLiteral("the persistent Domain Workspace remains selected for complete editing"));
+    check(sawCompleteDomainEditor,
+          QStringLiteral("Workspace Domain Add opens the existing schema-driven record editor"));
+    check(submittedCompleteConfiguration,
+          QStringLiteral("the complete Workspace draft becomes valid and enables atomic Apply"));
+    check(domainWindow.isWindowModified() && zoneCRow >= 0
               && domainManagerInstances
               && domainManagerInstances->rowCount() == 3
               && domainManagerInstances->item(zoneCRow, 1)->text()
@@ -3371,6 +3437,44 @@ int main(int argc, char** argv) {
                      QStringLiteral("edgeOverrides")).toArray().isEmpty(),
           QStringLiteral("saving complete Domain configuration persists all five arrays, the added optional Domain, and the existing default policy"));
 
+    int workspaceZoneCRow = -1;
+    if (domainWorkspaceDomains) {
+        for (int row = 0; row < domainWorkspaceDomains->rowCount(); ++row) {
+            QTableWidgetItem* id = domainWorkspaceDomains->item(row, 2);
+            if (id && id->text() == QStringLiteral("zone-c")) {
+                workspaceZoneCRow = row;
+                break;
+            }
+        }
+    }
+    auto* deleteWorkspaceDomain = domainConfigurationWorkspace
+        ? domainConfigurationWorkspace->findChild<QPushButton*>(
+              QStringLiteral("finepaper.domainConfiguration.domains.delete"))
+        : nullptr;
+    auto* revertWorkspaceDraft = domainConfigurationWorkspace
+        ? domainConfigurationWorkspace->findChild<QPushButton*>(
+              QStringLiteral("finepaper.domainConfiguration.revert"))
+        : nullptr;
+    if (domainWorkspaceDomains && deleteWorkspaceDomain
+        && workspaceZoneCRow >= 0) {
+        domainWorkspaceDomains->selectRow(workspaceZoneCRow);
+        deleteWorkspaceDomain->click();
+        application.processEvents();
+    }
+    check(workspaceZoneCRow >= 0 && revertWorkspaceDraft
+              && revertWorkspaceDraft->isEnabled()
+              && domainWorkspaceDomains
+              && domainWorkspaceDomains->rowCount() == 3
+              && domainManagerInstances
+              && domainManagerInstances->rowCount() == 3
+              && !domainWindow.isWindowModified(),
+          QStringLiteral(
+              "a persistent complete-configuration draft remains separate from durable quick-Manager data"));
+    if (domainCenterViews) {
+        domainCenterViews->setCurrentIndex(0);
+        application.processEvents();
+    }
+
     if (domainManagerTabs) {
         domainManagerTabs->setCurrentIndex(1);
     }
@@ -3406,7 +3510,7 @@ int main(int argc, char** argv) {
               && zoneBAssignment->checkState() == Qt::PartiallyChecked,
           QStringLiteral("two Routers with different generic multiple assignments expose Mixed tri-state choices"));
 
-    const int callbacksBeforeDomainApply = domainLayerSelectionCallbacks;
+    int callbacksBeforeDomainApply = domainLayerSelectionCallbacks;
     if (zoneAAssignment && zoneBAssignment) {
         zoneAAssignment->setCheckState(Qt::Checked);
         zoneBAssignment->setCheckState(Qt::Unchecked);
@@ -3415,6 +3519,44 @@ int main(int argc, char** argv) {
     check(domainApplyAssignment && domainApplyAssignment->isEnabled()
               && !domainWindow.isWindowModified(),
           QStringLiteral("editing Mixed choices stages an explicit atomic assignment without mutating the design"));
+
+    auto* domainEndpointPalette = domainWindow.findChild<QListWidget*>(
+        QStringLiteral("finepaper.endpointPalette"));
+    if (domainScene && domainRouter && domainRouterGraphics
+        && domainEndpointPalette && domainEndpointPalette->count() > 0) {
+        domainScene->clearSelection();
+        domainRouterGraphics->setSelected(true);
+        domainScene->nodeSelected(*domainRouter);
+        application.processEvents();
+        endpointCreationAutoAccepter.setEnabled(false);
+        chooseMessageBoxButton(QMessageBox::Discard);
+        rejectEndpointCreationDialog();
+        domainEndpointPalette->itemDoubleClicked(
+            domainEndpointPalette->item(0));
+        application.processEvents();
+        endpointCreationAutoAccepter.setEnabled(true);
+    }
+    zoneAAssignment = domainAssignmentItem(QStringLiteral("zone-a"));
+    zoneBAssignment = domainAssignmentItem(QStringLiteral("zone-b"));
+    check(domainEndpointPalette && domainEndpointPalette->count() > 0
+              && domainApplyAssignment && domainApplyAssignment->isEnabled()
+              && zoneAAssignment
+              && zoneAAssignment->checkState() == Qt::Checked
+              && zoneBAssignment
+              && zoneBAssignment->checkState() == Qt::Unchecked
+              && revertWorkspaceDraft && revertWorkspaceDraft->isEnabled()
+              && domainWorkspaceDomains
+              && domainWorkspaceDomains->rowCount() == 3
+              && !domainWindow.isWindowModified(),
+          QStringLiteral(
+              "authorizing discard before Endpoint creation keeps both quick and complete Domain drafts when the later Endpoint dialog is cancelled"));
+    if (domainScene && domainRouterGraphics && domainRouter1Graphics) {
+        domainScene->clearSelection();
+        domainRouterGraphics->setSelected(true);
+        domainRouter1Graphics->setSelected(true);
+        application.processEvents();
+    }
+    callbacksBeforeDomainApply = domainLayerSelectionCallbacks;
 
     QAction* pendingDomainSave = actionWithText(
         domainWindow, QStringLiteral("Save"));
@@ -3433,11 +3575,27 @@ int main(int argc, char** argv) {
     }
     check(pendingDomainSave && pendingDomainValidate && pendingDomainGenerate
               && domainApplyAssignment->isEnabled()
+              && revertWorkspaceDraft && revertWorkspaceDraft->isEnabled()
               && !domainWindow.operationBusy()
               && !domainWindow.isWindowModified(),
-          QStringLiteral("Save, Validate and Generate cannot silently ignore a staged Domain assignment"));
+          QStringLiteral(
+              "Save, Validate and Generate cannot silently ignore quick or complete Domain drafts"));
 
     if (domainApplyAssignment) {
+        chooseMessageBoxButton(QMessageBox::Cancel);
+        domainApplyAssignment->click();
+        application.processEvents();
+    }
+    check(domainApplyAssignment && domainApplyAssignment->isEnabled()
+              && revertWorkspaceDraft && revertWorkspaceDraft->isEnabled()
+              && domainWorkspaceDomains
+              && domainWorkspaceDomains->rowCount() == 3
+              && domainManagerInstances
+              && domainManagerInstances->rowCount() == 3,
+          QStringLiteral(
+              "cancelling quick Manager Apply preserves both its assignment draft and the complete Workspace draft"));
+    if (domainApplyAssignment) {
+        chooseMessageBoxButton(QMessageBox::Discard);
         domainApplyAssignment->click();
         application.processEvents();
         application.processEvents();
@@ -3466,8 +3624,12 @@ int main(int argc, char** argv) {
               && domainAssignmentState->property("assignmentState").toString()
                   == QStringLiteral("common")
               && zoneAAssignment && zoneAAssignment->checkState() == Qt::Checked
-              && zoneBAssignment && zoneBAssignment->checkState() == Qt::Unchecked,
-          QStringLiteral("one Apply atomically converges every selected Router on the requested assignment set"));
+              && zoneBAssignment && zoneBAssignment->checkState() == Qt::Unchecked
+              && revertWorkspaceDraft && !revertWorkspaceDraft->isEnabled()
+              && domainWorkspaceDomains
+              && domainWorkspaceDomains->rowCount() == 4,
+          QStringLiteral(
+              "one quick Apply atomically converges the selected Routers and discards the separately authorized complete Workspace draft only after success"));
     check(domainView && domainView->scene() == domainScene
               && domainScene && domainRouter && domainRouter1
               && domainScene->nodeGraphicsObject(*domainRouter)
@@ -3529,6 +3691,118 @@ int main(int argc, char** argv) {
               && persistedAssignment(QStringLiteral("r-1-0"))
                   == QStringList{QStringLiteral("zone-a")},
           QStringLiteral("saving clears dirty state and persists the atomic generic Domain assignment"));
+
+    const auto stageCompleteDomainDraft = [&domainWindow]() {
+        auto* workspace = domainWindow.findChild<QWidget*>(
+            QStringLiteral("finepaper.domainConfigurationWorkspace"));
+        auto* domains = workspace ? workspace->findChild<QTableWidget*>(
+                                        QStringLiteral(
+                                            "finepaper.domainConfiguration.domains"))
+                                  : nullptr;
+        auto* remove = workspace ? workspace->findChild<QPushButton*>(
+                                       QStringLiteral(
+                                           "finepaper.domainConfiguration.domains.delete"))
+                                 : nullptr;
+        int row = -1;
+        if (domains) {
+            for (int index = 0; index < domains->rowCount(); ++index) {
+                QTableWidgetItem* id = domains->item(index, 2);
+                if (id && id->text() == QStringLiteral("zone-c")) {
+                    row = index;
+                    break;
+                }
+            }
+        }
+        if (domains && remove && row >= 0) {
+            domains->selectRow(row);
+            remove->click();
+            QApplication::processEvents();
+        }
+        auto* revert = workspace ? workspace->findChild<QPushButton*>(
+                                       QStringLiteral(
+                                           "finepaper.domainConfiguration.revert"))
+                                 : nullptr;
+        return row >= 0 && revert && revert->isEnabled();
+    };
+    const auto completeDomainDraftPending = [&domainWindow] {
+        auto* revert = domainWindow.findChild<QPushButton*>(
+            QStringLiteral("finepaper.domainConfiguration.revert"));
+        return revert && revert->isEnabled();
+    };
+
+    check(stageCompleteDomainDraft(),
+          QStringLiteral("a complete Domain draft can be staged before Validate"));
+    chooseMessageBoxButton(QMessageBox::Discard);
+    if (pendingDomainValidate) {
+        pendingDomainValidate->trigger();
+        application.processEvents();
+    }
+    const bool validateDiscardedAtStart = pendingDomainValidate
+        && !completeDomainDraftPending();
+    waitUntil([&domainWindow] { return !domainWindow.operationBusy(); });
+    check(validateDiscardedAtStart,
+          QStringLiteral(
+              "Validate discards an authorized complete Domain draft only when the async operation actually starts"));
+
+    check(stageCompleteDomainDraft(),
+          QStringLiteral("a complete Domain draft can be staged before Generate"));
+    chooseMessageBoxButton(QMessageBox::Discard);
+    QTimer::singleShot(250, [] {
+        chooseMessageBoxButton(QMessageBox::Ok);
+    });
+    if (pendingDomainGenerate) {
+        pendingDomainGenerate->trigger();
+        application.processEvents();
+    }
+    const bool generateDiscardedAtStart = pendingDomainGenerate
+        && !completeDomainDraftPending();
+    waitUntil([&domainWindow] { return !domainWindow.operationBusy(); });
+    check(generateDiscardedAtStart,
+          QStringLiteral(
+              "Generate discards an authorized complete Domain draft only when the async operation actually starts"));
+
+    check(stageCompleteDomainDraft(),
+          QStringLiteral("a complete Domain draft can be staged before Mesh resize"));
+    QAction* domainResizeAction = domainWindow.findChild<QAction*>(
+        QStringLiteral("finepaper.resizeMeshAction"));
+    respondToMeshResizeDialog(true, 1, 3);
+    chooseMessageBoxButton(QMessageBox::Discard);
+    if (domainResizeAction) {
+        domainResizeAction->trigger();
+        application.processEvents();
+    }
+    check(domainResizeAction && !completeDomainDraftPending()
+              && domainWindow.isWindowModified(),
+          QStringLiteral(
+              "successful Mesh resize commits the previously authorized Domain-draft discard"));
+    if (domainSaveAction) {
+        domainSaveAction->trigger();
+        application.processEvents();
+    }
+
+    check(stageCompleteDomainDraft(),
+          QStringLiteral("a complete Domain draft can be staged before Open"));
+    chooseMessageBoxButton(QMessageBox::Discard);
+    const bool reopenedDomainDesign = domainWindow.openDesignFile(
+        domainDesignPath);
+    application.processEvents();
+    check(reopenedDomainDesign && !completeDomainDraftPending()
+              && !domainWindow.isWindowModified(),
+          QStringLiteral(
+              "successful Open commits the authorized Domain-draft discard and starts a new design session"));
+
+    check(stageCompleteDomainDraft(),
+          QStringLiteral("a complete Domain draft can be staged before New Design"));
+    chooseMessageBoxButton(QMessageBox::Discard);
+    createDesignThroughDialog(
+        domainWindow,
+        QStringLiteral("test.domain-presentation@1.0.0"),
+        QStringLiteral("replacement_domain_design"),
+        1,
+        2);
+    check(!completeDomainDraftPending() && domainWindow.isWindowModified(),
+          QStringLiteral(
+              "successful New Design commits the authorized Domain-draft discard and starts a new design session"));
     if (domainEditor) {
         domainEditor->semanticSelectionChanged = domainMainWindowSelectionHandler;
     }

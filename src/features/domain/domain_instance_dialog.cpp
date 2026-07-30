@@ -1,4 +1,4 @@
-#include "gui/domain_instance_dialog.h"
+#include "features/domain/domain_instance_dialog.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>

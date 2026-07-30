@@ -1,6 +1,6 @@
 #include "gui/endpoint_configuration_panel.h"
 
-#include "gui/endpoint_domain_assignment_dialog.h"
+#include "features/domain/endpoint_domain_assignment_dialog.h"
 #include "gui/package_parameter_form.h"
 
 #include <QComboBox>

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "application/domain_assignment.h"
-#include "gui/domain_manager_projection.h"
-#include "gui/domain_presentation.h"
+#include "features/domain/domain_manager_projection.h"
+#include "features/domain/domain_presentation.h"
 
 #include <QSet>
 #include <QString>

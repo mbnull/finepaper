@@ -1,4 +1,5 @@
-#include "gui/domain_configuration_dialog.h"
+#include "features/domain/domain_configuration_dialog.h"
+#include "features/domain/domain_configuration_workspace.h"
 
 #include "application/domain_configuration.h"
 
@@ -7,6 +8,7 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QEventLoop>
+#include <QLabel>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -83,6 +85,9 @@ PackageDefinition domainPackage() {
     package.name = QStringLiteral("Domain configuration dialog test");
     package.version = QStringLiteral("1.0.0");
     package.domainTypes = {power, clock};
+    package.runtimeCapabilities.domainConfiguration =
+        DomainConfigurationRuntimeCapabilities{
+            true, true, true, true, true};
     return package;
 }
 
@@ -805,7 +810,7 @@ void setValuedCrossingsAreVisibleButCannotBeOverridden() {
         auto* crossings = editor->findChild<QComboBox*>(
             QStringLiteral("finepaper.domainConfiguration.overrideDialog.edge"));
         check(crossings != nullptr,
-              QStringLiteral("Override Add exposes the projected directed crossings"));
+              QStringLiteral("Override Add exposes the projected canonically oriented crossings"));
         if (crossings) {
             candidateCount = crossings->count();
             for (int index = 0; index < crossings->count(); ++index) {
@@ -834,6 +839,179 @@ void setValuedCrossingsAreVisibleButCannotBeOverridden() {
     dialog.close();
 }
 
+void persistentWorkspaceAppliesAndProtectsDrafts() {
+    PackageDefinition package = domainPackage();
+    const DomainConfiguration initial = completeConfiguration();
+    NocDesign design = domain_configuration::replace(baseDesign(), initial);
+    int applyRequests = 0;
+
+    DomainConfigurationWorkspace workspace;
+    workspace.resize(980, 700);
+    workspace.applyRequested = [&applyRequests](const DesignResult& result) {
+        ++applyRequests;
+        return result.success;
+    };
+    workspace.setContext(
+        &design,
+        &package,
+        QStringLiteral("workspace-session"),
+        [&design](const DomainConfiguration& configuration) {
+            return acceptedResult(design, configuration);
+        });
+    workspace.show();
+    processEventsFor();
+
+    auto* editor = dynamic_cast<DomainConfigurationDialog*>(
+        workspace.findChild<QWidget*>(
+            QStringLiteral("finepaper.domainConfigurationWorkspace.editor")));
+    auto* tabs = workspace.findChild<QTabWidget*>(
+        QStringLiteral("finepaper.domainConfiguration.tabs"));
+    auto* overrides = workspace.findChild<QTableWidget*>(
+        QStringLiteral("finepaper.domainConfiguration.overrides"));
+    auto* removeOverride = workspace.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainConfiguration.overrides.delete"));
+    auto* apply = workspace.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainConfiguration.apply"));
+    auto* capabilities = workspace.findChild<QLabel*>(
+        QStringLiteral(
+            "finepaper.domainConfigurationWorkspace.runtimeCapabilities"));
+    check(editor && tabs && tabs->count() == 5 && overrides
+              && removeOverride && apply && capabilities
+              && capabilities->text().contains(QStringLiteral("all five")),
+          QStringLiteral(
+              "the center Workspace persistently embeds the existing five-page editor and Package consumption summary"));
+    if (!editor || !overrides || !removeOverride || !apply) {
+        return;
+    }
+
+    overrides->selectRow(0);
+    removeOverride->click();
+    processEventsFor();
+    check(workspace.hasPendingChanges() && overrides->rowCount() == 0
+              && apply->isEnabled(),
+          QStringLiteral(
+              "editing a Workspace section creates one validated atomic draft"));
+    apply->click();
+    processEventsFor();
+    check(applyRequests == 1 && !workspace.hasPendingChanges()
+              && workspace.isVisible() && editor->isVisible()
+              && tabs->count() == 5,
+          QStringLiteral(
+              "Workspace Apply adopts atomically without closing or recreating the editor"));
+
+    overrides->selectRow(-1);
+    // Re-establish an editable row, then stage a change which must survive an
+    // unexpected authoritative Domain update.
+    design = domain_configuration::replace(design, initial);
+    workspace.setContext(
+        &design,
+        &package,
+        QStringLiteral("workspace-session"),
+        [&design](const DomainConfiguration& configuration) {
+            return acceptedResult(design, configuration);
+        });
+    overrides = workspace.findChild<QTableWidget*>(
+        QStringLiteral("finepaper.domainConfiguration.overrides"));
+    removeOverride = workspace.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainConfiguration.overrides.delete"));
+    if (overrides && removeOverride && overrides->rowCount() == 1) {
+        overrides->selectRow(0);
+        removeOverride->click();
+        processEventsFor();
+    }
+
+    DomainConfiguration external = initial;
+    external.domains.append(DomainDefinition{
+        QStringLiteral("p1"), QStringLiteral("power"),
+        QStringLiteral("External power"), {}});
+    NocDesign externalDesign = domain_configuration::replace(design, external);
+    workspace.setContext(
+        &externalDesign,
+        &package,
+        QStringLiteral("workspace-session"),
+        [&externalDesign](const DomainConfiguration& configuration) {
+            return acceptedResult(externalDesign, configuration);
+        });
+    auto* diagnostics = workspace.findChild<QPlainTextEdit*>(
+        QStringLiteral("finepaper.domainConfiguration.diagnostics"));
+    apply = workspace.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainConfiguration.apply"));
+    check(workspace.hasPendingChanges() && diagnostics
+              && diagnostics->toPlainText().contains(
+                  QStringLiteral(
+                      "domain_configuration.external_change_conflict"))
+              && apply && !apply->isEnabled(),
+          QStringLiteral(
+              "an unexpected authoritative Domain change preserves the Workspace draft and fails closed"));
+    workspace.discardPendingChanges();
+    processEventsFor();
+    auto* domains = workspace.findChild<QTableWidget*>(
+        QStringLiteral("finepaper.domainConfiguration.domains"));
+    overrides = workspace.findChild<QTableWidget*>(
+        QStringLiteral("finepaper.domainConfiguration.overrides"));
+    check(!workspace.hasPendingChanges() && domains
+              && domains->rowCount() == external.domains.size()
+              && overrides && overrides->rowCount() == 1,
+          QStringLiteral(
+              "explicit discard resolves a conflict by loading the authoritative five-array configuration"));
+
+    PackageDefinition partialPackage = package;
+    partialPackage.runtimeCapabilities.domainConfiguration =
+        DomainConfigurationRuntimeCapabilities{
+            true, true, false, true, false};
+    workspace.setContext(
+        &externalDesign,
+        &partialPackage,
+        QStringLiteral("partial-capability-session"),
+        [&externalDesign](const DomainConfiguration& configuration) {
+            return acceptedResult(externalDesign, configuration);
+        });
+    capabilities = workspace.findChild<QLabel*>(
+        QStringLiteral(
+            "finepaper.domainConfigurationWorkspace.runtimeCapabilities"));
+    check(capabilities
+              && capabilities->text().contains(QStringLiteral("Relations"))
+              && capabilities->text().contains(QStringLiteral("Edge Overrides"))
+              && capabilities->text().contains(QStringLiteral("fail closed")),
+          QStringLiteral(
+              "Workspace reports unsupported data planes generically without Domain-type hardcoding"));
+
+    workspace.setContext(
+        &externalDesign,
+        nullptr,
+        QStringLiteral("missing-package-session"),
+        {});
+    auto* readOnlySnapshot = workspace.findChild<QPlainTextEdit*>(
+        QStringLiteral(
+            "finepaper.domainConfigurationWorkspace.readOnlySnapshot"));
+    check(readOnlySnapshot && readOnlySnapshot->isVisible()
+              && readOnlySnapshot->isReadOnly()
+              && readOnlySnapshot->toPlainText().contains(
+                  QStringLiteral("\"domains\""))
+              && readOnlySnapshot->toPlainText().contains(
+                  QStringLiteral("\"domainMemberships\""))
+              && readOnlySnapshot->toPlainText().contains(
+                  QStringLiteral("\"crossingPolicies\"")),
+          QStringLiteral(
+              "a missing Package keeps all persisted Domain planes inspectable as a generic read-only snapshot"));
+
+    NocDesign legacyDesign = externalDesign;
+    legacyDesign.formatVersion = 1;
+    workspace.setContext(
+        &legacyDesign,
+        nullptr,
+        QStringLiteral("legacy-missing-package-session"),
+        {});
+    auto* status = workspace.findChild<QLabel*>(
+        QStringLiteral("finepaper.domainConfigurationWorkspace.status"));
+    check(readOnlySnapshot && !readOnlySnapshot->isVisible()
+              && status && status->isVisible()
+              && status->text().contains(
+                  QStringLiteral("does not expose Domain configuration")),
+          QStringLiteral(
+              "a legacy Design without Domain fields never receives a fabricated five-plane snapshot"));
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -848,6 +1026,7 @@ int main(int argc, char** argv) {
     overridePropertiesUsePartialValidation();
     newOverrideDoesNotCopyPolicyDefaults();
     setValuedCrossingsAreVisibleButCannotBeOverridden();
+    persistentWorkspaceAppliesAndProtectsDrafts();
 
     if (failures == 0) {
         QTextStream(stdout) << "All Domain configuration dialog tests passed"

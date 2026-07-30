@@ -1,5 +1,5 @@
 #include "application/endpoint_domain_assignment.h"
-#include "gui/endpoint_domain_assignment_dialog.h"
+#include "features/domain/endpoint_domain_assignment_dialog.h"
 
 #include <QApplication>
 #include <QComboBox>

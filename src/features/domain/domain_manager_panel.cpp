@@ -1,6 +1,6 @@
-#include "gui/domain_manager_panel.h"
+#include "features/domain/domain_manager_panel.h"
 
-#include "gui/domain_instance_dialog.h"
+#include "features/domain/domain_instance_dialog.h"
 
 #include <QAbstractItemView>
 #include <QComboBox>
@@ -71,7 +71,7 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     root->addWidget(m_status);
 
     m_completeConfiguration = new QPushButton(
-        QStringLiteral("Open complete Domain configuration…"));
+        QStringLiteral("Open Domain Configuration workspace"));
     m_completeConfiguration->setObjectName(
         QStringLiteral("finepaper.domainManager.completeConfiguration"));
     root->addWidget(m_completeConfiguration);
@@ -272,8 +272,8 @@ void DomainManagerPanel::setContext(const NocDesign* design,
             "This Package explicitly declares no Domain types."));
     } else {
         m_status->setText(QStringLiteral(
-            "Use the quick tabs for common instance/selection edits, or open "
-            "the complete working copy for memberships, relations, default "
+            "Use the quick tabs for common instance/selection edits, or switch "
+            "to the persistent Domain Configuration workspace for memberships, relations, default "
             "crossing policies, and edge overrides. Use the selection helpers "
             "or the canvas Select mode for bulk assignment. Routers and Router "
             "Links remain fixed projections of the Mesh."));

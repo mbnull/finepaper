@@ -1,4 +1,4 @@
-#include "gui/domain_manager_projection.h"
+#include "features/domain/domain_manager_projection.h"
 
 #include <QSet>
 

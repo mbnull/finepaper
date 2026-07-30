@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gui/schema_value_editor.h"
+#include "ui/common/schema_value_editor.h"
 
 #include <QJsonObject>
 #include <QStringList>

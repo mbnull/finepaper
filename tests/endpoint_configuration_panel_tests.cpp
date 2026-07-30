@@ -1,7 +1,7 @@
 #include "application/endpoint_configuration.h"
 #include "gui/endpoint_configuration_panel.h"
 #include "gui/package_parameter_form.h"
-#include "gui/schema_value_editor.h"
+#include "ui/common/schema_value_editor.h"
 
 #include <QApplication>
 #include <QComboBox>

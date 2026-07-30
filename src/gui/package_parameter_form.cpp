@@ -1,6 +1,6 @@
 #include "gui/package_parameter_form.h"
 
-#include "gui/schema_value_editor.h"
+#include "ui/common/schema_value_editor.h"
 
 #include <QFormLayout>
 #include <QGroupBox>
