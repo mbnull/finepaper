@@ -173,6 +173,22 @@ target("finepaper-domain-manager-panel-tests")
         runenvs = {QT_QPA_PLATFORM = "offscreen"}
     })
 
+target("finepaper-domain-configuration-dialog-tests")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/domain_configuration_dialog_tests.cpp")
+    add_files("src/gui/domain_configuration_dialog.cpp")
+    add_files("src/gui/domain_property_form.cpp")
+    add_files("src/gui/schema_value_editor.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+
 target("finepaper-gui-smoke")
     add_rules("qt.widgetapp")
     add_frameworks("QtConcurrent")
@@ -184,6 +200,7 @@ target("finepaper-gui-smoke")
     add_files("tests/gui_smoke_test.cpp")
     add_files("src/gui/main_window.cpp")
     add_files("src/gui/animated_graphics_view.cpp")
+    add_files("src/gui/domain_configuration_dialog.cpp")
     add_files("src/gui/domain_instance_dialog.cpp")
     add_files("src/gui/domain_manager_panel.cpp")
     add_files("src/gui/domain_manager_projection.cpp")

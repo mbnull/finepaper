@@ -417,6 +417,32 @@ void chooseInputDialogItem(int index) {
     });
 }
 
+bool chooseComboData(QComboBox* combo, const QString& value) {
+    if (!combo) {
+        return false;
+    }
+    const int index = combo->findData(value);
+    if (index < 0) {
+        return false;
+    }
+    combo->setCurrentIndex(index);
+    QApplication::processEvents();
+    return true;
+}
+
+bool chooseComboTextContaining(QComboBox* combo, const QString& text) {
+    if (!combo) {
+        return false;
+    }
+    const int index = combo->findText(text, Qt::MatchContains);
+    if (index < 0) {
+        return false;
+    }
+    combo->setCurrentIndex(index);
+    QApplication::processEvents();
+    return true;
+}
+
 void chooseMessageBoxButton(QMessageBox::StandardButton button, int attempts = 100) {
     QTimer::singleShot(0, [button, attempts] {
         for (QWidget* widget : QApplication::topLevelWidgets()) {
@@ -618,6 +644,77 @@ bool createDomainPresentationPackage(const QString& sourceRoot,
     return QFile::setPermissions(destinationGenerator, QFile::permissions(sourceGenerator));
 }
 
+bool createRequiredRelationPackage(const QString& sourceRoot,
+                                   const QString& destinationRoot) {
+    QFile sourceManifest(QDir(sourceRoot).filePath(QStringLiteral("package.json")));
+    if (!sourceManifest.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    QJsonParseError error;
+    QJsonDocument document = QJsonDocument::fromJson(sourceManifest.readAll(), &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject()) {
+        return false;
+    }
+
+    QJsonObject package = document.object();
+    package.insert(QStringLiteral("formatVersion"), 2);
+    package.insert(QStringLiteral("id"), QStringLiteral("test.required-relation"));
+    package.insert(QStringLiteral("name"), QStringLiteral("Required Relation Fixture"));
+    package.insert(QStringLiteral("domainTypes"), QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("power")},
+            {QStringLiteral("label"), QStringLiteral("Power domains")},
+            {QStringLiteral("appliesTo"), QJsonArray{QStringLiteral("router")}},
+            {QStringLiteral("cardinality"), QStringLiteral("single")},
+            {QStringLiteral("required"), true},
+            {QStringLiteral("properties"), QJsonArray{}},
+            {QStringLiteral("relations"), QJsonArray{}},
+            {QStringLiteral("crossingProperties"), QJsonArray{}}
+        },
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("clock")},
+            {QStringLiteral("label"), QStringLiteral("Clock domains")},
+            {QStringLiteral("appliesTo"), QJsonArray{QStringLiteral("router")}},
+            {QStringLiteral("cardinality"), QStringLiteral("single")},
+            {QStringLiteral("required"), true},
+            {QStringLiteral("properties"), QJsonArray{}},
+            {QStringLiteral("relations"), QJsonArray{
+                QJsonObject{
+                    {QStringLiteral("id"), QStringLiteral("poweredBy")},
+                    {QStringLiteral("label"), QStringLiteral("Powered by")},
+                    {QStringLiteral("targetTypes"), QJsonArray{
+                        QStringLiteral("power")}},
+                    {QStringLiteral("cardinality"), QStringLiteral("single")},
+                    {QStringLiteral("required"), true},
+                    {QStringLiteral("properties"), QJsonArray{}}
+                }
+            }},
+            {QStringLiteral("crossingProperties"), QJsonArray{}}
+        }
+    });
+
+    if (!QDir().mkpath(QDir(destinationRoot).filePath(QStringLiteral("runtime/bin")))) {
+        return false;
+    }
+    QFile destinationManifest(
+        QDir(destinationRoot).filePath(QStringLiteral("package.json")));
+    if (!destinationManifest.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        || destinationManifest.write(
+               QJsonDocument(package).toJson(QJsonDocument::Indented)) < 0) {
+        return false;
+    }
+    destinationManifest.close();
+
+    const QString sourceGenerator = QDir(sourceRoot).filePath(
+        QStringLiteral("runtime/bin/generate"));
+    const QString destinationGenerator = QDir(destinationRoot).filePath(
+        QStringLiteral("runtime/bin/generate"));
+    if (!QFile::copy(sourceGenerator, destinationGenerator)) {
+        return false;
+    }
+    return QFile::setPermissions(destinationGenerator, QFile::permissions(sourceGenerator));
+}
+
 bool writeDomainPresentationDesign(const QString& path) {
     const QJsonObject design{
         {QStringLiteral("format"), QStringLiteral("finepaper.noc-design")},
@@ -686,7 +783,15 @@ bool writeDomainPresentationDesign(const QString& path) {
             }
         }},
         {QStringLiteral("domainRelations"), QJsonArray{}},
-        {QStringLiteral("crossingPolicies"), QJsonArray{}},
+        {QStringLiteral("crossingPolicies"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("zone-transition")},
+                {QStringLiteral("domainType"), QStringLiteral("security-zone")},
+                {QStringLiteral("from"), QStringLiteral("zone-a")},
+                {QStringLiteral("to"), QStringLiteral("zone-b")},
+                {QStringLiteral("properties"), QJsonObject{}}
+            }
+        }},
         {QStringLiteral("edgeOverrides"), QJsonArray{}}
     };
     QFile file(path);
@@ -2298,6 +2403,164 @@ int main(int argc, char** argv) {
               QStringLiteral("runtime Package fixture is restored after repair testing"));
     }
 
+    QTemporaryDir requiredRelationPackageRoot(
+        QStringLiteral("/tmp/finepaper-required-relation-package-XXXXXX"));
+    check(requiredRelationPackageRoot.isValid()
+              && createRequiredRelationPackage(
+                  standardPackageRoot, requiredRelationPackageRoot.path()),
+          QStringLiteral("a Package V2 fixture with a required cross-Domain relation is created"));
+    finepaper::RuntimeLocations requiredRelationLocations{
+        QStringList{requiredRelationPackageRoot.path()}, outputRoot.path()};
+    finepaper::FinepaperMainWindow requiredRelationWindow(
+        requiredRelationLocations);
+    requiredRelationWindow.show();
+    application.processEvents();
+
+    bool sawRequiredConfigurationRecovery = false;
+    bool completedRequiredRelation = false;
+    bool appliedRequiredConfiguration = false;
+    std::function<void(int)> applyRequiredConfigurationWhenReady;
+    applyRequiredConfigurationWhenReady = [&](int attempts) {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        auto* apply = dialog
+            && dialog->objectName()
+                == QStringLiteral("finepaper.domainConfigurationDialog")
+            ? dialog->findChild<QPushButton*>(
+                  QStringLiteral("finepaper.domainConfiguration.apply"))
+            : nullptr;
+        if (apply && apply->isEnabled()) {
+            appliedRequiredConfiguration = true;
+            apply->click();
+            return;
+        }
+        if (attempts > 0) {
+            QTimer::singleShot(20, [&, attempts] {
+                applyRequiredConfigurationWhenReady(attempts - 1);
+            });
+        } else if (dialog) {
+            dialog->reject();
+        }
+    };
+    std::function<void(int)> configureRequiredRelation;
+    configureRequiredRelation = [&](int attempts) {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!dialog
+            || dialog->objectName()
+                != QStringLiteral("finepaper.domainConfigurationDialog")) {
+            if (attempts > 0) {
+                QTimer::singleShot(20, [&, attempts] {
+                    configureRequiredRelation(attempts - 1);
+                });
+            }
+            return;
+        }
+
+        auto* domains = dialog->findChild<QTableWidget*>(
+            QStringLiteral("finepaper.domainConfiguration.domains"));
+        auto* memberships = dialog->findChild<QTableWidget*>(
+            QStringLiteral("finepaper.domainConfiguration.memberships"));
+        auto* relations = dialog->findChild<QTableWidget*>(
+            QStringLiteral("finepaper.domainConfiguration.relations"));
+        auto* addRelation = dialog->findChild<QPushButton*>(
+            QStringLiteral("finepaper.domainConfiguration.relations.add"));
+        sawRequiredConfigurationRecovery = domains && memberships && relations
+            && domains->rowCount() == 2
+            && memberships->rowCount() == 1
+            && relations->rowCount() == 0
+            && addRelation;
+        if (!addRelation) {
+            dialog->reject();
+            return;
+        }
+
+        QTimer::singleShot(0, [&] {
+            auto* relationEditor = qobject_cast<QDialog*>(
+                QApplication::activeModalWidget());
+            if (!relationEditor
+                || relationEditor->objectName()
+                    != QStringLiteral(
+                        "finepaper.domainConfiguration.relationDialog")) {
+                if (relationEditor) {
+                    relationEditor->reject();
+                }
+                return;
+            }
+            auto* from = relationEditor->findChild<QComboBox*>(
+                QStringLiteral(
+                    "finepaper.domainConfiguration.relationDialog.from"));
+            auto* type = relationEditor->findChild<QComboBox*>(
+                QStringLiteral(
+                    "finepaper.domainConfiguration.relationDialog.type"));
+            auto* to = relationEditor->findChild<QComboBox*>(
+                QStringLiteral(
+                    "finepaper.domainConfiguration.relationDialog.to"));
+            const bool selected = chooseComboTextContaining(
+                                      from, QStringLiteral("Clock domains"))
+                && chooseComboData(type, QStringLiteral("poweredBy"))
+                && chooseComboTextContaining(
+                    to, QStringLiteral("Power domains"));
+            auto* buttons = relationEditor->findChild<QDialogButtonBox*>();
+            QPushButton* save = buttons
+                ? buttons->button(QDialogButtonBox::Ok) : nullptr;
+            if (selected && save && save->isEnabled()) {
+                completedRequiredRelation = true;
+                save->click();
+            } else {
+                relationEditor->reject();
+            }
+        });
+        addRelation->click();
+        applyRequiredConfigurationWhenReady(100);
+    };
+
+    respondToNewDesignDialog(
+        QStringLiteral("test.required-relation@1.0.0"),
+        QStringLiteral("required_relation_design"), 1, 1, true);
+    configureRequiredRelation(100);
+    auto* requiredRelationCreate = requiredRelationWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.createDesign"));
+    if (requiredRelationCreate) {
+        requiredRelationCreate->click();
+        application.processEvents();
+    }
+    auto* requiredRelationActivePackage = requiredRelationWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.activePackage"));
+    check(requiredRelationCreate
+              && sawRequiredConfigurationRecovery
+              && completedRequiredRelation
+              && appliedRequiredConfiguration
+              && requiredRelationActivePackage
+              && requiredRelationActivePackage->text().contains(
+                  QStringLiteral("test.required-relation@1.0.0"))
+              && requiredRelationWindow.isWindowModified(),
+          QStringLiteral("New Design recovers Package-required Domain relations through the same atomic complete editor"));
+
+    bool recoveredRelationIsInActiveDesign = false;
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        auto* relations = dialog ? dialog->findChild<QTableWidget*>(
+                                       QStringLiteral(
+                                           "finepaper.domainConfiguration.relations"))
+                                 : nullptr;
+        recoveredRelationIsInActiveDesign = dialog
+            && dialog->objectName()
+                == QStringLiteral("finepaper.domainConfigurationDialog")
+            && relations && relations->rowCount() == 1
+            && relations->item(0, 0)->text() == QStringLiteral("poweredBy");
+        if (dialog) {
+            dialog->reject();
+        }
+    });
+    auto* requiredRelationComplete = requiredRelationWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainManager.completeConfiguration"));
+    if (requiredRelationComplete) {
+        requiredRelationComplete->click();
+        application.processEvents();
+    }
+    check(requiredRelationComplete && recoveredRelationIsInActiveDesign,
+          QStringLiteral("the required relation accepted during creation becomes active Design data"));
+    closeDiscarding(requiredRelationWindow);
+
     QTemporaryDir domainPackageRoot(
         QStringLiteral("/tmp/finepaper-domain-package-XXXXXX"));
     QTemporaryDir domainDesignRoot(
@@ -2370,6 +2633,8 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.assignmentEditor.multiple"));
     auto* domainApplyAssignment = domainWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.applyAssignment"));
+    auto* domainCompleteConfiguration = domainWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainManager.completeConfiguration"));
     if (domainManagerType) {
         domainManagerType->setCurrentIndex(
             domainManagerType->findData(QStringLiteral("security-zone")));
@@ -2494,6 +2759,30 @@ int main(int argc, char** argv) {
                      finepaper::domainCrossingDataRole).toBool(),
           QStringLiteral("nodes and derived Mesh crossings receive generic Domain presentation roles"));
 
+    if (domainScene && domainLinkGraphics) {
+        domainScene->clearSelection();
+        domainLinkGraphics->setSelected(true);
+        application.processEvents();
+    }
+    auto* domainSelectionInspectorGroup = domainWindow.findChild<QGroupBox*>(
+        finepaper::workbench::selectionInspectorName);
+    auto* domainSelectionInspector = domainSelectionInspectorGroup
+        ? domainSelectionInspectorGroup->findChild<QLabel*>() : nullptr;
+    check(domainSelectionInspector
+              && domainSelectionInspector->text().contains(
+                  QStringLiteral("Color-by Domain crossing"))
+              && domainSelectionInspector->text().contains(
+                  QStringLiteral("From set: { zone-a }"))
+              && domainSelectionInspector->text().contains(
+                  QStringLiteral("To set: { zone-b }"))
+              && domainSelectionInspector->text().contains(
+                  QStringLiteral("zone-transition"))
+              && domainSelectionInspector->text().contains(
+                  QStringLiteral("Edge override"))
+              && domainSelectionInspector->text().contains(
+                  QStringLiteral("default applies unchanged")),
+          QStringLiteral("Inspector separates singleton crossing sets, the resolved default, and the absent edge override"));
+
     const QString domainWorkspaceKey = finepaper::workbench::designWorkspaceKey(
         QStringLiteral("test.domain-presentation"),
         QStringLiteral("1.0.0"),
@@ -2503,6 +2792,222 @@ int main(int argc, char** argv) {
               .value(domainWorkspaceKey).toString()
               == QStringLiteral("security-zone"),
           QStringLiteral("the active Domain layer is saved as per-design Workspace state"));
+
+    const int callbacksBeforeCompleteConfiguration =
+        domainLayerSelectionCallbacks;
+    bool sawCancelledCompleteConfiguration = false;
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        auto* domains = dialog ? dialog->findChild<QTableWidget*>(
+                                     QStringLiteral(
+                                         "finepaper.domainConfiguration.domains"))
+                               : nullptr;
+        sawCancelledCompleteConfiguration = dialog
+            && dialog->objectName()
+                == QStringLiteral("finepaper.domainConfigurationDialog")
+            && domains && domains->rowCount() == 3;
+        auto* buttons = dialog ? dialog->findChild<QDialogButtonBox*>(
+                                     QStringLiteral(
+                                         "finepaper.domainConfiguration.buttons"))
+                               : nullptr;
+        if (QAbstractButton* cancel = buttons
+                ? buttons->button(QDialogButtonBox::Cancel) : nullptr) {
+            cancel->click();
+        } else if (dialog) {
+            dialog->reject();
+        }
+    });
+    if (domainCompleteConfiguration) {
+        domainCompleteConfiguration->click();
+        application.processEvents();
+    }
+    check(domainCompleteConfiguration && sawCancelledCompleteConfiguration
+              && !domainWindow.isWindowModified()
+              && domainView && domainView->scene() == domainScene
+              && domainScene && domainRouter
+              && domainScene->nodeGraphicsObject(*domainRouter)
+                  == domainRouterGraphics
+              && domainLinkGraphics && domainLinkGraphics->isSelected()
+              && domainLayerSelectionCallbacks
+                  == callbacksBeforeCompleteConfiguration
+              && domainManagerInstances
+              && domainManagerInstances->rowCount() == 2,
+          QStringLiteral("Domain Manager opens the complete editor and Cancel preserves the design, scene, and selection"));
+
+    bool sawCompleteConfiguration = false;
+    bool sawCompleteDomainEditor = false;
+    bool submittedCompleteConfiguration = false;
+    std::function<void(int)> applyCompleteConfigurationWhenReady;
+    applyCompleteConfigurationWhenReady = [&](int attempts) {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        auto* apply = dialog
+            && dialog->objectName()
+                == QStringLiteral("finepaper.domainConfigurationDialog")
+            ? dialog->findChild<QPushButton*>(
+                  QStringLiteral("finepaper.domainConfiguration.apply"))
+            : nullptr;
+        if (apply && apply->isEnabled()) {
+            submittedCompleteConfiguration = true;
+            apply->click();
+            return;
+        }
+        if (attempts > 0) {
+            QTimer::singleShot(20, [&, attempts] {
+                applyCompleteConfigurationWhenReady(attempts - 1);
+            });
+        } else if (dialog) {
+            dialog->reject();
+        }
+    };
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        sawCompleteConfiguration = dialog
+            && dialog->objectName()
+                == QStringLiteral("finepaper.domainConfigurationDialog");
+        auto* addDomain = dialog ? dialog->findChild<QPushButton*>(
+                                      QStringLiteral(
+                                          "finepaper.domainConfiguration.domains.add"))
+                                 : nullptr;
+        if (!addDomain) {
+            if (dialog) {
+                dialog->reject();
+            }
+            return;
+        }
+        QTimer::singleShot(0, [&] {
+            auto* editor = qobject_cast<QDialog*>(
+                QApplication::activeModalWidget());
+            sawCompleteDomainEditor = editor
+                && editor->objectName()
+                    == QStringLiteral(
+                        "finepaper.domainConfiguration.domainDialog");
+            auto* type = editor ? editor->findChild<QComboBox*>(
+                                      QStringLiteral(
+                                          "finepaper.domainConfiguration.domainDialog.type"))
+                                : nullptr;
+            auto* id = editor ? editor->findChild<QLineEdit*>(
+                                    QStringLiteral(
+                                        "finepaper.domainConfiguration.domainDialog.id"))
+                              : nullptr;
+            auto* name = editor ? editor->findChild<QLineEdit*>(
+                                      QStringLiteral(
+                                          "finepaper.domainConfiguration.domainDialog.name"))
+                                : nullptr;
+            if (type) {
+                type->setCurrentIndex(
+                    type->findData(QStringLiteral("security-zone")));
+            }
+            if (id) {
+                id->setText(QStringLiteral("zone-c"));
+            }
+            if (name) {
+                name->setText(QStringLiteral("Observed"));
+            }
+            auto* save = editor ? editor->findChild<QPushButton*>(
+                                      QStringLiteral(
+                                          "finepaper.domainConfiguration.domainDialog.save"))
+                                : nullptr;
+            if (save && save->isEnabled()) {
+                save->click();
+            } else if (editor) {
+                editor->reject();
+            }
+        });
+        addDomain->click();
+        applyCompleteConfigurationWhenReady(100);
+    });
+    if (domainCompleteConfiguration) {
+        domainCompleteConfiguration->click();
+        application.processEvents();
+        application.processEvents();
+    }
+
+    const int zoneCRow = domainInstanceRow(QStringLiteral("zone-c"));
+    check(sawCompleteConfiguration && sawCompleteDomainEditor
+              && submittedCompleteConfiguration
+              && domainWindow.isWindowModified()
+              && zoneCRow >= 0
+              && domainManagerInstances
+              && domainManagerInstances->rowCount() == 3
+              && domainManagerInstances->item(zoneCRow, 1)->text()
+                  == QStringLiteral("Observed"),
+          QStringLiteral("a legal complete working-copy change is applied atomically and refreshes the Domain Manager"));
+    check(domainView && domainView->scene() == domainScene
+              && domainScene && domainRouter && domainRouter1
+              && domainScene->nodeGraphicsObject(*domainRouter)
+                  == domainRouterGraphics
+              && domainScene->nodeGraphicsObject(*domainRouter1)
+                  == domainRouter1Graphics
+              && domainScene->graphModel().allNodeIds().size()
+                  == static_cast<size_t>(domainNodeCount)
+              && sceneConnectionIds(domainScene).size()
+                  == static_cast<size_t>(domainConnectionCount)
+              && domainLinkGraphics && domainLinkGraphics->isSelected()
+              && domainLayerSelectionCallbacks
+                  == callbacksBeforeCompleteConfiguration,
+          QStringLiteral("complete Domain Apply repaints the existing scene without rebuilding or disturbing selection"));
+
+    QAction* domainCompleteSaveAction = actionWithText(
+        domainWindow, QStringLiteral("Save"));
+    if (domainCompleteSaveAction) {
+        domainCompleteSaveAction->trigger();
+        application.processEvents();
+    }
+    QFile savedCompleteDomainFile(domainDesignPath);
+    QJsonDocument savedCompleteDomainDocument;
+    if (savedCompleteDomainFile.open(QIODevice::ReadOnly)) {
+        QJsonParseError error;
+        savedCompleteDomainDocument = QJsonDocument::fromJson(
+            savedCompleteDomainFile.readAll(), &error);
+        check(error.error == QJsonParseError::NoError,
+              QStringLiteral("the complete Domain configuration saves as valid JSON"));
+    }
+    const QJsonObject savedCompleteDomain =
+        savedCompleteDomainDocument.object();
+    const QJsonArray savedDomains = savedCompleteDomain.value(
+        QStringLiteral("domains")).toArray();
+    const QJsonArray savedCrossingPolicies = savedCompleteDomain.value(
+        QStringLiteral("crossingPolicies")).toArray();
+    bool savedZoneC = false;
+    for (const QJsonValue& value : savedDomains) {
+        savedZoneC = savedZoneC
+            || (value.isObject()
+                && value.toObject().value(QStringLiteral("id")).toString()
+                    == QStringLiteral("zone-c"));
+    }
+    bool savedZoneTransition = false;
+    for (const QJsonValue& value : savedCrossingPolicies) {
+        const QJsonObject policy = value.toObject();
+        savedZoneTransition = savedZoneTransition
+            || (policy.value(QStringLiteral("id")).toString()
+                    == QStringLiteral("zone-transition")
+                && policy.value(QStringLiteral("domainType")).toString()
+                    == QStringLiteral("security-zone")
+                && policy.value(QStringLiteral("from")).toString()
+                    == QStringLiteral("zone-a")
+                && policy.value(QStringLiteral("to")).toString()
+                    == QStringLiteral("zone-b"));
+    }
+    check(domainCompleteSaveAction && !domainWindow.isWindowModified()
+              && savedCompleteDomain.value(QStringLiteral("domains")).isArray()
+              && savedCompleteDomain.value(
+                     QStringLiteral("domainMemberships")).isArray()
+              && savedCompleteDomain.value(
+                     QStringLiteral("domainRelations")).isArray()
+              && savedCompleteDomain.value(
+                     QStringLiteral("crossingPolicies")).isArray()
+              && savedCompleteDomain.value(
+                     QStringLiteral("edgeOverrides")).isArray()
+              && savedDomains.size() == 4 && savedZoneC
+              && savedCompleteDomain.value(
+                     QStringLiteral("domainMemberships")).toArray().size() == 2
+              && savedCompleteDomain.value(
+                     QStringLiteral("domainRelations")).toArray().isEmpty()
+              && savedCrossingPolicies.size() == 1
+              && savedZoneTransition
+              && savedCompleteDomain.value(
+                     QStringLiteral("edgeOverrides")).toArray().isEmpty(),
+          QStringLiteral("saving complete Domain configuration persists all five arrays, the added optional Domain, and the existing default policy"));
 
     if (domainManagerTabs) {
         domainManagerTabs->setCurrentIndex(1);

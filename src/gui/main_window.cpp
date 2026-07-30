@@ -1,6 +1,7 @@
 #include "gui/main_window.h"
 
 #include "gui/domain_manager_panel.h"
+#include "gui/domain_configuration_dialog.h"
 #include "gui/workbench_config.h"
 #include "storage/json.h"
 
@@ -75,6 +76,86 @@ QString diagnosticText(const QVector<Diagnostic>& diagnostics) {
                            : lines.join(QLatin1Char('\n'));
 }
 
+QString domainSetHtml(const QStringList& domainIds) {
+    if (domainIds.isEmpty()) {
+        return QStringLiteral("∅");
+    }
+    QStringList escapedIds;
+    escapedIds.reserve(domainIds.size());
+    for (const QString& domainId : domainIds) {
+        escapedIds.append(domainId.toHtmlEscaped());
+    }
+    return QStringLiteral("{ %1 }").arg(escapedIds.join(QStringLiteral(", ")));
+}
+
+QString propertiesHtml(const QJsonObject& properties) {
+    return QStringLiteral("<code>%1</code>")
+        .arg(QString::fromUtf8(
+                 QJsonDocument(properties).toJson(QJsonDocument::Compact))
+                 .toHtmlEscaped());
+}
+
+QString domainCrossingInspectorHtml(
+    const DomainPresentationSnapshot& snapshot,
+    const ElementRef& edge) {
+    const DomainCrossingPresentation* crossing = snapshot.crossing(edge);
+    if (!crossing || snapshot.activeDomainType.isEmpty()) {
+        return {};
+    }
+
+    const QString label = snapshot.domainTypeLabel.trimmed().isEmpty()
+        ? snapshot.activeDomainType : snapshot.domainTypeLabel;
+    const QString layer = label == snapshot.activeDomainType
+        ? label.toHtmlEscaped()
+        : QStringLiteral("%1 (<code>%2</code>)")
+              .arg(label.toHtmlEscaped(),
+                   snapshot.activeDomainType.toHtmlEscaped());
+
+    QStringList lines{
+        QStringLiteral("<b>Color-by Domain crossing — %1</b>").arg(layer),
+        QStringLiteral("From set: %1").arg(
+            domainSetHtml(crossing->fromDomainIds)),
+        QStringLiteral("To set: %1").arg(
+            domainSetHtml(crossing->toDomainIds))
+    };
+    if (crossing->defaultPolicy) {
+        lines.append(
+            QStringLiteral("Default policy: <code>%1</code>")
+                .arg(crossing->defaultPolicy->toHtmlEscaped()));
+        lines.append(
+            QStringLiteral("Default properties: %1")
+                .arg(propertiesHtml(crossing->defaultProperties)));
+    } else {
+        const bool singleton = crossing->fromDomainIds.size() == 1
+            && crossing->toDomainIds.size() == 1;
+        lines.append(
+            singleton
+                ? QStringLiteral(
+                      "Default policy: <i>none resolved for this exact "
+                      "directed pair</i>")
+                : QStringLiteral(
+                      "Default policy: <i>unavailable for a set-valued "
+                      "crossing</i>"));
+    }
+
+    if (crossing->overridePolicy || !crossing->overrideProperties.isEmpty()) {
+        lines.append(
+            QStringLiteral("Edge override policy: %1")
+                .arg(crossing->overridePolicy
+                         ? QStringLiteral("<code>%1</code>")
+                               .arg(crossing->overridePolicy->toHtmlEscaped())
+                         : QStringLiteral("<i>not specified</i>")));
+        lines.append(
+            QStringLiteral("Override properties: %1")
+                .arg(propertiesHtml(crossing->overrideProperties)));
+    } else {
+        lines.append(crossing->defaultPolicy
+            ? QStringLiteral("Edge override: <i>none; the default applies unchanged</i>")
+            : QStringLiteral("Edge override: <i>none</i>"));
+    }
+    return QStringLiteral("<br><br>%1").arg(lines.join(QStringLiteral("<br>")));
+}
+
 QString normalizedAbsolutePath(const QString& path) {
     const QFileInfo info(path);
     const QString canonicalPath = info.canonicalFilePath();
@@ -108,6 +189,21 @@ QWidget* placeholderPage(const QString& title, const QString& description, QLabe
         *summary = text;
     }
     return page;
+}
+
+bool hasOnlyDomainConfigurationErrors(
+    const QVector<Diagnostic>& diagnostics) {
+    bool hasError = false;
+    for (const Diagnostic& diagnostic : diagnostics) {
+        if (diagnostic.severity != QStringLiteral("error")) {
+            continue;
+        }
+        hasError = true;
+        if (!domain_configuration::ownsDiagnostic(diagnostic)) {
+            return false;
+        }
+    }
+    return hasError;
 }
 
 class NewDesignDialog final : public QDialog {
@@ -322,6 +418,7 @@ FinepaperMainWindow::~FinepaperMainWindow() {
         m_domainManager->updateDomainRequested = {};
         m_domainManager->removeDomainRequested = {};
         m_domainManager->assignmentPatchRequested = {};
+        m_domainManager->completeConfigurationRequested = {};
         m_domainManager->showDomainLayerRequested = {};
     }
 }
@@ -628,6 +725,28 @@ void FinepaperMainWindow::createDomainDock() {
                 std::move(patch)),
             QStringLiteral("Update %1 assignments").arg(domainType));
     };
+    m_domainManager->completeConfigurationRequested = [this] {
+        const PackageDefinition* package = packageForDesign();
+        if (!m_design || !package || m_design->formatVersion != 2
+            || package->formatVersion != 2) {
+            return;
+        }
+        const NocDesign baseDesign = *m_design;
+        DomainConfigurationDialog dialog(
+            baseDesign,
+            *package,
+            domain_configuration::fromDesign(baseDesign),
+            [this, baseDesign](const DomainConfiguration& configuration) {
+                return m_application.replaceDomainConfiguration(
+                    baseDesign, configuration);
+            },
+            this);
+        if (dialog.exec() == QDialog::Accepted) {
+            adoptDomainResult(
+                dialog.validatedResult(),
+                QStringLiteral("Apply complete Domain configuration"));
+        }
+    };
     m_domainManager->showDomainLayerRequested = [this](
         const QString& domainType) {
         if (!m_domainLayerSelector) {
@@ -875,6 +994,7 @@ void FinepaperMainWindow::createActions() {
             settings.setValue(workbench::domainLayerSelectionsSetting, selections);
         }
         applyDomainLayer(domainType);
+        updateInspector(m_editorSelection);
     });
 
     QToolBar* activityBar = new QToolBar(QStringLiteral("Workbench Panels"), this);
@@ -1602,7 +1722,39 @@ void FinepaperMainWindow::createDesign() {
         return;
     }
 
-    const DesignResult result = m_application.createDesign(request);
+    DesignResult result = m_application.createDesign(request);
+    if (!result.success
+        && result.design.formatVersion == 2
+        && hasOnlyDomainConfigurationErrors(result.diagnostics)) {
+        const PackageDefinition* package = packageByKey(
+            QStringLiteral("%1@%2")
+                .arg(result.design.package.id, result.design.package.version));
+        if (package && package->formatVersion == 2) {
+            DomainConfigurationDialog configurationDialog(
+                result.design,
+                *package,
+                domain_configuration::fromDesign(result.design),
+                [this, request](const DomainConfiguration& configuration) {
+                    QJsonObject configuredRequest = request;
+                    configuredRequest.insert(
+                        QStringLiteral("domainConfiguration"),
+                        domain_configuration::toJson(configuration));
+                    return m_application.createDesign(configuredRequest);
+                },
+                this);
+            configurationDialog.setWindowTitle(
+                QStringLiteral("Configure Domains for New Design"));
+            if (configurationDialog.exec() != QDialog::Accepted) {
+                statusBar()->showMessage(
+                    QStringLiteral(
+                        "Design creation cancelled before its required Domain "
+                        "configuration was complete."),
+                    6000);
+                return;
+            }
+            result = configurationDialog.validatedResult();
+        }
+    }
     if (result.success) {
         m_designPath.clear();
     }
@@ -2078,35 +2230,45 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
         return;
     }
     if (item.kind == NocEditorSelection::Kind::RouterLink && m_design) {
+        const ElementRef edge{ElementKind::RouterLink, item.id};
         QString endpointsText;
-        if (const auto endpoints = edgeEndpoints(
-                *m_design, ElementRef{ElementKind::RouterLink, item.id})) {
+        if (const auto endpoints = edgeEndpoints(*m_design, edge)) {
             endpointsText = QStringLiteral("<br>From: %1<br>To: %2")
                                 .arg(endpoints->first.id.toHtmlEscaped(),
                                      endpoints->second.id.toHtmlEscaped());
         }
+        const QString crossingText = m_nodeEditor
+            ? domainCrossingInspectorHtml(
+                  m_nodeEditor->domainPresentation(), edge)
+            : QString();
         m_selectionSummary->setText(
             QStringLiteral("<b>Router Link %1</b>%2<br>This Link is derived from the fixed "
-                           "Mesh and cannot be created, deleted, or rewired manually.")
-                .arg(item.id.toHtmlEscaped(), endpointsText));
+                           "Mesh and cannot be created, deleted, or rewired manually.%3")
+                .arg(item.id.toHtmlEscaped(), endpointsText, crossingText));
         return;
     }
     if (item.kind == NocEditorSelection::Kind::EndpointAttachment) {
+        const ElementRef edge{ElementKind::EndpointAttachment, item.id};
+        const QString crossingText = m_nodeEditor
+            ? domainCrossingInspectorHtml(
+                  m_nodeEditor->domainPresentation(), edge)
+            : QString();
         if (endpointFound) {
             m_selectionSummary->setText(
                 QStringLiteral("<b>Endpoint Attachment %1</b><br>Router: (%2, %3)<br>"
                                "Slot: %4<br>This semantic attachment may be disconnected or "
                                "reassigned explicitly. Endpoint canvas placement remains "
-                               "independent Workspace state.")
+                               "independent Workspace state.%5")
                     .arg(endpoint->id.toHtmlEscaped())
                     .arg(endpoint->attachment.router.x)
                     .arg(endpoint->attachment.router.y)
                     .arg(endpoint->attachment.slot.value_or(QStringLiteral("automatic"))
-                             .toHtmlEscaped()));
+                             .toHtmlEscaped())
+                    .arg(crossingText));
         } else {
             m_selectionSummary->setText(
-                QStringLiteral("<b>Endpoint Attachment %1</b>")
-                    .arg(item.id.toHtmlEscaped()));
+                QStringLiteral("<b>Endpoint Attachment %1</b>%2")
+                    .arg(item.id.toHtmlEscaped(), crossingText));
         }
         return;
     }

@@ -70,6 +70,12 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     m_status->setWordWrap(true);
     root->addWidget(m_status);
 
+    m_completeConfiguration = new QPushButton(
+        QStringLiteral("Open complete Domain configuration…"));
+    m_completeConfiguration->setObjectName(
+        QStringLiteral("finepaper.domainManager.completeConfiguration"));
+    root->addWidget(m_completeConfiguration);
+
     auto* typeRow = new QHBoxLayout;
     typeRow->addWidget(new QLabel(QStringLiteral("Domain type")));
     m_typeSelector = new QComboBox;
@@ -173,6 +179,11 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
             showDomainLayerRequested(currentDomainType());
         }
     });
+    connect(m_completeConfiguration, &QPushButton::clicked, this, [this] {
+        if (completeConfigurationRequested) {
+            completeConfigurationRequested();
+        }
+    });
     connect(m_instances, &QTableWidget::itemSelectionChanged,
             this, [this] { updateActionState(); });
     connect(m_addDomain, &QPushButton::clicked,
@@ -234,8 +245,10 @@ void DomainManagerPanel::setContext(const NocDesign* design,
             "This Package explicitly declares no Domain types."));
     } else {
         m_status->setText(QStringLiteral(
-            "Domain instances and assignments are Design data. Routers and "
-            "Router Links remain fixed projections of the Mesh."));
+            "Use the quick tabs for common instance/selection edits, or open "
+            "the complete working copy for memberships, relations, default "
+            "crossing policies, and edge overrides. Routers and Router Links "
+            "remain fixed projections of the Mesh."));
     }
     refreshCurrentType();
 }
@@ -523,6 +536,17 @@ void DomainManagerPanel::updateActionState() {
         && m_design->formatVersion == 2 && m_package->formatVersion == 2
         && selectedType();
     const bool hasSelectedDomain = selectedDomain();
+    const bool completeEditable = !m_busy && m_design && m_package
+        && m_design->formatVersion == 2 && m_package->formatVersion == 2
+        && !m_assignmentEdited;
+    m_completeConfiguration->setEnabled(completeEditable);
+    m_completeConfiguration->setToolTip(
+        m_assignmentEdited
+            ? QStringLiteral(
+                  "Apply or discard the pending selection assignment first.")
+            : QStringLiteral(
+                  "Edit all Package-defined Domain data as one atomic working "
+                  "copy. Routers and Router Links remain fixed Mesh projections."));
     m_typeSelector->setEnabled(
         m_typeSelector->count() > 0 && !m_assignmentEdited);
     m_showOnCanvas->setEnabled(

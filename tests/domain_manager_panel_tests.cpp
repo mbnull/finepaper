@@ -225,6 +225,8 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.applyAssignment"));
     auto* discardAssignment = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.discardAssignment"));
+    auto* completeConfiguration = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainManager.completeConfiguration"));
     auto* addDomain = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.addDomain"));
     auto* editDomain = panel.findChild<QPushButton*>(
@@ -234,13 +236,24 @@ int main(int argc, char** argv) {
 
     check(typeSelector && instances && tabs && assignmentState && singleAssignment
               && multipleAssignment && applyAssignment && discardAssignment
-              && addDomain && editDomain && deleteDomain,
+              && completeConfiguration && addDomain && editDomain && deleteDomain,
           QStringLiteral("Domain Manager exposes its stable test controls"));
     if (!typeSelector || !instances || !tabs || !assignmentState || !singleAssignment
         || !multipleAssignment || !applyAssignment || !discardAssignment
-        || !addDomain || !editDomain || !deleteDomain) {
+        || !completeConfiguration || !addDomain || !editDomain || !deleteDomain) {
         return 1;
     }
+
+    int completeConfigurationRequests = 0;
+    panel.completeConfigurationRequested = [&completeConfigurationRequests] {
+        ++completeConfigurationRequests;
+    };
+    check(completeConfiguration->isEnabled(),
+          QStringLiteral("Package V2 enables the complete Domain configuration entry"));
+    completeConfiguration->click();
+    QApplication::processEvents();
+    check(completeConfigurationRequests == 1,
+          QStringLiteral("the complete Domain configuration entry emits its callback"));
 
     check(typeSelector->count() == 2
               && typeSelector->itemData(0).toString()
@@ -423,6 +436,13 @@ int main(int argc, char** argv) {
     if (zoneC) {
         zoneC->setCheckState(Qt::Checked);
     }
+    QApplication::processEvents();
+    check(!completeConfiguration->isEnabled(),
+          QStringLiteral("pending assignment changes disable complete Domain configuration"));
+    completeConfiguration->click();
+    QApplication::processEvents();
+    check(completeConfigurationRequests == 1,
+          QStringLiteral("a disabled complete configuration entry cannot emit its callback"));
     panel.setSelection({endpoint});
     QApplication::processEvents();
     check(assignmentState->text().contains(QStringLiteral("original 2 eligible"))
@@ -435,6 +455,28 @@ int main(int argc, char** argv) {
                   == QStringLiteral("common")
               && assignmentState->text().contains(QStringLiteral("1 of 1")),
           QStringLiteral("Discard adopts the latest canvas selection and clears pending state"));
+    check(completeConfiguration->isEnabled(),
+          QStringLiteral("Discard restores the complete Domain configuration entry"));
+    completeConfiguration->click();
+    QApplication::processEvents();
+    check(completeConfigurationRequests == 2,
+          QStringLiteral("the restored complete configuration entry emits its callback"));
+
+    PackageDefinition emptyDomainPackage = package;
+    emptyDomainPackage.domainTypes.clear();
+    NocDesign staleDomainDesign = design;
+    panel.setContext(&staleDomainDesign, &resolved, &emptyDomainPackage, {});
+    QApplication::processEvents();
+    check(completeConfiguration->isEnabled(),
+          QStringLiteral("a Package with no Domain types still permits opening the complete editor to remove stale rows"));
+    completeConfiguration->click();
+    QApplication::processEvents();
+    check(completeConfigurationRequests == 3,
+          QStringLiteral("the repair entry remains available for stale Domain data"));
+
+    panel.setContext(&design, &resolved, &package,
+                     QStringLiteral("security-zone"));
+    QApplication::processEvents();
 
     panel.setSelection({router0, router1});
     zoneC = assignmentItem(multipleAssignment, QStringLiteral("zone-c"));

@@ -56,6 +56,7 @@ public:
     std::function<void(QString)> removeDomainRequested;
     std::function<void(QVector<ElementRef>, QString, DomainAssignmentPatch)>
         assignmentPatchRequested;
+    std::function<void()> completeConfigurationRequested;
     std::function<void(QString)> showDomainLayerRequested;
 
 private:
@@ -89,6 +90,7 @@ private:
     bool m_selectionChangedWhileEditing = false;
 
     QLabel* m_status = nullptr;
+    QPushButton* m_completeConfiguration = nullptr;
     QComboBox* m_typeSelector = nullptr;
     QPushButton* m_showOnCanvas = nullptr;
     QTabWidget* m_tabs = nullptr;
