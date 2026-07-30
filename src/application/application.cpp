@@ -468,6 +468,27 @@ DesignResult FinepaperApplication::createDesign(const QJsonObject& request) cons
         result.diagnostics += std::move(domainResult.diagnostics);
     }
 
+    const QString elementConfigurationsKey =
+        QStringLiteral("elementConfigurations");
+    if (request.contains(elementConfigurationsKey)) {
+        if (!formatVersionSupportsElementConfigurations(
+                package->formatVersion)) {
+            appendDiagnostic(
+                result.diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("create.element_configurations_require_v3"),
+                QStringLiteral(
+                    "elementConfigurations requires a Package format with element-configuration support"),
+                QStringLiteral("/elementConfigurations"));
+        } else {
+            ElementConfigurationsParseResult parsed =
+                parseElementConfigurations(
+                    request.value(elementConfigurationsKey));
+            design.elementConfigurations = std::move(parsed.configurations);
+            result.diagnostics += std::move(parsed.diagnostics);
+        }
+    }
+
     if (request.contains(QStringLiteral("packageData"))) {
         if (!request.value(QStringLiteral("packageData")).isObject()) {
             appendDiagnostic(result.diagnostics,
@@ -558,7 +579,8 @@ DesignResult FinepaperApplication::addEndpoint(
     const NocDesign& design,
     EndpointInstance endpoint,
     const QHash<QString, QStringList>& domainAssignments,
-    const QVector<DomainEdgeOverride>& attachmentOverrides) const {
+    const QVector<DomainEdgeOverride>& attachmentOverrides,
+    const QVector<ElementConfiguration>& attachmentConfigurations) const {
     endpoint.id = endpoint.id.trimmed();
     const auto package = m_catalog.resolve(design.package);
     if (!package) {
@@ -593,6 +615,21 @@ DesignResult FinepaperApplication::addEndpoint(
                 "being added"),
             QStringLiteral("/edgeOverrides/new-endpoint/%1/edge").arg(index));
     }
+    for (qsizetype index = 0;
+         index < attachmentConfigurations.size(); ++index) {
+        if (attachmentConfigurations.at(index).element
+            == expectedAttachment) {
+            continue;
+        }
+        appendDiagnostic(
+            overrideDiagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("endpoint.attachment_configuration_mismatch"),
+            QStringLiteral(
+                "Endpoint attachment configuration must reference the Endpoint being added"),
+            QStringLiteral("/elementConfigurations/new-endpoint/%1/element")
+                .arg(index));
+    }
     if (hasErrors(overrideDiagnostics)) {
         return DesignResult{
             false,
@@ -615,6 +652,7 @@ DesignResult FinepaperApplication::addEndpoint(
         };
     }
     domainResult.design.edgeOverrides += attachmentOverrides;
+    domainResult.design.elementConfigurations += attachmentConfigurations;
     DesignResult validated = validateEditedDesign(domainResult.design);
     if (!validated.success) {
         validated.design = design;
@@ -681,6 +719,49 @@ DesignResult FinepaperApplication::updateParameters(const NocDesign& design,
     NocDesign edited = design;
     edited.parameters = parameters;
     DesignResult validated = validateEditedDesign(edited);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
+DesignResult FinepaperApplication::setElementConfiguration(
+    const NocDesign& design,
+    ElementRef element,
+    const QString& propertySet,
+    const QJsonObject& properties) const {
+    const auto package = m_catalog.resolve(design.package);
+    if (!package) {
+        return validateEditedDesign(design);
+    }
+    element_configuration::MutationResult mutation =
+        element_configuration::set(
+            design, *package, element, propertySet, properties);
+    if (hasErrors(mutation.diagnostics)) {
+        return DesignResult{false, design, std::move(mutation.diagnostics)};
+    }
+    DesignResult validated = validateEditedDesign(mutation.design);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
+DesignResult FinepaperApplication::clearElementConfiguration(
+    const NocDesign& design,
+    ElementRef element,
+    const QString& propertySet) const {
+    const auto package = m_catalog.resolve(design.package);
+    if (!package) {
+        return validateEditedDesign(design);
+    }
+    element_configuration::MutationResult mutation =
+        element_configuration::clear(
+            design, *package, element, propertySet);
+    if (hasErrors(mutation.diagnostics)) {
+        return DesignResult{false, design, std::move(mutation.diagnostics)};
+    }
+    DesignResult validated = validateEditedDesign(mutation.design);
     if (!validated.success) {
         validated.design = design;
     }
@@ -926,6 +1007,8 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
             }
         }
     }
+
+    diagnostics += validateElementConfigurations(design, package);
 
     diagnostics += domain_service::validateAgainstPackage(design, package);
 

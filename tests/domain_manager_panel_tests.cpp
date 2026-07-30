@@ -256,6 +256,20 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    PackageDefinition v3Package = package;
+    v3Package.formatVersion = 3;
+    NocDesign v3Design = design;
+    v3Design.formatVersion = 3;
+    const ResolvedDesign v3Resolved = resolveDesign(v3Design);
+    panel.setContext(&v3Design, &v3Resolved, &v3Package,
+                     QStringLiteral("security-zone"));
+    QApplication::processEvents();
+    check(completeConfiguration->isEnabled() && addDomain->isEnabled(),
+          QStringLiteral("Package and Design V3 retain complete Domain editing capabilities"));
+    panel.setContext(&design, &resolved, &package,
+                     QStringLiteral("security-zone"));
+    QApplication::processEvents();
+
     int completeConfigurationRequests = 0;
     panel.completeConfigurationRequested = [&completeConfigurationRequests] {
         ++completeConfigurationRequests;

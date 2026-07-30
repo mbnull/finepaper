@@ -1,6 +1,6 @@
 # Finepaper 可配置多 Domain 架构基线
 
-> 状态：Domain V2 实现契约。
+> 状态：Domain V2+ 与 Element Configuration V3 实现契约。
 >
 > 本文定义 Finepaper 对 clock、power 以及 Package 自定义 Domain 的公共表达。Router 仍由 Mesh 派生，用户不能创建、删除或任意连线 Router；可配置的是 Domain 类型、实例、归属、关系和 crossing 策略。
 
@@ -16,9 +16,9 @@ Finepaper 当前只支持规则 `rows × columns` Mesh。Router、相邻 Router 
 
 Domain 不受 clock/power 两个名字限制。Package 可以声明 `clock`、`power`、`security`、`voltage`、`vendor.dtc`、`vendor.dn` 等任意 Type，Finepaper Core 不增加相应字符串分支。
 
-## 2. Design V2 的五层 Domain 模型
+## 2. Design V2+ 的五层 Domain 模型
 
-Domain 数据属于 `NocDesign`，参与 dirty、undo、save、validate 和 generate 生命周期。`finepaper.noc-design` V2 固定包含五组顶层数组：
+Domain 数据属于 `NocDesign`，参与 dirty、undo、save、validate 和 generate 生命周期。从 `finepaper.noc-design` V2 开始固定包含五组顶层数组；V3 及后续受支持版本继续完整保留它们：
 
 1. `domains`：Domain 实例；
 2. `domainMemberships`：Router/Endpoint 的归属；
@@ -106,9 +106,9 @@ struct DomainEdgeOverride {
 
 Membership 是稀疏设计意图，不保存完整 Router 图。空 membership、空 assignment 数组、未知元素和未知 Domain 都是错误。
 
-## 3. Package V2 声明可编辑能力
+## 3. Package V2+ 声明可编辑能力
 
-Package Manifest V2 必须显式提供 `domainTypes` 数组，空数组表示该 Package 不开放 Domain。每个 Type 可以配置：
+从 Package Manifest V2 开始必须显式提供 `domainTypes` 数组，空数组表示该 Package 不开放 Domain。V3 是累积扩展，不会关闭或缩减 Domain 能力。每个 Type 可以配置：
 
 - `id`、`label`；
 - `appliesTo`：`router`、`endpoint` 或两者；
@@ -252,7 +252,7 @@ Router Link 和 Endpoint attachment 都由 Mesh 与挂载关系派生。对某�
 
 未来若要让 set-valued crossing 可配置，需要先定义无歧义的集合策略模型，例如显式的实例对矩阵、集合级 policy 或确定的组合/优先级规则，并通过相应的 Design 格式演进开放；不能复用当前单个 policy 引用来隐式代表整个集合关系。
 
-Generator/Engine 接收完整 Design V2。Core 不把 clock、power 或厂商 Type 转成内部特例字段。
+Generator/Engine 接收当前版本的完整 Design。Core 不把 clock、power 或厂商 Type 转成内部特例字段。
 
 ## 6. 应用层操作
 
@@ -277,13 +277,13 @@ struct DomainConfiguration {
 };
 ~~~
 
-`DomainConfiguration` 只是五组既有数组的内存 aggregate，不是 Design V2 的第六个持久化字段；保存时仍展开为 `domains`、`domainMemberships`、`domainRelations`、`crossingPolicies` 和 `edgeOverrides`。
+`DomainConfiguration` 只是五组既有数组的内存 aggregate，不是额外的持久化字段；保存时仍展开为 `domains`、`domainMemberships`、`domainRelations`、`crossingPolicies` 和 `edgeOverrides`。
 
 `replaceDomainConfiguration` 是 aggregate transaction：先在候选 Design 上整体替换五组数据，再执行 Core 与 Package 全量校验；任何结构、引用、schema 或 required 约束失败时返回原 Design，不暴露半更新状态。Router 和 Router Link 仍由 Mesh 派生，配置只能通过稳定引用选择它们，不能携带或创建 Router/Link 实体。
 
 GUI 的完整编辑器持有 `DomainConfigurationDraft`。每条草稿记录使用只存在于编辑会话的单调 token 定位，因此损坏旧设计中的重复 relation/policy/override 也能逐条修复；token 不是持久化字段。草稿 reducer 不逐条运行权威校验，允许 required relation、self/cyclic reference 等互相依赖的对象按任意顺序组装。只有最终 Apply 调用 `replaceDomainConfiguration`，所以 Design 永远不会暴露半套配置。
 
-Package V2 的 `createDesign` 请求可以显式携带完整配置。`domainConfiguration` 必须是 object，并显式包含全部五个数组；解析复用 Design V2 的严格 JSON codec：
+支持 Domain 的 Package（V2+）在 `createDesign` 请求中可以显式携带完整配置。`domainConfiguration` 必须是 object，并显式包含全部五个数组；解析复用当前 Design 版本的严格 JSON codec：
 
 ~~~json
 {
@@ -303,11 +303,11 @@ Package V2 的 `createDesign` 请求可以显式携带完整配置。`domainConf
 
 简单 required Type 可以继续使用默认物化作为脚手架；若 required reference/relation 令脚手架无法独立成立，GUI 应把尚未成功创建的候选 Design 交给同一个完整编辑器，并把最终五数组作为显式 `domainConfiguration` 重新提交。Application 不应为某个 clock/power 关系编造隐式对象或顺序规则。
 
-required Type 可以在 Package V2 中用 `defaultInstance` 显式声明脚手架的 ID、名称和属性。Application 只消费 Package parser 解析后的 canonical scaffold，不再拼接 ID、猜名称或收集默认属性。为兼容旧 Package，省略该字段时仍由 Package parser（而不是 Application）解析为 `<type>-default`、Type label 和属性 schema defaults；这是受控的 manifest 兼容规则，不是 clock/power 特例。
+required Type 可以在支持 Domain 的 Package 中用 `defaultInstance` 显式声明脚手架的 ID、名称和属性。Application 只消费 Package parser 解析后的 canonical scaffold，不再拼接 ID、猜名称或收集默认属性。为兼容旧 Package，省略该字段时仍由 Package parser（而不是 Application）解析为 `<type>-default`、Type label 和属性 schema defaults；这是受控的 manifest 兼容规则，不是 clock/power 特例。
 
 批量 assignment 必须原子执行：任一元素或 Domain 不合法时，整次操作不修改设计。修改 Domain 的稳定 `id/type` 不应通过普通 update 偷偷重写引用；需要独立 rename/migrate 操作时再增加显式 API。
 
-创建 Package V2 设计时，Application 可以按 Package schema 物化 required Type 的默认实例与归属，但不能按 `clock`、`power` 名称分支。Endpoint 删除应清理其 membership 和 attachment override。Mesh 缩小若会令 Endpoint 悬空必须作为硬阻塞；若只会删除被裁剪 Router 的 membership 或被裁剪 RouterLink 的 override，则预览必须完整列出原记录，并要求调用方原样回传精确确认。缺失、额外或已陈旧的确认都应原子失败，不能使用宽泛的 `allowDataLoss` 开关，也不能静默丢数据。
+创建支持 Domain 的设计时，Application 可以按 Package schema 物化 required Type 的默认实例与归属，但不能按 `clock`、`power` 名称分支。Endpoint 删除应清理其 membership、attachment override 和 attachment element configuration。Mesh 缩小若会令 Endpoint 悬空必须作为硬阻塞；若会删除被裁剪 Router/RouterLink 的 membership、override 或 element configuration，则预览必须完整列出原记录，并要求调用方原样回传精确确认。缺失、额外或已陈旧的确认都应原子失败，不能使用宽泛的 `allowDataLoss` 开关，也不能静默丢数据。
 
 ## 7. GUI 交互目标
 
@@ -328,27 +328,97 @@ required Type 可以在 Package V2 中用 `defaultInstance` 显式声明脚手�
 
 切换 Domain 图层或提交 DomainConfiguration 只刷新 Domain presentation，不应清空重建整个 NodeEditor。Router 仍然是不可创建/删除/改 ID/任意连线的 Mesh 投影；Membership 只能选择这些派生 Router 和现有 Endpoint，Override 只能选择派生 RouterLink/EndpointAttachment，Domain UI 不改变这一边界。
 
-## 8. 版本与迁移
+## 8. Design/Package V3 的任意元素配置
 
-- Design V1 不允许出现任何五组 V2 Domain 字段，即使值是空数组；
-- Design V2 必须显式提供全部五组数组；
-- Package V1 不允许出现 `domainTypes`；
-- Package V2 必须显式提供 `domainTypes` 数组；
-- aggregate `replaceDomainConfiguration` API 与 create request 的 `domainConfiguration` 仅支持 Design V2；create request 同时要求 Package V2，且五个数组必须全部显式存在；
+Domain membership 回答“这个 Router/Endpoint 属于哪个 clock、power、security 等逻辑区域”；普通 element configuration 回答“这个具体 Router、Mesh Link 或 Endpoint Attachment 使用什么实现参数”。两者不能复用同一记录，否则 buffer、pipeline、routing 等局部参数会被错误解释成 Domain crossing 策略。
+
+Package V3 在完整保留 `domainTypes` 的同时，必须显式提供 `elementPropertySets` 数组。Set ID 和 property ID 都由 Package 定义，Core 不认识 `bufferDepth`、`pipelineStages`、`virtualChannels` 等产品字符串：
+
+~~~json
+{
+  "format": "finepaper.noc-package",
+  "formatVersion": 3,
+  "domainTypes": [],
+  "elementPropertySets": [
+    {
+      "id": "fabric.microarchitecture",
+      "label": "Fabric microarchitecture",
+      "appliesTo": ["router", "router-link"],
+      "properties": [
+        {
+          "id": "pipelineStages",
+          "type": "integer",
+          "default": 2,
+          "minimum": 0,
+          "maximum": 8
+        }
+      ]
+    },
+    {
+      "id": "initiator.attachment",
+      "appliesTo": ["endpoint-attachment"],
+      "endpointTypes": ["initiator"],
+      "properties": [
+        {
+          "id": "implementation",
+          "type": "enum",
+          "default": "registered",
+          "values": ["combinational", "registered"]
+        }
+      ]
+    }
+  ]
+}
+~~~
+
+Property 支持 integer、number、boolean、string、enum、数值范围和 `multiple` 数组。每个 property 必须声明 default，因此 Mesh 扩容可以直接继承 Package baseline，而不需要为每个新 Router/Link 物化重复记录。Endpoint 自身的可配置参数继续归 `EndpointInstance.parameters` 所有；`elementPropertySets` 不允许直接应用到 Endpoint，避免出现两个互相竞争的参数 owner。
+
+Design V3 必须显式包含 `elementConfigurations`。持久化值是相对 Package default 的稀疏 delta，而不是完整参数副本：
+
+~~~cpp
+struct ElementConfiguration {
+    ElementRef element;      // Router | RouterLink | EndpointAttachment
+    QString propertySet;     // Package-defined stable id
+    QJsonObject properties;  // only values different from defaults
+};
+~~~
+
+唯一键为 `(ElementRef, propertySet)`。设置为 default 会移除对应 key；最后一个 override 被清除时移除整条记录。读取 effective values 时使用 `Package defaults + sparse delta`。所有 set/clear 操作先在候选 Design 上完成 Core 与 Package 全量校验，失败必须返回原 Design。
+
+Router 和 RouterLink 仍不是持久化实体。它们的 ID 来自 Mesh 投影，element configuration 只能引用这些稳定 ID，不能创建 Router、删除 Router、改变 Router ID 或自由 rewiring。生命周期规则如下：
+
+- Mesh 扩容：新 Router/Link 继承 Package default，不新增记录；
+- Mesh 缩容：准确预览会删除的 Router/Link configuration，并要求 exact confirmation；
+- Endpoint 移动或断开后重连：Attachment stable ID 不变，configuration 随草稿保存并恢复；
+- Endpoint 永久删除：同时删除其 EndpointAttachment configuration；
+- Domain crossing 引起的 synchronizer/isolation 等策略继续属于 `crossingPolicies`/`edgeOverrides`；普通链路 pipeline/buffer 等属于 `elementConfigurations`。
+
+## 9. 版本与迁移
+
+- Design V1 不允许出现任何五组 Domain 字段或 `elementConfigurations`，即使值是空数组；
+- Design V2 必须显式提供全部五组 Domain 数组，并拒绝 `elementConfigurations`；
+- Design V3 必须显式提供全部五组 Domain 数组和 `elementConfigurations`；
+- Package V1 不允许出现 `domainTypes` 或 `elementPropertySets`；
+- Package V2 必须显式提供 `domainTypes`，并拒绝 `elementPropertySets`；
+- Package V3 必须显式提供 `domainTypes` 与 `elementPropertySets`；
+- `replaceDomainConfiguration` 与 create request 的 `domainConfiguration` 支持所有具备 Domain capability 的 Design/Package（当前为 V2/V3），且五个数组必须全部显式存在；
 - 未知更高版本必须失败关闭，不能读入后以旧版本覆盖保存。
 
 V1 -> V2 迁移是显式应用操作：根据 Package required Type 创建默认实例、为所有适用 Router/Endpoint 物化归属、运行 Core 与 Package validation，最后由用户确认保存。
 
-## 9. 实施顺序
+V2 -> V3 迁移同样是显式操作：保留五组 Domain 数据，加入空 `elementConfigurations`，并绑定同 ID/version 或用户明确选择的 V3 Package。不能把 V2 Package 猜测升级成某个 V3 property schema。
 
-1. Design V2、Package V2、严格 JSON/Manifest 与模型测试；
-2. Application schema validation、默认物化、typed 单个/批量操作；
-3. crossing/resolved projection 与 Generator/Engine 输入测试；
-4. Domain Manager、图层、Legend、批量编辑和 crossing Inspector；
-5. clock/power 示例 Package 的 create -> validate -> generate 纵向闭环；
-6. 再接复杂 Package/IP Engine，验证厂商 Domain DRC 和实现映射。
+## 10. 实施顺序
 
-## 10. 复杂 NoC 参考带来的能力要求
+1. Design/Package V2 Domain 与严格 JSON/Manifest；
+2. Domain Application validation、默认物化、typed 单个/批量操作；
+3. crossing/resolved projection 与 Generator/Engine 输入；
+4. Design/Package V3 element property schema 与 sparse configuration；
+5. Application 原子编辑、Mesh/Endpoint 生命周期和 Inspector；
+6. clock/power 示例 Package 的 create -> validate -> generate 纵向闭环；
+7. 再接复杂 Package/IP Engine，验证厂商 Domain DRC 和实现映射。
+
+## 11. 复杂 NoC 参考带来的能力要求
 
 对 `/home/bnl/dev/some_else/ipcore` 的只读检查表明，复杂交付会同时记录 Router 的 clock、DTC、DN 等归属，在跨 clock Domain 的 Link 上配置同步/异步实现，并提供独立图层与分领域 DRC。Finepaper 因此需要通用的多 Domain、分层可视化、结构化诊断和进程外 Engine 边界。
 

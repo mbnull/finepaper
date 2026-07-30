@@ -47,6 +47,7 @@ struct MeshResizeRouterPlan {
 struct MeshResizeImpactConfirmation {
     QVector<DomainMembership> removedMemberships;
     QVector<DomainEdgeOverride> removedEdgeOverrides;
+    QVector<ElementConfiguration> removedElementConfigurations;
 
     bool operator==(const MeshResizeImpactConfirmation&) const = default;
 };
@@ -63,6 +64,7 @@ struct MeshResizePlan {
     QVector<ElementRef> detachedEndpoints;
     QVector<DomainMembership> removedMemberships;
     QVector<DomainEdgeOverride> removedEdgeOverrides;
+    QVector<ElementConfiguration> removedElementConfigurations;
 
     QVector<MeshResizeDomainOption> domains;
     QStringList declaredDomainTypes;

@@ -155,7 +155,8 @@ bool MeshResizePlan::requiresExplicitAssignments() const {
 }
 
 bool MeshResizePlan::requiresImpactConfirmation() const {
-    return !removedMemberships.isEmpty() || !removedEdgeOverrides.isEmpty();
+    return !removedMemberships.isEmpty() || !removedEdgeOverrides.isEmpty()
+        || !removedElementConfigurations.isEmpty();
 }
 
 bool MeshResizePlan::canApplyWithoutAssignments() const {
@@ -355,6 +356,32 @@ MeshResizePlan buildMeshResizePlan(const NocDesign& design,
             QStringLiteral("/edgeOverrides/%1/edge").arg(index));
     }
 
+    for (qsizetype index = 0;
+         index < design.elementConfigurations.size(); ++index) {
+        const ElementConfiguration& configuration =
+            design.elementConfigurations.at(index);
+        const bool removedRouter =
+            configuration.element.kind == ElementKind::Router
+            && !requestedRouterIds.contains(configuration.element.id);
+        const bool removedRouterLink =
+            configuration.element.kind == ElementKind::RouterLink
+            && !requestedLinkIds.contains(configuration.element.id);
+        if (!removedRouter && !removedRouterLink) {
+            continue;
+        }
+        plan.removedElementConfigurations.append(configuration);
+        appendDiagnostic(
+            plan.diagnostics,
+            QStringLiteral("warning"),
+            QStringLiteral("mesh.resize_would_remove_element_configuration"),
+            QStringLiteral(
+                "resize will remove %1 %2 configuration %3")
+                .arg(elementKindId(configuration.element.kind),
+                     configuration.element.id,
+                     configuration.propertySet),
+            QStringLiteral("/elementConfigurations/%1/element").arg(index));
+    }
+
     return plan;
 }
 
@@ -388,6 +415,20 @@ MeshResizeAssignmentResolution resolveMeshResizeAssignments(
         QStringLiteral("mesh.resize_missing_override_confirmation"),
         QStringLiteral("mesh.resize_extra_override_confirmation"),
         QStringLiteral("mesh.resize_stale_override_confirmation"),
+        resolution.diagnostics);
+    validateExactImpactConfirmation(
+        plan.removedElementConfigurations,
+        confirmation.removedElementConfigurations,
+        [](const ElementConfiguration& lhs,
+           const ElementConfiguration& rhs) {
+            return lhs.element == rhs.element
+                && lhs.propertySet == rhs.propertySet;
+        },
+        QStringLiteral("/impactConfirmation/removedElementConfigurations"),
+        QStringLiteral("element configuration"),
+        QStringLiteral("mesh.resize_missing_element_configuration_confirmation"),
+        QStringLiteral("mesh.resize_extra_element_configuration_confirmation"),
+        QStringLiteral("mesh.resize_stale_element_configuration_confirmation"),
         resolution.diagnostics);
 
     QHash<QString, const MeshResizeRouterPlan*> newRouters;

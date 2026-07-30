@@ -353,6 +353,7 @@ void missingRequiredInstancesRemainBlocked() {
 
 NocDesign shrinkDesign(bool withEndpoint) {
     NocDesign design = growthDesign();
+    design.formatVersion = 3;
     design.topology = TopologySpec{QStringLiteral("mesh"), 1, 2};
     design.domainMemberships = {
         DomainMembership{
@@ -370,6 +371,18 @@ NocDesign shrinkDesign(bool withEndpoint) {
             QStringLiteral("fabric-zone"),
             QStringLiteral("isolated-crossing"),
             QJsonObject{{QStringLiteral("mode"), QStringLiteral("safe")}}}};
+    const QString removedLink =
+        linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"));
+    design.elementConfigurations = {
+        ElementConfiguration{
+            ElementRef{ElementKind::Router, QStringLiteral("r-1-0")},
+            QStringLiteral("vendor.router-implementation"),
+            QJsonObject{{QStringLiteral("pipeline"), 3}}},
+        ElementConfiguration{
+            ElementRef{ElementKind::RouterLink, removedLink},
+            QStringLiteral("vendor.mesh-link"),
+            QJsonObject{{QStringLiteral("width"), 128}}}
+    };
     if (withEndpoint) {
         design.endpoints = {
             EndpointInstance{
@@ -383,13 +396,17 @@ NocDesign shrinkDesign(bool withEndpoint) {
 
 void exactImpactConfirmationIsExplicitAndEfficient() {
     const NocDesign design = shrinkDesign(false);
-    MeshResizeDialog dialog(design, packageFixture());
+    PackageDefinition package = packageFixture();
+    package.formatVersion = 3;
+    MeshResizeDialog dialog(design, package);
     auto* columns = dialog.findChild<QSpinBox*>(
         QStringLiteral("finepaper.meshResize.columns"));
     auto* memberships = dialog.findChild<QListWidget*>(
         QStringLiteral("finepaper.meshResize.removedMemberships"));
     auto* overrides = dialog.findChild<QListWidget*>(
         QStringLiteral("finepaper.meshResize.removedEdgeOverrides"));
+    auto* configurations = dialog.findChild<QListWidget*>(
+        QStringLiteral("finepaper.meshResize.removedElementConfigurations"));
     auto* confirmAll = dialog.findChild<QPushButton*>(
         QStringLiteral("finepaper.meshResize.confirmAllImpacts"));
     auto* clear = dialog.findChild<QPushButton*>(
@@ -398,10 +415,12 @@ void exactImpactConfirmationIsExplicitAndEfficient() {
         QStringLiteral("finepaper.meshResize.diagnostics"));
     auto* apply = dialog.findChild<QPushButton*>(
         QStringLiteral("finepaper.meshResize.apply"));
-    check(columns && memberships && overrides && confirmAll && clear
+    check(columns && memberships && overrides && configurations
+              && confirmAll && clear
               && diagnostics && apply,
           QStringLiteral("impact preview exposes stable exact-confirmation controls"));
-    if (!columns || !memberships || !overrides || !confirmAll || !clear
+    if (!columns || !memberships || !overrides || !configurations
+        || !confirmAll || !clear
         || !diagnostics || !apply) {
         return;
     }
@@ -410,14 +429,25 @@ void exactImpactConfirmationIsExplicitAndEfficient() {
     QApplication::processEvents();
     check(dialog.plan().removedMemberships == design.domainMemberships
               && dialog.plan().removedEdgeOverrides == design.edgeOverrides
-              && memberships->count() == 1 && overrides->count() == 1,
-          QStringLiteral("shrink preview lists every exact membership and override record"));
+              && dialog.plan().removedElementConfigurations
+                  == design.elementConfigurations
+              && memberships->count() == 1 && overrides->count() == 1
+              && configurations->count() == 2,
+          QStringLiteral("shrink preview lists every exact Domain and element configuration record"));
     check(memberships->item(0)->text().contains(QStringLiteral("zone-b"))
               && overrides->item(0)->text().contains(
                   QStringLiteral("isolated-crossing"))
               && overrides->item(0)->text().contains(
-                  QStringLiteral("safe")),
-          QStringLiteral("impact rows expose assignment, policy, and property details"));
+                  QStringLiteral("safe"))
+              && configurations->item(0)->text().contains(
+                  QStringLiteral("vendor.router-implementation"))
+              && configurations->item(0)->text().contains(
+                  QStringLiteral("pipeline"))
+              && configurations->item(1)->text().contains(
+                  QStringLiteral("vendor.mesh-link"))
+              && configurations->item(1)->text().contains(
+                  QStringLiteral("128")),
+          QStringLiteral("impact rows expose assignment, policy, property-set, and sparse-value details"));
     check(!apply->isEnabled() && confirmAll->isEnabled()
               && !clear->isEnabled(),
           QStringLiteral("unconfirmed impacts gate Apply while bulk exact confirmation is available"));
@@ -431,9 +461,11 @@ void exactImpactConfirmationIsExplicitAndEfficient() {
     check(apply->isEnabled()
               && dialog.impactConfirmation()
                   == MeshResizeImpactConfirmation{
-                      design.domainMemberships, design.edgeOverrides}
+                      design.domainMemberships,
+                      design.edgeOverrides,
+                      design.elementConfigurations}
               && diagnostics->text().contains(
-                  QStringLiteral("delete 2 confirmed state record")),
+                  QStringLiteral("delete 4 confirmed state record")),
           QStringLiteral("Confirm all checks exactly the current preview and reports deletion count"));
 
     clear->click();
@@ -449,6 +481,8 @@ void exactImpactConfirmationIsExplicitAndEfficient() {
     QApplication::processEvents();
     check(memberships->item(0)->checkState() == Qt::Unchecked
               && overrides->item(0)->checkState() == Qt::Unchecked
+              && configurations->item(0)->checkState() == Qt::Unchecked
+              && configurations->item(1)->checkState() == Qt::Unchecked
               && !apply->isEnabled(),
           QStringLiteral("changing the topology invalidates confirmation of an older preview"));
     confirmAll->click();
@@ -459,7 +493,9 @@ void exactImpactConfirmationIsExplicitAndEfficient() {
 }
 
 void endpointDetachIsAlwaysAHardBlocker() {
-    MeshResizeDialog dialog(shrinkDesign(true), packageFixture());
+    PackageDefinition package = packageFixture();
+    package.formatVersion = 3;
+    MeshResizeDialog dialog(shrinkDesign(true), package);
     auto* columns = dialog.findChild<QSpinBox*>(
         QStringLiteral("finepaper.meshResize.columns"));
     auto* confirmAll = dialog.findChild<QPushButton*>(

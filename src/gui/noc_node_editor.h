@@ -101,6 +101,7 @@ struct NocDetachedEndpointSnapshot {
     EndpointInstance endpoint;
     QHash<QString, QStringList> domainAssignments;
     QVector<DomainEdgeOverride> attachmentOverrides;
+    QVector<ElementConfiguration> attachmentConfigurations;
 };
 
 struct NocRouterAttachmentPortItem {
@@ -117,6 +118,10 @@ public:
     ~NocNodeEditor() override;
 
     void setDesign(const NocDesign* design);
+    // Updates non-projected semantic state (for example Domain assignments or
+    // sparse element configurations) without rebuilding the graph or losing
+    // the current selection and Workspace layout.
+    void syncDesignState(const NocDesign& design);
     void setEndpointTypes(QVector<NocEndpointTypeItem> endpointTypes);
     void setRouterAttachmentPorts(QVector<NocRouterAttachmentPortItem> ports);
     void setEditingEnabled(bool enabled);

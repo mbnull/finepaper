@@ -474,6 +474,15 @@ MutationResult resizeMesh(
                 return plan.removedEdgeOverrides.contains(edgeOverride);
             }),
         result.design.edgeOverrides.end());
+    result.design.elementConfigurations.erase(
+        std::remove_if(
+            result.design.elementConfigurations.begin(),
+            result.design.elementConfigurations.end(),
+            [&](const ElementConfiguration& configuration) {
+                return plan.removedElementConfigurations.contains(
+                    configuration);
+            }),
+        result.design.elementConfigurations.end());
     result.design.topology = plan.requestedTopology;
     result.design.domainMemberships +=
         std::move(assignmentResolution.newRouterMemberships);
@@ -527,6 +536,16 @@ NocDesign removeEndpointReferences(const NocDesign& design,
                     && edgeOverride.edge.id == endpointId;
             }),
         edited.edgeOverrides.end());
+    edited.elementConfigurations.erase(
+        std::remove_if(
+            edited.elementConfigurations.begin(),
+            edited.elementConfigurations.end(),
+            [&](const ElementConfiguration& configuration) {
+                return configuration.element.kind
+                        == ElementKind::EndpointAttachment
+                    && configuration.element.id == endpointId;
+            }),
+        edited.elementConfigurations.end());
     return edited;
 }
 

@@ -2,6 +2,7 @@
 
 #include "gui/domain_manager_panel.h"
 #include "gui/domain_configuration_dialog.h"
+#include "gui/element_configuration_panel.h"
 #include "gui/endpoint_domain_assignment_dialog.h"
 #include "gui/mesh_resize_dialog.h"
 #include "gui/workbench_config.h"
@@ -425,6 +426,10 @@ FinepaperMainWindow::~FinepaperMainWindow() {
         m_domainManager->showDomainLayerRequested = {};
         m_domainManager->selectElementsRequested = {};
     }
+    if (m_elementConfigurationPanel) {
+        m_elementConfigurationPanel->applyRequested = {};
+        m_elementConfigurationPanel->resetRequested = {};
+    }
 }
 
 bool FinepaperMainWindow::operationBusy() const {
@@ -534,7 +539,8 @@ void FinepaperMainWindow::createCentralViews() {
             *m_design,
             endpoint,
             *assignments,
-            detached.attachmentOverrides);
+            detached.attachmentOverrides,
+            detached.attachmentConfigurations);
         adoptDesignResult(result,
                           QStringLiteral("Reconnect Endpoint %1").arg(endpoint.id));
         return result.success;
@@ -669,6 +675,17 @@ void FinepaperMainWindow::createInspectorDock() {
     selectionLayout->addWidget(m_selectionSummary);
     layout->addWidget(selectionGroup);
 
+    auto* elementConfigurationGroup = new QGroupBox(
+        QStringLiteral("Element Configuration"));
+    elementConfigurationGroup->setObjectName(
+        QStringLiteral("finepaper.elementConfigurationGroup"));
+    auto* elementConfigurationLayout =
+        new QVBoxLayout(elementConfigurationGroup);
+    m_elementConfigurationPanel = new ElementConfigurationPanel(
+        elementConfigurationGroup);
+    elementConfigurationLayout->addWidget(m_elementConfigurationPanel);
+    layout->addWidget(elementConfigurationGroup);
+
     m_parameterGroup = new QGroupBox(QStringLiteral("NoC Parameters"));
     m_parameterGroup->setObjectName(QStringLiteral("finepaper.parameterGroup"));
     auto* parameterGroupLayout = new QVBoxLayout(m_parameterGroup);
@@ -691,6 +708,42 @@ void FinepaperMainWindow::createInspectorDock() {
             this, &FinepaperMainWindow::applyParameters);
     connect(m_resizeMeshButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::resizeMesh);
+    m_elementConfigurationPanel->applyRequested = [this](
+        ElementRef element,
+        QString propertySet,
+        QJsonObject effectiveValues) {
+        if (m_operationBusy || !m_design || !packageForDesign()) {
+            return;
+        }
+        if (!confirmDiscardPendingDomainAssignments(
+                QStringLiteral("Applying element configuration"))) {
+            return;
+        }
+        adoptDesignResult(
+            m_application.setElementConfiguration(
+                *m_design,
+                std::move(element),
+                propertySet,
+                effectiveValues),
+            QStringLiteral("Apply Element Configuration"),
+            DesignRefreshScope::InspectorOnly);
+    };
+    m_elementConfigurationPanel->resetRequested = [this](
+        ElementRef element,
+        QString propertySet) {
+        if (m_operationBusy || !m_design || !packageForDesign()) {
+            return;
+        }
+        if (!confirmDiscardPendingDomainAssignments(
+                QStringLiteral("Resetting element configuration"))) {
+            return;
+        }
+        adoptDesignResult(
+            m_application.clearElementConfiguration(
+                *m_design, std::move(element), propertySet),
+            QStringLiteral("Reset Element Configuration"),
+            DesignRefreshScope::InspectorOnly);
+    };
 }
 
 void FinepaperMainWindow::createDomainDock() {
@@ -1691,6 +1744,9 @@ void FinepaperMainWindow::updateUiState() {
     if (m_domainManager) {
         m_domainManager->setBusy(m_operationBusy);
     }
+    if (m_elementConfigurationPanel) {
+        m_elementConfigurationPanel->setBusy(m_operationBusy);
+    }
 }
 
 void FinepaperMainWindow::setOperationBusy(bool busy, const QString& message) {
@@ -2360,6 +2416,17 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
     if (m_domainManager) {
         m_domainManager->setSelection(selection.elements());
     }
+    if (m_elementConfigurationPanel) {
+        std::optional<ElementRef> selectedElement;
+        if (selection.items.size() == 1) {
+            selectedElement = selection.items.front().element();
+        }
+        m_elementConfigurationPanel->setContext(
+            m_design ? &*m_design : nullptr,
+            packageForDesign(),
+            std::move(selectedElement),
+            m_operationBusy);
+    }
     m_selectedRouter.reset();
 
     if (selection.items.isEmpty()) {
@@ -2512,7 +2579,13 @@ void FinepaperMainWindow::adoptDesignResult(
     }
     m_design = result.design;
     if (scope == DesignRefreshScope::DomainsOnly) {
+        m_nodeEditor->syncDesignState(*m_design);
         refreshDomainViews();
+    } else if (scope == DesignRefreshScope::InspectorOnly) {
+        m_nodeEditor->syncDesignState(*m_design);
+        m_resolvedDesign = resolveDesign(*m_design);
+        updateInspector(m_editorSelection);
+        updateUiState();
     } else {
         refreshDesignViews();
     }

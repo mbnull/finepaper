@@ -93,6 +93,33 @@ QString impactOverrideText(const DomainEdgeOverride& edgeOverride) {
     return text;
 }
 
+QString impactElementConfigurationText(
+    const ElementConfiguration& configuration) {
+    QString kind;
+    switch (configuration.element.kind) {
+    case ElementKind::Router:
+        kind = QStringLiteral("Router");
+        break;
+    case ElementKind::RouterLink:
+        kind = QStringLiteral("Router link");
+        break;
+    case ElementKind::EndpointAttachment:
+        kind = QStringLiteral("Endpoint attachment");
+        break;
+    case ElementKind::Endpoint:
+        kind = QStringLiteral("Endpoint");
+        break;
+    case ElementKind::Invalid:
+        kind = QStringLiteral("Element");
+        break;
+    }
+    return QStringLiteral("%1 %2: property set %3; sparse overrides %4")
+        .arg(kind,
+             configuration.element.id,
+             configuration.propertySet,
+             compactObject(configuration.properties));
+}
+
 QStringList errorDiagnosticText(const QVector<Diagnostic>& diagnostics) {
     QStringList result;
     for (const Diagnostic& diagnostic : diagnostics) {
@@ -104,7 +131,10 @@ QStringList errorDiagnosticText(const QVector<Diagnostic>& diagnostics) {
                     "mesh.resize_missing_membership_confirmation")
             || diagnostic.code
                 == QStringLiteral(
-                    "mesh.resize_missing_override_confirmation")) {
+                    "mesh.resize_missing_override_confirmation")
+            || diagnostic.code
+                == QStringLiteral(
+                    "mesh.resize_missing_element_configuration_confirmation")) {
             // The impact lists already name every exact record. The dialog
             // adds one concise summary per category below instead of
             // repeating this structural error for every unchecked row.
@@ -287,6 +317,17 @@ MeshResizeDialog::MeshResizeDialog(NocDesign design,
     m_removedEdgeOverrides->setSelectionMode(QAbstractItemView::NoSelection);
     m_removedEdgeOverrides->setMaximumHeight(112);
     impactLayout->addWidget(m_removedEdgeOverrides);
+    impactLayout->addWidget(new QLabel(
+        QStringLiteral("Router and Router-link element configurations"),
+        impactGroup));
+    m_removedElementConfigurations = new QListWidget(impactGroup);
+    m_removedElementConfigurations->setObjectName(
+        QStringLiteral(
+            "finepaper.meshResize.removedElementConfigurations"));
+    m_removedElementConfigurations->setSelectionMode(
+        QAbstractItemView::NoSelection);
+    m_removedElementConfigurations->setMaximumHeight(112);
+    impactLayout->addWidget(m_removedElementConfigurations);
     root->addWidget(impactGroup);
 
     m_diagnostics = new QLabel(this);
@@ -331,6 +372,12 @@ MeshResizeDialog::MeshResizeDialog(NocDesign design,
                     updateValidation();
                 }
             });
+    connect(m_removedElementConfigurations, &QListWidget::itemChanged,
+            this, [this] {
+                if (!m_rebuilding) {
+                    updateValidation();
+                }
+            });
     connect(m_confirmAllImpacts, &QPushButton::clicked,
             this, [this] {
                 m_rebuilding = true;
@@ -339,6 +386,11 @@ MeshResizeDialog::MeshResizeDialog(NocDesign design,
                 }
                 for (int row = 0; row < m_removedEdgeOverrides->count(); ++row) {
                     m_removedEdgeOverrides->item(row)->setCheckState(Qt::Checked);
+                }
+                for (int row = 0;
+                     row < m_removedElementConfigurations->count(); ++row) {
+                    m_removedElementConfigurations->item(row)->setCheckState(
+                        Qt::Checked);
                 }
                 m_rebuilding = false;
                 updateValidation();
@@ -351,6 +403,11 @@ MeshResizeDialog::MeshResizeDialog(NocDesign design,
                 }
                 for (int row = 0; row < m_removedEdgeOverrides->count(); ++row) {
                     m_removedEdgeOverrides->item(row)->setCheckState(Qt::Unchecked);
+                }
+                for (int row = 0;
+                     row < m_removedElementConfigurations->count(); ++row) {
+                    m_removedElementConfigurations->item(row)->setCheckState(
+                        Qt::Unchecked);
                 }
                 m_rebuilding = false;
                 updateValidation();
@@ -403,6 +460,19 @@ MeshResizeImpactConfirmation MeshResizeDialog::impactConfirmation() const {
             }
         }
     }
+    if (m_removedElementConfigurations) {
+        for (int row = 0;
+             row < m_removedElementConfigurations->count(); ++row) {
+            const QListWidgetItem* item =
+                m_removedElementConfigurations->item(row);
+            const int index = item->data(Qt::UserRole).toInt();
+            if (item->checkState() == Qt::Checked && index >= 0
+                && index < m_plan.removedElementConfigurations.size()) {
+                confirmation.removedElementConfigurations.append(
+                    m_plan.removedElementConfigurations.at(index));
+            }
+        }
+    }
     return confirmation;
 }
 
@@ -429,7 +499,8 @@ void MeshResizeDialog::rebuildPlan() {
 
     m_deltaSummary->setText(
         QStringLiteral(
-            "Mesh %1 × %2 → %3 × %4. Routers: +%5 / −%6; Router links: +%7 / −%8.")
+            "Mesh %1 × %2 → %3 × %4. Routers: +%5 / −%6; Router links: +%7 / −%8. "
+            "State removals: %9 membership(s), %10 Domain override(s), %11 element configuration(s).")
             .arg(m_design.topology.rows)
             .arg(m_design.topology.columns)
             .arg(m_plan.requestedTopology.rows)
@@ -437,7 +508,10 @@ void MeshResizeDialog::rebuildPlan() {
             .arg(m_plan.newRouters.size())
             .arg(m_plan.removedRouters.size())
             .arg(m_plan.newRouterLinks.size())
-            .arg(m_plan.removedRouterLinks.size()));
+            .arg(m_plan.removedRouterLinks.size())
+            .arg(m_plan.removedMemberships.size())
+            .arg(m_plan.removedEdgeOverrides.size())
+            .arg(m_plan.removedElementConfigurations.size()));
 
     QStringList blockerLines;
     if (!m_plan.detachedEndpoints.isEmpty()) {
@@ -780,8 +854,28 @@ void MeshResizeDialog::rebuildImpactEditors() {
     }
     m_removedEdgeOverrides->setEnabled(
         m_removedEdgeOverrides->count() > 0);
+    m_removedElementConfigurations->clear();
+    for (qsizetype index = 0;
+         index < m_plan.removedElementConfigurations.size(); ++index) {
+        const ElementConfiguration& configuration =
+            m_plan.removedElementConfigurations.at(index);
+        auto* item = new QListWidgetItem(
+            impactElementConfigurationText(configuration),
+            m_removedElementConfigurations);
+        item->setData(Qt::UserRole, static_cast<int>(index));
+        item->setData(Qt::UserRole + 1, configuration.element.id);
+        item->setData(Qt::UserRole + 2, configuration.propertySet);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(Qt::Unchecked);
+        item->setToolTip(
+            QStringLiteral(
+                "Check to confirm removal of this exact sparse element configuration record."));
+    }
+    m_removedElementConfigurations->setEnabled(
+        m_removedElementConfigurations->count() > 0);
     const bool hasImpacts = m_removedMemberships->count() > 0
-        || m_removedEdgeOverrides->count() > 0;
+        || m_removedEdgeOverrides->count() > 0
+        || m_removedElementConfigurations->count() > 0;
     m_confirmAllImpacts->setEnabled(hasImpacts);
     m_clearImpactConfirmations->setEnabled(false);
 }
@@ -814,7 +908,8 @@ void MeshResizeDialog::updateValidation() {
     }
     const QStringList errors = collectLocalErrors();
     const int removedRecordCount = m_plan.removedMemberships.size()
-        + m_plan.removedEdgeOverrides.size();
+        + m_plan.removedEdgeOverrides.size()
+        + m_plan.removedElementConfigurations.size();
     m_apply->setText(
         removedRecordCount > 0
             ? QStringLiteral("Resize and remove %1 records")
@@ -824,7 +919,8 @@ void MeshResizeDialog::updateValidation() {
     const MeshResizeImpactConfirmation confirmation = impactConfirmation();
     m_clearImpactConfirmations->setEnabled(
         !confirmation.removedMemberships.isEmpty()
-        || !confirmation.removedEdgeOverrides.isEmpty());
+        || !confirmation.removedEdgeOverrides.isEmpty()
+        || !confirmation.removedElementConfigurations.isEmpty());
     if (errors.isEmpty()) {
         QString ready = QStringLiteral(
             "Ready. Applying will commit the Mesh dimensions and all new "
@@ -948,6 +1044,15 @@ QStringList MeshResizeDialog::collectLocalErrors() const {
             QStringLiteral(
                 "Confirm %1 Router-link Domain override removal(s) in the exact-record list above.")
                 .arg(uncheckedOverrides));
+    }
+    const qsizetype uncheckedConfigurations =
+        m_plan.removedElementConfigurations.size()
+        - confirmation.removedElementConfigurations.size();
+    if (uncheckedConfigurations > 0) {
+        errors.append(
+            QStringLiteral(
+                "Confirm %1 Router or Router-link element configuration removal(s) in the exact-record list above.")
+                .arg(uncheckedConfigurations));
     }
 
     errors.removeDuplicates();

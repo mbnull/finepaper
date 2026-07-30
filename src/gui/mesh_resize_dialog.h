@@ -70,6 +70,7 @@ private:
     QPushButton* m_clearImpactConfirmations = nullptr;
     QListWidget* m_removedMemberships = nullptr;
     QListWidget* m_removedEdgeOverrides = nullptr;
+    QListWidget* m_removedElementConfigurations = nullptr;
     QLabel* m_diagnostics = nullptr;
     QDialogButtonBox* m_buttons = nullptr;
     QPushButton* m_apply = nullptr;

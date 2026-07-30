@@ -1,0 +1,247 @@
+#include "gui/element_configuration_panel.h"
+
+#include <QApplication>
+#include <QComboBox>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMetaObject>
+#include <QPushButton>
+#include <QTextStream>
+
+#include <optional>
+
+namespace {
+
+using namespace finepaper;
+
+int failures = 0;
+
+void check(bool condition, const QString& message) {
+    if (!condition) {
+        QTextStream(stderr) << "FAILED: " << message << Qt::endl;
+        ++failures;
+    }
+}
+
+ElementPropertyDefinition integerProperty(const QString& id,
+                                          int defaultValue) {
+    ElementPropertyDefinition property;
+    property.id = id;
+    property.label = QStringLiteral("Arbitrary %1").arg(id);
+    property.type = ParameterType::Integer;
+    property.hasDefault = true;
+    property.defaultValue = defaultValue;
+    property.minimum = 0;
+    property.maximum = 64;
+    return property;
+}
+
+ElementPropertySetDefinition propertySet(
+    const QString& id,
+    const QVector<ElementKind>& appliesTo,
+    const QStringList& endpointTypes = {}) {
+    ElementPropertySetDefinition definition;
+    definition.id = id;
+    definition.label = QStringLiteral("Schema %1").arg(id);
+    definition.appliesTo = appliesTo;
+    definition.endpointTypes = endpointTypes;
+    definition.properties = {
+        integerProperty(QStringLiteral("pipeline"), 2)
+    };
+    return definition;
+}
+
+PackageDefinition packageFixture() {
+    PackageDefinition package;
+    package.format = QStringLiteral("finepaper.noc-package");
+    package.formatVersion = 3;
+    package.id = QStringLiteral("test.element-configuration-panel");
+    package.name = QStringLiteral("Element Configuration Panel");
+    package.version = QStringLiteral("1.0.0");
+    package.elementPropertySets = {
+        propertySet(QStringLiteral("vendor.router-implementation"),
+                    {ElementKind::Router}),
+        propertySet(QStringLiteral("vendor.mesh-link"),
+                    {ElementKind::RouterLink}),
+        propertySet(QStringLiteral("vendor.attachment-common"),
+                    {ElementKind::EndpointAttachment}),
+        propertySet(QStringLiteral("vendor.client-attachment"),
+                    {ElementKind::EndpointAttachment},
+                    {QStringLiteral("client")})
+    };
+    return package;
+}
+
+NocDesign designFixture() {
+    NocDesign design;
+    design.formatVersion = 3;
+    design.id = QStringLiteral("element-configuration-panel");
+    design.package = PackageReference{
+        QStringLiteral("test.element-configuration-panel"),
+        QStringLiteral("1.0.0")};
+    design.topology = TopologySpec{QStringLiteral("mesh"), 1, 2};
+    design.endpoints = {
+        EndpointInstance{
+            QStringLiteral("ep-client"),
+            QStringLiteral("client"),
+            EndpointAttachment{RouterPosition{0, 0}, std::nullopt},
+            {}},
+        EndpointInstance{
+            QStringLiteral("ep-memory"),
+            QStringLiteral("memory"),
+            EndpointAttachment{RouterPosition{1, 0}, std::nullopt},
+            {}}
+    };
+    design.elementConfigurations = {
+        ElementConfiguration{
+            ElementRef{ElementKind::Router, QStringLiteral("r-0-0")},
+            QStringLiteral("vendor.router-implementation"),
+            QJsonObject{{QStringLiteral("pipeline"), 4}}}
+    };
+    return design;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    QApplication application(argc, argv);
+
+    const PackageDefinition package = packageFixture();
+    const NocDesign design = designFixture();
+    const ElementRef router{
+        ElementKind::Router, QStringLiteral("r-0-0")};
+    const ElementRef link{
+        ElementKind::RouterLink,
+        linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))};
+    const ElementRef clientAttachment{
+        ElementKind::EndpointAttachment, QStringLiteral("ep-client")};
+    const ElementRef memoryAttachment{
+        ElementKind::EndpointAttachment, QStringLiteral("ep-memory")};
+
+    const ElementConfigurationPanelProjection routerProjection =
+        projectElementConfigurationPanel(&design, &package, router);
+    check(routerProjection.ready()
+              && routerProjection.propertySetIds
+                  == QStringList{QStringLiteral("vendor.router-implementation")},
+          QStringLiteral("Router property sets are projected from arbitrary Package ids"));
+    check(projectElementConfigurationPanel(&design, &package, link)
+              .propertySetIds
+              == QStringList{QStringLiteral("vendor.mesh-link")},
+          QStringLiteral("Router Link receives only its Package-declared property sets"));
+    check(projectElementConfigurationPanel(
+              &design, &package, clientAttachment).propertySetIds
+              == QStringList{
+                  QStringLiteral("vendor.attachment-common"),
+                  QStringLiteral("vendor.client-attachment")},
+          QStringLiteral("Endpoint Attachment combines generic and endpoint-type schemas"));
+    check(projectElementConfigurationPanel(
+              &design, &package, memoryAttachment).propertySetIds
+              == QStringList{QStringLiteral("vendor.attachment-common")},
+          QStringLiteral("endpointTypes filters Attachment schemas without fixed type names"));
+    check(projectElementConfigurationPanel(
+              &design,
+              &package,
+              ElementRef{ElementKind::Endpoint, QStringLiteral("ep-client")})
+              .state == ElementConfigurationPanelState::UnsupportedSelection,
+          QStringLiteral("Endpoint instances stay outside the element configuration model"));
+
+    NocDesign v2Design = design;
+    v2Design.formatVersion = 2;
+    check(projectElementConfigurationPanel(&v2Design, &package, router).state
+              == ElementConfigurationPanelState::UnsupportedFormat,
+          QStringLiteral("V2 Designs expose an explicit read-only capability state"));
+    PackageDefinition noSets = package;
+    noSets.elementPropertySets.clear();
+    check(projectElementConfigurationPanel(&design, &noSets, router).state
+              == ElementConfigurationPanelState::NoApplicablePropertySets,
+          QStringLiteral("a V3 Package may explicitly expose no applicable set"));
+
+    ElementConfigurationPanel panel;
+    panel.resize(520, 520);
+    panel.show();
+    panel.setContext(&design, &package, router);
+    QApplication::processEvents();
+
+    auto* selector = panel.findChild<QComboBox*>(
+        QStringLiteral("finepaper.elementConfiguration.propertySet"));
+    auto* status = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.elementConfiguration.status"));
+    auto* overrideState = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.elementConfiguration.overrideState"));
+    auto* pipeline = panel.findChild<QLineEdit*>(
+        QStringLiteral("finepaper.schemaValue.pipeline.scalar.text"));
+    auto* apply = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    auto* reset = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.reset"));
+    check(selector && status && overrideState && pipeline && apply && reset,
+          QStringLiteral("Element Configuration exposes stable schema-driven controls"));
+    if (!selector || !status || !overrideState || !pipeline || !apply || !reset) {
+        return 1;
+    }
+
+    check(selector->count() == 1
+              && selector->currentData().toString()
+                  == QStringLiteral("vendor.router-implementation")
+              && pipeline->text() == QStringLiteral("4")
+              && overrideState->text().contains(QStringLiteral("1 overridden")),
+          QStringLiteral("Inspector displays Package defaults plus the current sparse override"));
+    check(status->text().contains(QStringLiteral("fixed Mesh"))
+              && !apply->isEnabled() && reset->isEnabled(),
+          QStringLiteral("Router Inspector keeps the Mesh boundary visible and avoids no-op apply"));
+
+    std::optional<QJsonObject> appliedValues;
+    std::optional<QString> appliedSet;
+    panel.applyRequested = [&](ElementRef element,
+                               QString propertySetId,
+                               QJsonObject values) {
+        check(element == router,
+              QStringLiteral("Apply retains the exact semantic Router identity"));
+        appliedSet = std::move(propertySetId);
+        appliedValues = std::move(values);
+    };
+    pipeline->setText(QStringLiteral("6"));
+    QMetaObject::invokeMethod(
+        pipeline,
+        "textEdited",
+        Qt::DirectConnection,
+        Q_ARG(QString, QStringLiteral("6")));
+    QApplication::processEvents();
+    check(apply->isEnabled(),
+          QStringLiteral("a valid effective-value edit enables Apply"));
+    apply->click();
+    check(appliedSet == QStringLiteral("vendor.router-implementation")
+              && appliedValues
+              && appliedValues->value(QStringLiteral("pipeline")).toInt() == 6,
+          QStringLiteral("Apply emits schema-generic effective values for atomic mutation"));
+
+    std::optional<QString> resetSet;
+    panel.resetRequested = [&](ElementRef element, QString propertySetId) {
+        check(element == router,
+              QStringLiteral("Reset retains the exact semantic Router identity"));
+        resetSet = std::move(propertySetId);
+    };
+    reset->click();
+    check(resetSet == QStringLiteral("vendor.router-implementation"),
+          QStringLiteral("Reset requests deletion of the selected sparse set"));
+
+    panel.setBusy(true);
+    QApplication::processEvents();
+    check(!selector->isEnabled() && !apply->isEnabled() && !reset->isEnabled()
+              && status->text().contains(QStringLiteral("Read-only")),
+          QStringLiteral("busy operations retain visible values in an explicit read-only state"));
+
+    panel.setContext(
+        &design,
+        &package,
+        ElementRef{ElementKind::Endpoint, QStringLiteral("ep-client")});
+    QApplication::processEvents();
+    check(status->text().contains(QStringLiteral("Endpoint instance parameters")),
+          QStringLiteral("Endpoint selection points users to its separate parameter path"));
+
+    if (failures == 0) {
+        QTextStream(stdout) << "Element configuration panel tests passed"
+                            << Qt::endl;
+    }
+    return failures == 0 ? 0 : 1;
+}

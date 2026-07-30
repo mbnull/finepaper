@@ -764,6 +764,10 @@ void NocNodeEditor::setDesign(const NocDesign* design) {
     rebuildGraph();
 }
 
+void NocNodeEditor::syncDesignState(const NocDesign& design) {
+    m_design = design;
+}
+
 void NocNodeEditor::setEndpointTypes(QVector<NocEndpointTypeItem> endpointTypes) {
     m_endpointTypes = std::move(endpointTypes);
 }
@@ -1995,6 +1999,14 @@ bool NocNodeEditor::detachEndpoint(QtNodes::NodeId nodeId,
             detachedOverrides.append(edgeOverride);
         }
     }
+    QVector<ElementConfiguration> detachedConfigurations;
+    for (const ElementConfiguration& configuration
+         : m_design->elementConfigurations) {
+        if (configuration.element
+            == ElementRef{ElementKind::EndpointAttachment, endpointId}) {
+            detachedConfigurations.append(configuration);
+        }
+    }
     if (!endpointRemovalRequested(endpointId)) {
         if (restoreProjectionOnFailure) {
             rebuildGraph(false);
@@ -2010,7 +2022,8 @@ bool NocNodeEditor::detachEndpoint(QtNodes::NodeId nodeId,
         NocDetachedEndpointSnapshot{
             detached,
             detachedAssignments,
-            detachedOverrides}});
+            detachedOverrides,
+            detachedConfigurations}});
     m_selectedItems = {{NocEditorSelection::Kind::PendingEndpoint, pendingId}};
     rebuildGraph(false);
     return true;

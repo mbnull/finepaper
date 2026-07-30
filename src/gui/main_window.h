@@ -33,6 +33,7 @@ namespace finepaper {
 
 class EndpointPaletteList;
 class DomainManagerPanel;
+class ElementConfigurationPanel;
 
 class FinepaperMainWindow final : public QMainWindow {
 public:
@@ -48,7 +49,8 @@ protected:
 private:
     enum class DesignRefreshScope {
         FullProjection,
-        DomainsOnly
+        DomainsOnly,
+        InspectorOnly
     };
 
     struct AttachmentSlotChoice {
@@ -179,6 +181,7 @@ private:
     QGroupBox* m_parameterGroup = nullptr;
     QFormLayout* m_parameterForm = nullptr;
     QPushButton* m_applyParametersButton = nullptr;
+    ElementConfigurationPanel* m_elementConfigurationPanel = nullptr;
 
     QDockWidget* m_domainDock = nullptr;
     DomainManagerPanel* m_domainManager = nullptr;

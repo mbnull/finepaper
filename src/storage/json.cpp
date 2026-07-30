@@ -220,6 +220,53 @@ bool saveJsonObject(const QString& path,
     return true;
 }
 
+ElementConfigurationsParseResult parseElementConfigurations(
+    const QJsonValue& value,
+    const QString& basePath) {
+    ElementConfigurationsParseResult result;
+    if (!value.isArray()) {
+        appendError(result.diagnostics,
+                    QStringLiteral("json.expected_array"),
+                    QStringLiteral("elementConfigurations must be an array"),
+                    basePath);
+        return result;
+    }
+    const QJsonArray configurations = value.toArray();
+    result.configurations.reserve(configurations.size());
+    for (qsizetype index = 0; index < configurations.size(); ++index) {
+        const QString base = QStringLiteral("%1/%2").arg(basePath).arg(index);
+        if (!configurations.at(index).isObject()) {
+            appendError(result.diagnostics,
+                        QStringLiteral("json.expected_object"),
+                        QStringLiteral("Element configuration must be an object"),
+                        base);
+            continue;
+        }
+        const QJsonObject configurationObject =
+            configurations.at(index).toObject();
+        ElementConfiguration configuration;
+        if (const auto element = elementRefFromJson(
+                configurationObject.value(QStringLiteral("element")),
+                base + QStringLiteral("/element"),
+                result.diagnostics)) {
+            configuration.element = *element;
+        }
+        configuration.propertySet = stringValue(
+            configurationObject,
+            QStringLiteral("propertySet"),
+            base,
+            result.diagnostics);
+        configuration.properties = requiredObject(
+            configurationObject,
+            QStringLiteral("properties"),
+            base,
+            result.diagnostics);
+        result.configurations.append(std::move(configuration));
+    }
+    result.success = !hasErrors(result.diagnostics);
+    return result;
+}
+
 QJsonObject designToJson(const NocDesign& design) {
     QJsonObject package{
         {QStringLiteral("id"), design.package.id},
@@ -728,41 +775,11 @@ DesignLoadResult designFromJson(const QJsonObject& object) {
         }
     }
 
-    if (const auto configurations = optionalArray(
-            object,
-            QStringLiteral("elementConfigurations"),
-            result.diagnostics)) {
-        for (qsizetype index = 0; index < configurations->size(); ++index) {
-            const QString base =
-                QStringLiteral("/elementConfigurations/%1").arg(index);
-            if (!configurations->at(index).isObject()) {
-                appendError(result.diagnostics,
-                            QStringLiteral("json.expected_object"),
-                            QStringLiteral("Element configuration must be an object"),
-                            base);
-                continue;
-            }
-            const QJsonObject configurationObject =
-                configurations->at(index).toObject();
-            ElementConfiguration configuration;
-            if (const auto element = elementRefFromJson(
-                    configurationObject.value(QStringLiteral("element")),
-                    base + QStringLiteral("/element"),
-                    result.diagnostics)) {
-                configuration.element = *element;
-            }
-            configuration.propertySet = stringValue(
-                configurationObject,
-                QStringLiteral("propertySet"),
-                base,
-                result.diagnostics);
-            configuration.properties = requiredObject(
-                configurationObject,
-                QStringLiteral("properties"),
-                base,
-                result.diagnostics);
-            design.elementConfigurations.append(std::move(configuration));
-        }
+    if (object.contains(QStringLiteral("elementConfigurations"))) {
+        ElementConfigurationsParseResult parsed = parseElementConfigurations(
+            object.value(QStringLiteral("elementConfigurations")));
+        design.elementConfigurations = std::move(parsed.configurations);
+        result.diagnostics += std::move(parsed.diagnostics);
     }
 
     if (object.contains(QStringLiteral("packageData"))) {

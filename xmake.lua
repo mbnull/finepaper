@@ -112,6 +112,18 @@ target("finepaper-application-domain-tests")
         trim_output = true
     })
 
+target("finepaper-application-element-configuration-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/application_element_configuration_tests.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
 target("finepaper-mesh-resize-plan-tests")
     add_rules("qt.console")
     set_kind("binary")
@@ -159,6 +171,21 @@ target("finepaper-domain-schema-editor-tests")
     add_deps("finepaper-application")
     add_files("tests/domain_schema_editor_tests.cpp")
     add_files("src/gui/domain_property_form.cpp")
+    add_files("src/gui/schema_value_editor.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+
+target("finepaper-element-configuration-panel-tests")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/element_configuration_panel_tests.cpp")
+    add_files("src/gui/element_configuration_panel.cpp")
     add_files("src/gui/schema_value_editor.cpp")
     add_includedirs("src")
     add_tests("default", {
@@ -246,6 +273,7 @@ target("finepaper-gui-smoke")
     add_files("src/gui/domain_manager_projection.cpp")
     add_files("src/gui/domain_presentation.cpp")
     add_files("src/gui/domain_property_form.cpp")
+    add_files("src/gui/element_configuration_panel.cpp")
     add_files("src/gui/endpoint_domain_assignment_dialog.cpp")
     add_files("src/gui/mesh_resize_dialog.cpp")
     add_files("src/gui/noc_editor_style.cpp")

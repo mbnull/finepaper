@@ -2,6 +2,7 @@
 
 #include "application/domain_assignment.h"
 #include "application/domain_configuration.h"
+#include "application/element_configuration.h"
 #include "application/mesh_resize_plan.h"
 #include "execution/package_protocol.h"
 #include "noc/model.h"
@@ -73,7 +74,8 @@ public:
         const NocDesign& design,
         EndpointInstance endpoint,
         const QHash<QString, QStringList>& domainAssignments = {},
-        const QVector<DomainEdgeOverride>& attachmentOverrides = {}) const;
+        const QVector<DomainEdgeOverride>& attachmentOverrides = {},
+        const QVector<ElementConfiguration>& attachmentConfigurations = {}) const;
     DesignResult moveEndpoint(const NocDesign& design,
                               const QString& endpointId,
                               RouterPosition router,
@@ -81,6 +83,15 @@ public:
     DesignResult removeEndpoint(const NocDesign& design, const QString& endpointId) const;
     DesignResult updateParameters(const NocDesign& design,
                                   const QJsonObject& parameters) const;
+    DesignResult setElementConfiguration(
+        const NocDesign& design,
+        ElementRef element,
+        const QString& propertySet,
+        const QJsonObject& properties) const;
+    DesignResult clearElementConfiguration(
+        const NocDesign& design,
+        ElementRef element,
+        const QString& propertySet) const;
     DesignResult replaceDomainConfiguration(
         const NocDesign& design,
         DomainConfiguration configuration) const;
