@@ -102,6 +102,19 @@ target("finepaper-package-domain-tests")
         trim_output = true
     })
 
+target("finepaper-v3-runtime-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/v3_runtime_tests.cpp")
+    add_includedirs("src")
+    add_defines('FINEPAPER_SOURCE_DIR="' .. path.unix(os.projectdir()) .. '"')
+    add_tests("default", {
+        trim_output = true
+    })
+
 target("finepaper-application-domain-tests")
     add_rules("qt.console")
     set_kind("binary")

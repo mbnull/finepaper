@@ -6,6 +6,12 @@ topology fixed to a rectangular Mesh.
 - The runtime is self-contained inside this Package root. Installing only
   `finepaper.noc@3.0.0` is sufficient for validation and generation; it does
   not locate or execute the V1 Package as a hidden sibling dependency.
+- V3 Router Links and Endpoint attachments expose a bidirectional
+  payload/valid/ready contract. The generated XP currently uses a registered,
+  one-to-one forwarding shell so every transfer has real backpressure and no
+  payload is broadcast. This is the hardware foundation for per-edge Domain
+  bridges; it is intentionally not presented as a complete routing or
+  virtual-channel implementation.
 - `clock` and `power` are ordinary Package-declared Domain types. Finepaper
   Core has no special branch for either name.
 - `router.microarchitecture` provides sparse per-Router overrides for routing

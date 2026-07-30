@@ -53,17 +53,19 @@
 //  - <%= feature.ljust(16) %> : <%= enabled ? 'generated' : 'masked' %>
 <% end %>
 //#
-//# Protocol Adapter Placeholders
-//# =============================
-//  - ingress_adapter : protocol-side request/data accepted into flit shell
-//  - egress_adapter  : router return flits presented to endpoint protocol
-//  - ordering_model  : preserves existing single-flit demo behavior
+//# Ready/Valid Attachment Foundation
+//# =================================
+//  - ingress_adapter : endpoint payload/valid/ready into the Router attachment
+//  - egress_adapter  : Router payload/valid/ready back to the endpoint
+//  - ordering_model  : one independent ordered stream per Endpoint slot
+//  - scope           : flow-control shell only; no AXI/CHI transaction or
+//                      complete NoC routing behavior is implied
 //#
 //# Credit and Flow Control
 //# =======================
-//  - tx_credit_count : placeholder local transmit credit counter
-//  - can_issue       : placeholder request admission decision
-//  - response_queue  : placeholder router-to-endpoint return buffering
+//  - request_queue   : one-entry registered ready/valid stage when enabled
+//  - response_queue  : one-entry registered ready/valid stage when enabled
+//  - disabled queue  : direct ready/valid pass-through, preserving backpressure
 //----------------------------------------------------------------------------
 
 module <%= module_name %> #(
@@ -82,7 +84,12 @@ module <%= module_name %> #(
         ep_ports << "  #{p.dir.ljust(6)} logic#{p.width ? " #{p.width}" : ''} #{prefix}_#{p.name}"
       end
     else
-      ep_ports << "  input  logic [FLIT_WIDTH-1:0] #{prefix}_flit_in,\n  output logic [FLIT_WIDTH-1:0] #{prefix}_flit_out"
+      ep_ports << "  input  logic [FLIT_WIDTH-1:0] #{prefix}_flit_in"
+      ep_ports << "  input  logic                  #{prefix}_flit_in_valid"
+      ep_ports << "  output logic                  #{prefix}_flit_in_ready"
+      ep_ports << "  output logic [FLIT_WIDTH-1:0] #{prefix}_flit_out"
+      ep_ports << "  output logic                  #{prefix}_flit_out_valid"
+      ep_ports << "  input  logic                  #{prefix}_flit_out_ready"
     end
   end
 %>
@@ -92,7 +99,12 @@ module <%= module_name %> #(
   router_ports = []
   slots.each do |slot|
     prefix = slot[:generic_id]
-    router_ports << "  output logic [FLIT_WIDTH-1:0] #{prefix}_router_flit_in,\n  input  logic [FLIT_WIDTH-1:0] #{prefix}_router_flit_out"
+    router_ports << "  output logic [FLIT_WIDTH-1:0] #{prefix}_router_flit_in"
+    router_ports << "  output logic                  #{prefix}_router_flit_in_valid"
+    router_ports << "  input  logic                  #{prefix}_router_flit_in_ready"
+    router_ports << "  input  logic [FLIT_WIDTH-1:0] #{prefix}_router_flit_out"
+    router_ports << "  input  logic                  #{prefix}_router_flit_out_valid"
+    router_ports << "  output logic                  #{prefix}_router_flit_out_ready"
   end
 %>
 <%= router_ports.join(",\n") %>
@@ -101,11 +113,14 @@ module <%= module_name %> #(
 <% slots.each do |slot|
      prefix = slot[:generic_id]
      flit_source = slot[:ports]&.any? ? "'0" : "#{prefix}_flit_in"
+     source_valid = slot[:ports]&.any? ? "1'b0" : "#{prefix}_flit_in_valid"
+     sink_ready = slot[:ports]&.any? ? "1'b0" : "#{prefix}_flit_out_ready"
 %>
   //# <%= prefix %> protocol conversion shell
   //# ===============================
-  // Static framework stubs make this generated NI look like a protocol bridge
-  // without claiming to implement AXI/CHI semantics yet.
+  // The flit-side handshake below is functional. Protocol-specific endpoint
+  // ports remain inert until a real adapter is supplied; this shell does not
+  // claim to implement AXI/CHI semantics.
 <% if ni_feature_enabled.call('protocol_decode') %>
   logic [3:0]            <%= prefix %>_opcode;
   logic                  <%= prefix %>_is_read;
@@ -131,11 +146,11 @@ module <%= module_name %> #(
     .clk(clk),
     .rst_n(rst_n),
     .payload_i(<%= flit_source %>),
-    .valid_i(1'b1),
+    .valid_i(<%= source_valid %>),
     .ready_o(<%= prefix %>_req_ready),
     .payload_o(<%= prefix %>_req_payload),
     .valid_o(<%= prefix %>_req_valid),
-    .ready_i(1'b1)
+    .ready_i(<%= prefix %>_router_flit_in_ready)
   );
 <% end %>
 <% if ni_feature_enabled.call('response_queue') %>
@@ -149,11 +164,11 @@ module <%= module_name %> #(
     .clk(clk),
     .rst_n(rst_n),
     .payload_i(<%= prefix %>_router_flit_out),
-    .valid_i(1'b1),
+    .valid_i(<%= prefix %>_router_flit_out_valid),
     .ready_o(<%= prefix %>_rsp_ready),
     .payload_o(<%= prefix %>_rsp_payload),
     .valid_o(<%= prefix %>_rsp_valid),
-    .ready_i(1'b1)
+    .ready_i(<%= sink_ready %>)
   );
 <% end %>
 <% if ni_feature_enabled.call('credit_flow') %>
@@ -162,8 +177,8 @@ module <%= module_name %> #(
   fp_ni_credit_flow u_<%= prefix %>_credit_flow (
     .clk(clk),
     .rst_n(rst_n),
-    .issue_i(1'b1),
-    .return_credit_i(1'b1),
+    .issue_i(<%= prefix %>_router_flit_in_valid && <%= prefix %>_router_flit_in_ready),
+    .return_credit_i(<%= prefix %>_router_flit_out_valid && <%= prefix %>_router_flit_out_ready),
     .credit_count_o(<%= prefix %>_tx_credit_count),
     .can_issue_o(<%= prefix %>_can_issue)
   );
@@ -196,10 +211,38 @@ module <%= module_name %> #(
     .event_o(<%= prefix %>_trace_event)
   );
 <% end %>
-  assign <%= prefix %>_router_flit_in = <%= flit_source %>;
+<% if ni_feature_enabled.call('request_queue') %>
+  assign <%= prefix %>_router_flit_in       = <%= prefix %>_req_payload;
+  assign <%= prefix %>_router_flit_in_valid = <%= prefix %>_req_valid;
 <% unless slot[:ports]&.any? %>
-  assign <%= prefix %>_flit_out = <%= prefix %>_router_flit_out;
-<% end %>
+  assign <%= prefix %>_flit_in_ready        = <%= prefix %>_req_ready;
+<% end
+   else %>
+  assign <%= prefix %>_router_flit_in       = <%= flit_source %>;
+  assign <%= prefix %>_router_flit_in_valid = rst_n && <%= source_valid %>;
+<% unless slot[:ports]&.any? %>
+  assign <%= prefix %>_flit_in_ready        = rst_n && <%= prefix %>_router_flit_in_ready;
+<% end
+   end %>
+<% if ni_feature_enabled.call('response_queue') %>
+  assign <%= prefix %>_router_flit_out_ready = <%= prefix %>_rsp_ready;
+<% unless slot[:ports]&.any? %>
+  assign <%= prefix %>_flit_out              = <%= prefix %>_rsp_payload;
+  assign <%= prefix %>_flit_out_valid        = <%= prefix %>_rsp_valid;
+<% end
+   else %>
+  assign <%= prefix %>_router_flit_out_ready = rst_n && <%= sink_ready %>;
+<% unless slot[:ports]&.any? %>
+  assign <%= prefix %>_flit_out              = <%= prefix %>_router_flit_out;
+  assign <%= prefix %>_flit_out_valid        = rst_n && <%= prefix %>_router_flit_out_valid;
+<% end
+   end %>
+<% if slot[:ports]&.any?
+     slot[:ports].each do |port|
+       next unless port.dir == 'output' %>
+  assign <%= prefix %>_<%= port.name %> = '0;
+<%   end
+   end %>
 
 <% end %>
 endmodule
