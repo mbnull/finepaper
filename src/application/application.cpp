@@ -1,5 +1,6 @@
 #include "application/application.h"
 
+#include "application/domain_runtime_validation.h"
 #include "application/domain_service.h"
 
 #include "execution/process.h"
@@ -1259,7 +1260,11 @@ ValidationResult FinepaperApplication::validate(const NocDesign& design,
     }
     result.diagnostics += validateAgainstPackage(design, *package);
     if (!hasErrors(result.diagnostics) && includePackageValidation) {
-        result.diagnostics += runPackageValidation(design, *package);
+        result.diagnostics += domain_runtime_validation::validateConsumption(
+            design, *package);
+        if (!hasErrors(result.diagnostics)) {
+            result.diagnostics += runPackageValidation(design, *package);
+        }
     }
     result.success = !hasErrors(result.diagnostics);
     return result;

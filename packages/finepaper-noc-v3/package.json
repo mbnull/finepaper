@@ -63,7 +63,7 @@
         }
       ],
       "crossingProperties": [
-        { "id": "implementation", "label": "CDC implementation", "description": "Circuit strategy used when traffic crosses this clock boundary", "category": "CDC", "type": "enum", "required": true, "default": "async-fifo", "values": ["synchronizer", "async-fifo"] },
+        { "id": "implementation", "label": "CDC implementation", "description": "Circuit strategy for both traffic directions across this clock boundary", "category": "CDC", "type": "enum", "required": true, "default": "async-fifo", "values": ["synchronizer", "async-fifo"] },
         { "id": "synchronizerStages", "label": "Synchronizer stages", "description": "Metastability filtering stages for synchronizer-based crossings", "category": "CDC", "advanced": true, "type": "integer", "required": true, "default": 2, "minimum": 2, "maximum": 8 }
       ]
     },
@@ -84,11 +84,20 @@
       ],
       "relations": [],
       "crossingProperties": [
-        { "id": "isolation", "label": "Isolation required", "description": "Insert isolation behavior at this power boundary", "category": "Power crossing", "type": "boolean", "required": true, "default": true },
-        { "id": "levelShift", "label": "Level shifting", "description": "Voltage translation direction at this power boundary", "category": "Power crossing", "type": "enum", "required": true, "default": "auto", "values": ["none", "up", "down", "auto"] }
+        { "id": "isolation", "label": "Isolation required", "description": "Insert isolation behavior for the complete bidirectional power boundary", "category": "Power crossing", "type": "boolean", "required": true, "default": true },
+        { "id": "levelShift", "label": "Level shifting", "description": "Voltage translation in canonical from-to orientation; reverse traffic uses the inverse direction", "category": "Power crossing", "type": "enum", "required": true, "default": "auto", "values": ["none", "up", "down", "auto"] }
       ]
     }
   ],
+  "runtimeCapabilities": {
+    "domainConfiguration": {
+      "domains": true,
+      "memberships": true,
+      "relations": true,
+      "crossingPolicies": true,
+      "edgeOverrides": true
+    }
+  },
   "elementPropertySets": [
     {
       "id": "router.microarchitecture",

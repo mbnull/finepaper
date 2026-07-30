@@ -120,6 +120,15 @@ QJsonObject packageManifest() {
             }
         }},
         {QStringLiteral("domainTypes"), QJsonArray{}},
+        {QStringLiteral("runtimeCapabilities"), QJsonObject{
+            {QStringLiteral("domainConfiguration"), QJsonObject{
+                {QStringLiteral("domains"), false},
+                {QStringLiteral("memberships"), false},
+                {QStringLiteral("relations"), false},
+                {QStringLiteral("crossingPolicies"), false},
+                {QStringLiteral("edgeOverrides"), false}
+            }}
+        }},
         {QStringLiteral("elementPropertySets"), QJsonArray{
             QJsonObject{
                 {QStringLiteral("id"), QStringLiteral("router-impl")},

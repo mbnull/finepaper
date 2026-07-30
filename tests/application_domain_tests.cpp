@@ -220,6 +220,15 @@ QJsonObject packageManifest() {
             }
         }},
         {QStringLiteral("domainTypes"), QJsonArray{powerType, clockType, tagType}},
+        {QStringLiteral("runtimeCapabilities"), QJsonObject{
+            {QStringLiteral("domainConfiguration"), QJsonObject{
+                {QStringLiteral("domains"), true},
+                {QStringLiteral("memberships"), true},
+                {QStringLiteral("relations"), true},
+                {QStringLiteral("crossingPolicies"), true},
+                {QStringLiteral("edgeOverrides"), true}
+            }}
+        }},
         {QStringLiteral("attachment"), QJsonObject{
             {QStringLiteral("maxPerRouter"), 8},
             {QStringLiteral("slotMode"), QStringLiteral("automatic")}
@@ -407,6 +416,7 @@ QJsonObject versionOnePackageManifest() {
     manifest.insert(
         QStringLiteral("name"), QStringLiteral("V1 Domain Configuration test"));
     manifest.remove(QStringLiteral("domainTypes"));
+    manifest.remove(QStringLiteral("runtimeCapabilities"));
     return manifest;
 }
 
@@ -742,6 +752,71 @@ int main(int argc, char** argv) {
                                QStringList{QStringLiteral("clock-default")})
               && !findDomain(base, QStringLiteral("tag-default")),
           QStringLiteral("createDesign assigns every Router and Endpoint to applicable required Domains"));
+
+    QTemporaryDir unsupportedRuntimeFixture(
+        QStringLiteral("/tmp/finepaper-domain-runtime-capability-test-XXXXXX"));
+    QJsonObject unsupportedRuntimeManifest = packageManifest();
+    unsupportedRuntimeManifest.insert(
+        QStringLiteral("id"), QStringLiteral("test.partial-domain-runtime"));
+    unsupportedRuntimeManifest.insert(
+        QStringLiteral("name"), QStringLiteral("Partial Domain Runtime test"));
+    QJsonObject runtimeCapabilities = unsupportedRuntimeManifest.value(
+        QStringLiteral("runtimeCapabilities")).toObject();
+    QJsonObject domainCapabilities = runtimeCapabilities.value(
+        QStringLiteral("domainConfiguration")).toObject();
+    domainCapabilities.insert(QStringLiteral("memberships"), false);
+    runtimeCapabilities.insert(
+        QStringLiteral("domainConfiguration"), domainCapabilities);
+    unsupportedRuntimeManifest.insert(
+        QStringLiteral("runtimeCapabilities"), runtimeCapabilities);
+    const bool unsupportedRuntimeFixtureReady =
+        unsupportedRuntimeFixture.isValid()
+        && prepareFixture(unsupportedRuntimeFixture.path())
+        && saveJsonObject(
+            QDir(unsupportedRuntimeFixture.path()).filePath(
+                QStringLiteral("package.json")),
+            unsupportedRuntimeManifest);
+    check(unsupportedRuntimeFixtureReady,
+          QStringLiteral("partial Domain runtime fixture is prepared"));
+    if (unsupportedRuntimeFixtureReady) {
+        FinepaperApplication unsupportedRuntimeApplication;
+        const QVector<Diagnostic> runtimePackageDiagnostics =
+            unsupportedRuntimeApplication.reloadPackages(
+                QStringList{unsupportedRuntimeFixture.path()});
+        const DesignResult runtimeDesign =
+            unsupportedRuntimeApplication.createDesign(
+                requestForPackage(QStringLiteral("test.partial-domain-runtime")));
+        const ValidationResult structuralValidation = runtimeDesign.success
+            ? unsupportedRuntimeApplication.validate(runtimeDesign.design, false)
+            : ValidationResult{};
+        const ValidationResult executableValidation = runtimeDesign.success
+            ? unsupportedRuntimeApplication.validate(runtimeDesign.design, true)
+            : ValidationResult{};
+        QTemporaryDir output(
+            QStringLiteral("/tmp/finepaper-domain-runtime-output-XXXXXX"));
+        const GenerationResult generation = runtimeDesign.success
+            && output.isValid()
+            ? unsupportedRuntimeApplication.generate(
+                  runtimeDesign.design, GenerationOptions{output.path()})
+            : GenerationResult{};
+        check(!hasErrors(runtimePackageDiagnostics)
+                  && runtimeDesign.success
+                  && structuralValidation.success,
+              QStringLiteral(
+                  "Domain authoring remains available when runtime consumption is partial"));
+        check(!executableValidation.success
+                  && hasDiagnosticCode(
+                      executableValidation.diagnostics,
+                      QStringLiteral(
+                          "runtime.domain_memberships_not_consumed"))
+                  && !generation.success
+                  && hasDiagnosticCode(
+                      generation.diagnostics,
+                      QStringLiteral(
+                          "runtime.domain_memberships_not_consumed")),
+              QStringLiteral(
+                  "validation and generation fail closed for populated Domain data planes the runtime does not consume"));
+    }
 
     QTemporaryDir scaffoldFixture(
         QStringLiteral("/tmp/finepaper-domain-scaffold-test-XXXXXX"));

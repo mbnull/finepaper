@@ -1479,6 +1479,193 @@ QVector<DomainTypeDefinition> parseDomainTypes(
     return definitions;
 }
 
+std::optional<bool> requiredDomainRuntimeCapability(
+    const QJsonObject& object,
+    const QString& key,
+    const QString& path,
+    QVector<Diagnostic>& diagnostics) {
+    const QString valuePath = path + QLatin1Char('/') + key;
+    if (!object.contains(key)) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("package.missing_domain_runtime_capability"),
+            QStringLiteral("Domain runtime capability %1 must be declared explicitly")
+                .arg(key),
+            valuePath);
+        return std::nullopt;
+    }
+    const QJsonValue value = object.value(key);
+    if (!value.isBool()) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("package.invalid_domain_runtime_capability"),
+            QStringLiteral("Domain runtime capability %1 must be a boolean")
+                .arg(key),
+            valuePath);
+        return std::nullopt;
+    }
+    return value.toBool();
+}
+
+RuntimeCapabilitiesDefinition parseRuntimeCapabilities(
+    const QJsonValue& value,
+    int packageFormatVersion,
+    bool domainTypesDeclared,
+    QVector<Diagnostic>& diagnostics) {
+    RuntimeCapabilitiesDefinition definition;
+    const QString path = QStringLiteral("/runtimeCapabilities");
+
+    if (!formatVersionSupportsDomains(packageFormatVersion)) {
+        if (!value.isUndefined()) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.runtime_capabilities_require_v2"),
+                QStringLiteral(
+                    "runtimeCapabilities.domainConfiguration requires Package formatVersion 2"),
+                path);
+        }
+        return definition;
+    }
+
+    if (value.isUndefined()) {
+        if (domainTypesDeclared) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.missing_runtime_capabilities"),
+                QStringLiteral(
+                    "Packages that declare domainTypes must declare runtimeCapabilities"),
+                path);
+        }
+        return definition;
+    }
+    if (!value.isObject()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_runtime_capabilities"),
+                         QStringLiteral("runtimeCapabilities must be an object"),
+                         path);
+        return definition;
+    }
+
+    const QJsonObject object = value.toObject();
+    const QSet<QString> allowed{QStringLiteral("domainConfiguration")};
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        if (!allowed.contains(it.key())) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.unknown_runtime_capability"),
+                QStringLiteral("runtime capability %1 is not supported").arg(it.key()),
+                path + QLatin1Char('/') + it.key());
+        }
+    }
+
+    const QString domainPath = path + QStringLiteral("/domainConfiguration");
+    if (!object.contains(QStringLiteral("domainConfiguration"))) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("package.missing_domain_runtime_capabilities"),
+            QStringLiteral(
+                "runtimeCapabilities.domainConfiguration must be declared explicitly"),
+            domainPath);
+        return definition;
+    }
+    const QJsonValue domainValue = object.value(QStringLiteral("domainConfiguration"));
+    if (!domainValue.isObject()) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("package.invalid_domain_runtime_capabilities"),
+            QStringLiteral("runtimeCapabilities.domainConfiguration must be an object"),
+            domainPath);
+        return definition;
+    }
+
+    const QJsonObject domainObject = domainValue.toObject();
+    const QSet<QString> domainAllowed{
+        QStringLiteral("domains"),
+        QStringLiteral("memberships"),
+        QStringLiteral("relations"),
+        QStringLiteral("crossingPolicies"),
+        QStringLiteral("edgeOverrides")
+    };
+    for (auto it = domainObject.constBegin(); it != domainObject.constEnd(); ++it) {
+        if (!domainAllowed.contains(it.key())) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.unknown_domain_runtime_capability"),
+                QStringLiteral("Domain runtime capability %1 is not supported")
+                    .arg(it.key()),
+                domainPath + QLatin1Char('/') + it.key());
+        }
+    }
+
+    const std::optional<bool> domains = requiredDomainRuntimeCapability(
+        domainObject, QStringLiteral("domains"), domainPath, diagnostics);
+    const std::optional<bool> memberships = requiredDomainRuntimeCapability(
+        domainObject, QStringLiteral("memberships"), domainPath, diagnostics);
+    const std::optional<bool> relations = requiredDomainRuntimeCapability(
+        domainObject, QStringLiteral("relations"), domainPath, diagnostics);
+    const std::optional<bool> crossingPolicies = requiredDomainRuntimeCapability(
+        domainObject, QStringLiteral("crossingPolicies"), domainPath, diagnostics);
+    const std::optional<bool> edgeOverrides = requiredDomainRuntimeCapability(
+        domainObject, QStringLiteral("edgeOverrides"), domainPath, diagnostics);
+    if (!domains || !memberships || !relations || !crossingPolicies || !edgeOverrides) {
+        return definition;
+    }
+
+    const auto requireCapability = [&](bool enabled,
+                                       const QString& capability,
+                                       bool dependencyEnabled,
+                                       const QString& dependency) {
+        if (!enabled || dependencyEnabled) {
+            return;
+        }
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("package.invalid_domain_runtime_capability_dependency"),
+            QStringLiteral("Domain runtime capability %1 requires %2")
+                .arg(capability, dependency),
+            domainPath + QLatin1Char('/') + capability);
+    };
+    requireCapability(*memberships,
+                      QStringLiteral("memberships"),
+                      *domains,
+                      QStringLiteral("domains"));
+    requireCapability(*relations,
+                      QStringLiteral("relations"),
+                      *domains,
+                      QStringLiteral("domains"));
+    requireCapability(*crossingPolicies,
+                      QStringLiteral("crossingPolicies"),
+                      *domains,
+                      QStringLiteral("domains"));
+    requireCapability(*edgeOverrides,
+                      QStringLiteral("edgeOverrides"),
+                      *domains,
+                      QStringLiteral("domains"));
+    requireCapability(*edgeOverrides,
+                      QStringLiteral("edgeOverrides"),
+                      *memberships,
+                      QStringLiteral("memberships"));
+    requireCapability(*edgeOverrides,
+                      QStringLiteral("edgeOverrides"),
+                      *crossingPolicies,
+                      QStringLiteral("crossingPolicies"));
+
+    definition.domainConfiguration = DomainConfigurationRuntimeCapabilities{
+        *domains, *memberships, *relations, *crossingPolicies, *edgeOverrides
+    };
+    return definition;
+}
+
 bool pathIsInside(const QString& rootPath, const QString& candidatePath) {
     const QString root = QFileInfo(rootPath).canonicalFilePath();
     const QString candidate = QFileInfo(candidatePath).canonicalFilePath();
@@ -1748,9 +1935,14 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
         package.endpointTypes.append(std::move(definition));
     }
 
+    const QJsonValue domainTypesValue = rootObject->value(
+        QStringLiteral("domainTypes"));
     package.domainTypes = parseDomainTypes(
-        rootObject->value(QStringLiteral("domainTypes")),
+        domainTypesValue, package.formatVersion, result.diagnostics);
+    package.runtimeCapabilities = parseRuntimeCapabilities(
+        rootObject->value(QStringLiteral("runtimeCapabilities")),
         package.formatVersion,
+        !domainTypesValue.isUndefined(),
         result.diagnostics);
     package.elementPropertySets = parseElementPropertySets(
         rootObject->value(QStringLiteral("elementPropertySets")),

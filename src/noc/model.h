@@ -119,6 +119,8 @@ struct DomainRelation {
 struct DomainCrossingPolicy {
     QString id;
     QString domainType;
+    // from/to orient one complete bidirectional physical boundary according
+    // to edgeEndpoints(); they are not individual traffic-channel directions.
     QString from;
     QString to;
     QJsonObject properties;
@@ -188,6 +190,7 @@ struct TopologyProjection {
 
 struct DomainCrossingView {
     ElementRef edge;
+    // Stable canonical orientation of the bidirectional physical edge.
     ElementRef fromElement;
     ElementRef toElement;
     QString domainType;

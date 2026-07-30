@@ -51,8 +51,20 @@ bool prepareFixture(const QString& packageRoot) {
             QFileDevice::ReadOther | QFileDevice::ExeOther);
 }
 
-QJsonObject baseManifest(int formatVersion) {
+QJsonObject completeRuntimeCapabilities() {
     return QJsonObject{
+        {QStringLiteral("domainConfiguration"), QJsonObject{
+            {QStringLiteral("domains"), true},
+            {QStringLiteral("memberships"), true},
+            {QStringLiteral("relations"), true},
+            {QStringLiteral("crossingPolicies"), true},
+            {QStringLiteral("edgeOverrides"), true}
+        }}
+    };
+}
+
+QJsonObject baseManifest(int formatVersion) {
+    QJsonObject manifest{
         {QStringLiteral("format"), QStringLiteral("finepaper.noc-package")},
         {QStringLiteral("formatVersion"), formatVersion},
         {QStringLiteral("id"), QStringLiteral("test.package-domains")},
@@ -84,6 +96,11 @@ QJsonObject baseManifest(int formatVersion) {
             {QStringLiteral("timeoutSeconds"), 10}
         }}
     };
+    if (formatVersion >= 2) {
+        manifest.insert(
+            QStringLiteral("runtimeCapabilities"), completeRuntimeCapabilities());
+    }
+    return manifest;
 }
 
 QJsonArray completeDomainTypes() {
@@ -346,6 +363,9 @@ int main(int argc, char** argv) {
     const PackageLoadResult v1Result = loadManifest(fixture.path(), v1Manifest);
     check(v1Result.success && v1Result.package && v1Result.package->domainTypes.isEmpty(),
           QStringLiteral("Package V1 succeeds without domainTypes"));
+    check(v1Result.package
+              && !v1Result.package->runtimeCapabilities.domainConfiguration,
+          QStringLiteral("Package V1 does not require a Domain runtime contract"));
 
     QJsonObject v1WithPresentationMetadata = v1Manifest;
     v1WithPresentationMetadata.insert(
@@ -389,18 +409,181 @@ int main(int argc, char** argv) {
                   QStringLiteral("package.domain_types_require_v2"),
                   QStringLiteral("Package V1 with domainTypes"));
 
+    QJsonObject v1WithRuntimeCapabilities = v1Manifest;
+    v1WithRuntimeCapabilities.insert(
+        QStringLiteral("runtimeCapabilities"), completeRuntimeCapabilities());
+    expectFailure(fixture.path(),
+                  v1WithRuntimeCapabilities,
+                  QStringLiteral("package.runtime_capabilities_require_v2"),
+                  QStringLiteral("Package V1 with Domain runtime capabilities"));
+
     const QJsonObject v2MissingDomains = baseManifest(2);
     expectFailure(fixture.path(),
                   v2MissingDomains,
                   QStringLiteral("package.invalid_domain_types"),
                   QStringLiteral("Package V2 without domainTypes"));
 
+    QJsonObject v2MissingRuntimeCapabilities = baseManifest(2);
+    v2MissingRuntimeCapabilities.insert(QStringLiteral("domainTypes"), QJsonArray{});
+    v2MissingRuntimeCapabilities.remove(QStringLiteral("runtimeCapabilities"));
+    expectFailure(fixture.path(),
+                  v2MissingRuntimeCapabilities,
+                  QStringLiteral("package.missing_runtime_capabilities"),
+                  QStringLiteral("Package V2 without a Domain runtime contract"));
+
+    QJsonObject invalidRuntimeCapabilities = baseManifest(2);
+    invalidRuntimeCapabilities.insert(QStringLiteral("domainTypes"), QJsonArray{});
+    invalidRuntimeCapabilities.insert(
+        QStringLiteral("runtimeCapabilities"), QStringLiteral("all"));
+    expectFailure(fixture.path(),
+                  invalidRuntimeCapabilities,
+                  QStringLiteral("package.invalid_runtime_capabilities"),
+                  QStringLiteral("a non-object runtime capability contract"));
+
+    QJsonObject missingDomainRuntimeCapabilities = baseManifest(2);
+    missingDomainRuntimeCapabilities.insert(QStringLiteral("domainTypes"), QJsonArray{});
+    missingDomainRuntimeCapabilities.insert(
+        QStringLiteral("runtimeCapabilities"), QJsonObject{});
+    expectFailure(fixture.path(),
+                  missingDomainRuntimeCapabilities,
+                  QStringLiteral("package.missing_domain_runtime_capabilities"),
+                  QStringLiteral("runtimeCapabilities without domainConfiguration"));
+
+    QJsonObject invalidDomainRuntimeCapabilities = baseManifest(2);
+    invalidDomainRuntimeCapabilities.insert(QStringLiteral("domainTypes"), QJsonArray{});
+    invalidDomainRuntimeCapabilities.insert(
+        QStringLiteral("runtimeCapabilities"),
+        QJsonObject{{QStringLiteral("domainConfiguration"), QJsonArray{}}});
+    expectFailure(fixture.path(),
+                  invalidDomainRuntimeCapabilities,
+                  QStringLiteral("package.invalid_domain_runtime_capabilities"),
+                  QStringLiteral("a non-object Domain runtime contract"));
+
+    QJsonObject unknownRuntimeCapability = baseManifest(2);
+    unknownRuntimeCapability.insert(QStringLiteral("domainTypes"), QJsonArray{});
+    QJsonObject unknownRuntimeObject = completeRuntimeCapabilities();
+    unknownRuntimeObject.insert(QStringLiteral("hardcodedTrick"), true);
+    unknownRuntimeCapability.insert(
+        QStringLiteral("runtimeCapabilities"), unknownRuntimeObject);
+    expectFailure(fixture.path(),
+                  unknownRuntimeCapability,
+                  QStringLiteral("package.unknown_runtime_capability"),
+                  QStringLiteral("an unknown runtime capability field"));
+
+    QJsonObject unknownDomainRuntimeCapability = baseManifest(2);
+    unknownDomainRuntimeCapability.insert(QStringLiteral("domainTypes"), QJsonArray{});
+    QJsonObject unknownDomainRuntimeObject = completeRuntimeCapabilities();
+    QJsonObject unknownDomainCapabilities = unknownDomainRuntimeObject.value(
+        QStringLiteral("domainConfiguration")).toObject();
+    unknownDomainCapabilities.insert(QStringLiteral("implicitClockTrick"), true);
+    unknownDomainRuntimeObject.insert(
+        QStringLiteral("domainConfiguration"), unknownDomainCapabilities);
+    unknownDomainRuntimeCapability.insert(
+        QStringLiteral("runtimeCapabilities"), unknownDomainRuntimeObject);
+    expectFailure(fixture.path(),
+                  unknownDomainRuntimeCapability,
+                  QStringLiteral("package.unknown_domain_runtime_capability"),
+                  QStringLiteral("an unknown Domain runtime capability field"));
+
+    QJsonObject missingDomainRuntimeCapability = baseManifest(2);
+    missingDomainRuntimeCapability.insert(QStringLiteral("domainTypes"), QJsonArray{});
+    QJsonObject missingDomainRuntimeObject = completeRuntimeCapabilities();
+    QJsonObject missingDomainCapabilities = missingDomainRuntimeObject.value(
+        QStringLiteral("domainConfiguration")).toObject();
+    missingDomainCapabilities.remove(QStringLiteral("relations"));
+    missingDomainRuntimeObject.insert(
+        QStringLiteral("domainConfiguration"), missingDomainCapabilities);
+    missingDomainRuntimeCapability.insert(
+        QStringLiteral("runtimeCapabilities"), missingDomainRuntimeObject);
+    expectFailure(fixture.path(),
+                  missingDomainRuntimeCapability,
+                  QStringLiteral("package.missing_domain_runtime_capability"),
+                  QStringLiteral("a missing Domain runtime capability flag"));
+
+    QJsonObject invalidDomainRuntimeCapability = baseManifest(2);
+    invalidDomainRuntimeCapability.insert(QStringLiteral("domainTypes"), QJsonArray{});
+    QJsonObject invalidDomainRuntimeObject = completeRuntimeCapabilities();
+    QJsonObject invalidDomainCapabilities = invalidDomainRuntimeObject.value(
+        QStringLiteral("domainConfiguration")).toObject();
+    invalidDomainCapabilities.insert(
+        QStringLiteral("memberships"), QStringLiteral("supported"));
+    invalidDomainRuntimeObject.insert(
+        QStringLiteral("domainConfiguration"), invalidDomainCapabilities);
+    invalidDomainRuntimeCapability.insert(
+        QStringLiteral("runtimeCapabilities"), invalidDomainRuntimeObject);
+    expectFailure(fixture.path(),
+                  invalidDomainRuntimeCapability,
+                  QStringLiteral("package.invalid_domain_runtime_capability"),
+                  QStringLiteral("a non-boolean Domain runtime capability flag"));
+
+    const auto withDomainCapabilities = [](QJsonObject manifest,
+                                           bool domains,
+                                           bool memberships,
+                                           bool relations,
+                                           bool crossingPolicies,
+                                           bool edgeOverrides) {
+        manifest.insert(
+            QStringLiteral("runtimeCapabilities"),
+            QJsonObject{{QStringLiteral("domainConfiguration"), QJsonObject{
+                {QStringLiteral("domains"), domains},
+                {QStringLiteral("memberships"), memberships},
+                {QStringLiteral("relations"), relations},
+                {QStringLiteral("crossingPolicies"), crossingPolicies},
+                {QStringLiteral("edgeOverrides"), edgeOverrides}
+            }}});
+        return manifest;
+    };
+
+    QJsonObject dependencyManifest = baseManifest(2);
+    dependencyManifest.insert(QStringLiteral("domainTypes"), QJsonArray{});
+    expectFailure(
+        fixture.path(),
+        withDomainCapabilities(dependencyManifest, false, true, false, false, false),
+        QStringLiteral("package.invalid_domain_runtime_capability_dependency"),
+        QStringLiteral("memberships consumption without domains consumption"));
+    expectFailure(
+        fixture.path(),
+        withDomainCapabilities(dependencyManifest, false, false, true, false, false),
+        QStringLiteral("package.invalid_domain_runtime_capability_dependency"),
+        QStringLiteral("relations consumption without domains consumption"));
+    expectFailure(
+        fixture.path(),
+        withDomainCapabilities(dependencyManifest, false, false, false, true, false),
+        QStringLiteral("package.invalid_domain_runtime_capability_dependency"),
+        QStringLiteral("crossing policy consumption without domains consumption"));
+    expectFailure(
+        fixture.path(),
+        withDomainCapabilities(dependencyManifest, true, false, false, false, true),
+        QStringLiteral("package.invalid_domain_runtime_capability_dependency"),
+        QStringLiteral("edge override consumption without crossing policy consumption"));
+    expectFailure(
+        fixture.path(),
+        withDomainCapabilities(dependencyManifest, true, false, false, true, true),
+        QStringLiteral("package.invalid_domain_runtime_capability_dependency"),
+        QStringLiteral("edge override consumption without membership consumption"));
+
+    const PackageLoadResult partialCapabilityResult = loadManifest(
+        fixture.path(),
+        withDomainCapabilities(dependencyManifest, true, false, false, true, false));
+    const auto partialCapabilities = partialCapabilityResult.package
+        ? partialCapabilityResult.package->runtimeCapabilities.domainConfiguration
+        : std::nullopt;
+    check(partialCapabilityResult.success && partialCapabilities
+              && partialCapabilities->domains
+              && !partialCapabilities->memberships
+              && !partialCapabilities->relations
+              && partialCapabilities->crossingPolicies
+              && !partialCapabilities->edgeOverrides,
+          QStringLiteral("a valid partial Domain runtime contract is retained exactly"));
+
     QJsonObject v2EmptyDomains = baseManifest(2);
     v2EmptyDomains.insert(QStringLiteral("domainTypes"), QJsonArray{});
     const PackageLoadResult v2EmptyResult = loadManifest(fixture.path(), v2EmptyDomains);
     check(v2EmptyResult.success && v2EmptyResult.package
-              && v2EmptyResult.package->domainTypes.isEmpty(),
-          QStringLiteral("Package V2 accepts an explicit empty domainTypes array"));
+              && v2EmptyResult.package->domainTypes.isEmpty()
+              && v2EmptyResult.package->runtimeCapabilities.domainConfiguration,
+          QStringLiteral(
+              "Package V2 accepts an explicit empty domainTypes array with a runtime contract"));
 
     QJsonObject v2WithElementProperties = v2EmptyDomains;
     v2WithElementProperties.insert(
@@ -430,12 +613,29 @@ int main(int argc, char** argv) {
               && v3EmptyResult.package->elementPropertySets.isEmpty(),
           QStringLiteral("Package V3 accepts explicit empty schema arrays"));
 
+    QJsonObject v3MissingRuntimeCapabilities = v3EmptySchemas;
+    v3MissingRuntimeCapabilities.remove(QStringLiteral("runtimeCapabilities"));
+    expectFailure(fixture.path(),
+                  v3MissingRuntimeCapabilities,
+                  QStringLiteral("package.missing_runtime_capabilities"),
+                  QStringLiteral("Package V3 without a Domain runtime contract"));
+
     const QJsonObject completeV3 = completeV3Manifest();
     const PackageLoadResult completeV3Result = loadManifest(
         fixture.path(), completeV3);
     check(completeV3Result.success && completeV3Result.package,
           QStringLiteral("a complete Package V3 element property schema loads"));
     if (completeV3Result.package) {
+        const auto& domainCapabilities =
+            completeV3Result.package->runtimeCapabilities.domainConfiguration;
+        check(domainCapabilities
+                  && domainCapabilities->domains
+                  && domainCapabilities->memberships
+                  && domainCapabilities->relations
+                  && domainCapabilities->crossingPolicies
+                  && domainCapabilities->edgeOverrides,
+              QStringLiteral(
+                  "a complete Package V3 retains every Domain runtime capability"));
         const ElementPropertySetDefinition* fabric =
             completeV3Result.package->elementPropertySet(
                 QStringLiteral("fabric.microarchitecture"));

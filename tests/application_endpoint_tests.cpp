@@ -216,6 +216,15 @@ QJsonObject packageManifest() {
                 }}
             }
         }},
+        {QStringLiteral("runtimeCapabilities"), QJsonObject{
+            {QStringLiteral("domainConfiguration"), QJsonObject{
+                {QStringLiteral("domains"), true},
+                {QStringLiteral("memberships"), true},
+                {QStringLiteral("relations"), true},
+                {QStringLiteral("crossingPolicies"), true},
+                {QStringLiteral("edgeOverrides"), true}
+            }}
+        }},
         {QStringLiteral("elementPropertySets"), QJsonArray{
             propertySet(QStringLiteral("generic-attachment"),
                         {},

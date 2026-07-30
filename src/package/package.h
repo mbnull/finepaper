@@ -152,6 +152,26 @@ struct EngineDefinition {
     int timeoutSeconds = 1800;
 };
 
+// Package V2+ runtimes declare Domain consumption per normalized Design data
+// plane. A true value is an explicit promise that the Package execution
+// pipeline validates and materializes that data in a declared output or
+// implementation stage; false is an explicit lack of support. This promise
+// does not by itself claim that a primary RTL artifact already implements the
+// resulting constraints. Keeping the fields separate prevents partial
+// implementations from being hidden behind a single "supports domains"
+// switch.
+struct DomainConfigurationRuntimeCapabilities {
+    bool domains = false;
+    bool memberships = false;
+    bool relations = false;
+    bool crossingPolicies = false;
+    bool edgeOverrides = false;
+};
+
+struct RuntimeCapabilitiesDefinition {
+    std::optional<DomainConfigurationRuntimeCapabilities> domainConfiguration;
+};
+
 struct PackageDefinition {
     QString format;
     int formatVersion = 0;
@@ -167,6 +187,7 @@ struct PackageDefinition {
     AttachmentDefinition attachment;
     GeneratorDefinition generator;
     std::optional<EngineDefinition> engine;
+    RuntimeCapabilitiesDefinition runtimeCapabilities;
 
     QString key() const;
     const ParameterDefinition* parameter(const QString& id) const;

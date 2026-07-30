@@ -34,6 +34,17 @@ bool hasDiagnosticCode(const QVector<Diagnostic>& diagnostics, const QString& co
     });
 }
 
+QJsonObject objectWithStringField(const QJsonArray& values,
+                                  const QString& field,
+                                  const QString& expected) {
+    const auto value = std::find_if(
+        values.cbegin(), values.cend(), [&](const QJsonValue& candidate) {
+            return candidate.isObject()
+                && candidate.toObject().value(field).toString() == expected;
+        });
+    return value == values.cend() ? QJsonObject{} : value->toObject();
+}
+
 bool preparePackageFixture(const QString& packageRoot,
                            const QString& generatorSource,
                            const QJsonObject& manifest) {
@@ -492,6 +503,16 @@ int main(int argc, char** argv) {
             created.design, GenerationOptions{outputRoot.path()});
         check(generation.success, QStringLiteral("reference Package generates RTL"));
         check(!generation.artifacts.isEmpty(), QStringLiteral("generation reports artifacts"));
+        check(std::none_of(
+                  generation.artifacts.cbegin(),
+                  generation.artifacts.cend(),
+                  [](const Artifact& artifact) {
+                      return artifact.type == QStringLiteral("constraints")
+                          || artifact.path.endsWith(
+                              QStringLiteral("_domain_constraints.json"));
+                  }),
+              QStringLiteral(
+                  "V1 compatibility generation does not invent Domain constraints"));
         const auto primary = std::find_if(
             generation.artifacts.cbegin(), generation.artifacts.cend(), [](const Artifact& artifact) {
                 return artifact.primary;
@@ -540,6 +561,13 @@ int main(int argc, char** argv) {
                 return artifact.path.endsWith(
                     QStringLiteral("_design_intent.json"));
             });
+        const auto constraints = std::find_if(
+            generation.artifacts.cbegin(), generation.artifacts.cend(),
+            [](const Artifact& artifact) {
+                return artifact.type == QStringLiteral("constraints")
+                    && artifact.path.endsWith(
+                        QStringLiteral("_domain_constraints.json"));
+            });
         QString primaryText;
         if (primary != generation.artifacts.cend()) {
             QFile primaryFile(QDir(generation.outputDirectory).filePath(
@@ -552,6 +580,11 @@ int main(int argc, char** argv) {
         if (intent != generation.artifacts.cend()) {
             intentDesign = loadDesign(
                 QDir(generation.outputDirectory).filePath(intent->path));
+        }
+        JsonObjectLoadResult defaultConstraints;
+        if (constraints != generation.artifacts.cend()) {
+            defaultConstraints = loadJsonObject(
+                QDir(generation.outputDirectory).filePath(constraints->path));
         }
         const auto intentMemory = intentDesign.success
             ? std::find_if(
@@ -574,9 +607,383 @@ int main(int argc, char** argv) {
                   && intentMemory->parameters.value(
                          QStringLiteral("bufferDepth")).toInt() == 37
                   && intentMemory->parameters.value(
-                         QStringLiteral("qosEnabled")).toBool(),
+                         QStringLiteral("qosEnabled")).toBool()
+                  && defaultConstraints.success
+                  && defaultConstraints.object.value(
+                         QStringLiteral("format")).toString()
+                      == QStringLiteral("finepaper.noc-domain-constraints")
+                  && defaultConstraints.object.value(
+                         QStringLiteral("boundarySemantics")).toObject().value(
+                         QStringLiteral("scope")).toString()
+                      == QStringLiteral("bidirectional-physical-edge")
+                  && defaultConstraints.object.value(
+                         QStringLiteral("instances")).toArray().size() == 2
+                  && defaultConstraints.object.value(
+                         QStringLiteral("meshCrossings")).toArray().isEmpty(),
               QStringLiteral(
-                  "bundled V3 Generator consumes Router and Endpoint parameters and emits the complete Design intent"));
+                  "bundled V3 Generator consumes Router, Endpoint, and default Domain intent"));
+    }
+
+    NocDesign crossingDesign;
+    if (routerConfigured.success) {
+        crossingDesign = routerConfigured.design;
+        crossingDesign.domains.append(DomainDefinition{
+            QStringLiteral("clock-io"),
+            QStringLiteral("clock"),
+            QStringLiteral("I/O clock"),
+            QJsonObject{{QStringLiteral("frequencyMHz"), 500}}
+        });
+        crossingDesign.domains.append(DomainDefinition{
+            QStringLiteral("power-low"),
+            QStringLiteral("power"),
+            QStringLiteral("Low-voltage island"),
+            QJsonObject{
+                {QStringLiteral("voltageMv"), 750},
+                {QStringLiteral("retention"), true}
+            }
+        });
+        for (DomainMembership& membership : crossingDesign.domainMemberships) {
+            const bool alternateRouter = membership.element.kind == ElementKind::Router
+                && (membership.element.id == QStringLiteral("r-1-0")
+                    || membership.element.id == QStringLiteral("r-1-1"));
+            const bool alternateEndpoint = membership.element.kind == ElementKind::Endpoint
+                && membership.element.id == QStringLiteral("memory");
+            if (alternateRouter || alternateEndpoint) {
+                membership.assignments.insert(
+                    QStringLiteral("clock"),
+                    QStringList{QStringLiteral("clock-io")});
+                membership.assignments.insert(
+                    QStringLiteral("power"),
+                    QStringList{QStringLiteral("power-low")});
+            }
+        }
+        crossingDesign.domainRelations.append(DomainRelation{
+            QStringLiteral("derived-from"),
+            QStringLiteral("clock-io"),
+            QStringLiteral("clock-main"),
+            QJsonObject{{QStringLiteral("divider"), 2}}
+        });
+        crossingDesign.crossingPolicies = {
+            DomainCrossingPolicy{
+                QStringLiteral("clock-main-to-io"),
+                QStringLiteral("clock"),
+                QStringLiteral("clock-main"),
+                QStringLiteral("clock-io"),
+                QJsonObject{
+                    {QStringLiteral("implementation"), QStringLiteral("async-fifo")},
+                    {QStringLiteral("synchronizerStages"), 3}
+                }
+            },
+            DomainCrossingPolicy{
+                QStringLiteral("power-main-to-low"),
+                QStringLiteral("power"),
+                QStringLiteral("power-main"),
+                QStringLiteral("power-low"),
+                QJsonObject{
+                    {QStringLiteral("isolation"), true},
+                    {QStringLiteral("levelShift"), QStringLiteral("down")}
+                }
+            }
+        };
+        crossingDesign.edgeOverrides.append(DomainEdgeOverride{
+            ElementRef{
+                ElementKind::RouterLink,
+                linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))
+            },
+            QStringLiteral("power"),
+            QStringLiteral("power-main-to-low"),
+            QJsonObject{{QStringLiteral("isolation"), false}}
+        });
+    }
+
+    const ValidationResult crossingValidation = routerConfigured.success
+        ? finepaper.validate(crossingDesign, true)
+        : ValidationResult{};
+    check(crossingValidation.success,
+          QStringLiteral(
+              "bundled V3 runtime validates Domain relations and resolvable Mesh crossings"));
+
+    QTemporaryDir crossingOutput(
+        QStringLiteral("/tmp/finepaper-domain-crossing-test-XXXXXX"));
+    check(crossingOutput.isValid(),
+          QStringLiteral("Domain crossing output directory is available"));
+    QJsonObject crossingConstraints;
+    QString crossingConstraintsText;
+    if (crossingValidation.success && crossingOutput.isValid()) {
+        const GenerationResult generation = finepaper.generate(
+            crossingDesign, GenerationOptions{crossingOutput.path()});
+        const auto constraints = std::find_if(
+            generation.artifacts.cbegin(), generation.artifacts.cend(),
+            [](const Artifact& artifact) {
+                return artifact.type == QStringLiteral("constraints")
+                    && artifact.path.endsWith(
+                        QStringLiteral("_domain_constraints.json"));
+            });
+        if (constraints != generation.artifacts.cend()) {
+            const QString path = QDir(generation.outputDirectory).filePath(
+                constraints->path);
+            const JsonObjectLoadResult loaded = loadJsonObject(path);
+            crossingConstraints = loaded.object;
+            QFile constraintsFile(path);
+            if (constraintsFile.open(QIODevice::ReadOnly)) {
+                crossingConstraintsText = QString::fromUtf8(
+                    constraintsFile.readAll());
+            }
+        }
+        const QJsonObject clockInstance = objectWithStringField(
+            crossingConstraints.value(QStringLiteral("instances")).toArray(),
+            QStringLiteral("id"),
+            QStringLiteral("clock-io"));
+        QJsonObject overriddenCrossing;
+        const QString overriddenLink = linkId(
+            QStringLiteral("r-0-0"), QStringLiteral("r-1-0"));
+        for (const QJsonValue& value : crossingConstraints.value(
+                 QStringLiteral("meshCrossings")).toArray()) {
+            const QJsonObject candidate = value.toObject();
+            if (candidate.value(QStringLiteral("domainType")).toString()
+                    == QStringLiteral("power")
+                && candidate.value(QStringLiteral("edge")).toObject().value(
+                       QStringLiteral("id")).toString() == overriddenLink) {
+                overriddenCrossing = candidate;
+                break;
+            }
+        }
+        const QJsonObject resolution = overriddenCrossing.value(
+            QStringLiteral("resolution")).toObject();
+        check(generation.success
+                  && !crossingConstraints.isEmpty()
+                  && clockInstance.value(QStringLiteral("members"))
+                         .toArray().size() == 3
+                  && crossingConstraints.value(QStringLiteral("relations"))
+                         .toArray().size() == 1
+                  && crossingConstraints.value(QStringLiteral("policies"))
+                         .toArray().size() == 2
+                  && crossingConstraints.value(QStringLiteral("overrides"))
+                         .toArray().size() == 1
+                  && crossingConstraints.value(
+                         QStringLiteral("boundarySemantics")).toObject().value(
+                         QStringLiteral("policyOrientation")).toString()
+                      == QStringLiteral("canonical-edge-endpoints")
+                  && crossingConstraints.value(QStringLiteral("meshCrossings"))
+                         .toArray().size() == 4
+                  && resolution.value(QStringLiteral("source")).toString()
+                      == QStringLiteral("override")
+                  && resolution.value(QStringLiteral("policy")).toString()
+                      == QStringLiteral("power-main-to-low")
+                  && resolution.value(QStringLiteral("overrideProperties"))
+                         .toObject().contains(QStringLiteral("isolation"))
+                  && !resolution.value(QStringLiteral("overrideProperties"))
+                          .toObject().value(QStringLiteral("isolation")).toBool()
+                  && resolution.value(QStringLiteral("effectiveProperties"))
+                         .toObject().value(QStringLiteral("levelShift")).toString()
+                      == QStringLiteral("down")
+                  && !resolution.value(QStringLiteral("effectiveProperties"))
+                          .toObject().value(QStringLiteral("isolation")).toBool(),
+              QStringLiteral(
+                  "Domain constraints compile instances, members, relations, policies, overrides, and Mesh crossings"));
+    }
+
+    NocDesign reorderedDomainDesign = crossingDesign;
+    std::reverse(reorderedDomainDesign.domains.begin(),
+                 reorderedDomainDesign.domains.end());
+    std::reverse(reorderedDomainDesign.domainMemberships.begin(),
+                 reorderedDomainDesign.domainMemberships.end());
+    std::reverse(reorderedDomainDesign.domainRelations.begin(),
+                 reorderedDomainDesign.domainRelations.end());
+    std::reverse(reorderedDomainDesign.crossingPolicies.begin(),
+                 reorderedDomainDesign.crossingPolicies.end());
+    std::reverse(reorderedDomainDesign.edgeOverrides.begin(),
+                 reorderedDomainDesign.edgeOverrides.end());
+    QTemporaryDir reorderedDomainOutput(
+        QStringLiteral("/tmp/finepaper-domain-order-test-XXXXXX"));
+    check(reorderedDomainOutput.isValid(),
+          QStringLiteral("Domain determinism output directory is available"));
+    if (crossingValidation.success && reorderedDomainOutput.isValid()) {
+        const GenerationResult generation = finepaper.generate(
+            reorderedDomainDesign,
+            GenerationOptions{reorderedDomainOutput.path()});
+        const auto constraints = std::find_if(
+            generation.artifacts.cbegin(), generation.artifacts.cend(),
+            [](const Artifact& artifact) {
+                return artifact.type == QStringLiteral("constraints");
+            });
+        QString reorderedText;
+        if (constraints != generation.artifacts.cend()) {
+            QFile constraintsFile(QDir(generation.outputDirectory).filePath(
+                constraints->path));
+            if (constraintsFile.open(QIODevice::ReadOnly)) {
+                reorderedText = QString::fromUtf8(constraintsFile.readAll());
+            }
+        }
+        check(generation.success
+                  && !crossingConstraintsText.isEmpty()
+                  && reorderedText == crossingConstraintsText,
+              QStringLiteral(
+                  "Domain constraints are deterministic across equivalent input ordering"));
+    }
+
+    NocDesign changedDomainDesign = crossingDesign;
+    for (DomainDefinition& domain : changedDomainDesign.domains) {
+        if (domain.id == QStringLiteral("clock-io")) {
+            domain.properties.insert(QStringLiteral("frequencyMHz"), 625);
+        }
+    }
+    QTemporaryDir changedDomainOutput(
+        QStringLiteral("/tmp/finepaper-domain-change-test-XXXXXX"));
+    check(changedDomainOutput.isValid(),
+          QStringLiteral("changed Domain output directory is available"));
+    if (crossingValidation.success && changedDomainOutput.isValid()) {
+        const GenerationResult generation = finepaper.generate(
+            changedDomainDesign,
+            GenerationOptions{changedDomainOutput.path()});
+        const auto constraints = std::find_if(
+            generation.artifacts.cbegin(), generation.artifacts.cend(),
+            [](const Artifact& artifact) {
+                return artifact.type == QStringLiteral("constraints");
+            });
+        QString changedText;
+        QJsonObject changedConstraints;
+        if (constraints != generation.artifacts.cend()) {
+            const QString path = QDir(generation.outputDirectory).filePath(
+                constraints->path);
+            const JsonObjectLoadResult loaded = loadJsonObject(path);
+            changedConstraints = loaded.object;
+            QFile constraintsFile(path);
+            if (constraintsFile.open(QIODevice::ReadOnly)) {
+                changedText = QString::fromUtf8(constraintsFile.readAll());
+            }
+        }
+        const QJsonObject changedClock = objectWithStringField(
+            changedConstraints.value(QStringLiteral("instances")).toArray(),
+            QStringLiteral("id"),
+            QStringLiteral("clock-io"));
+        check(generation.success
+                  && !crossingConstraintsText.isEmpty()
+                  && crossingConstraintsText != changedText
+                  && changedClock.value(QStringLiteral("properties"))
+                         .toObject().value(QStringLiteral("frequencyMHz")).toInt()
+                      == 625,
+              QStringLiteral(
+                  "changing a Domain property deterministically changes the compiled constraints artifact"));
+    }
+
+    NocDesign missingStrategyDesign = crossingDesign;
+    if (!missingStrategyDesign.crossingPolicies.isEmpty()) {
+        missingStrategyDesign.crossingPolicies.removeFirst();
+    }
+    const ValidationResult missingStrategyValidation = routerConfigured.success
+        ? finepaper.validate(missingStrategyDesign, true)
+        : ValidationResult{};
+    check(!missingStrategyValidation.success
+              && hasDiagnosticCode(
+                  missingStrategyValidation.diagnostics,
+                  QStringLiteral("finepaper_noc.adapter_failed")),
+          QStringLiteral(
+              "bundled V3 runtime rejects a Mesh Domain crossing without a directed strategy"));
+
+    QTemporaryDir strictDomainRun(
+        QStringLiteral("/tmp/finepaper-domain-strict-fields-XXXXXX"));
+    check(strictDomainRun.isValid(),
+          QStringLiteral("strict Domain validation directory is available"));
+    if (routerConfigured.success && strictDomainRun.isValid()) {
+        const QStringList domainArrayFields{
+            QStringLiteral("domains"),
+            QStringLiteral("domainMemberships"),
+            QStringLiteral("domainRelations"),
+            QStringLiteral("crossingPolicies"),
+            QStringLiteral("edgeOverrides")
+        };
+        bool allRejected = true;
+        for (const QString& field : domainArrayFields) {
+            QJsonObject invalidDesign = designToJson(crossingDesign);
+            invalidDesign.insert(field, QJsonObject{});
+            const QString designPath = QDir(strictDomainRun.path()).filePath(
+                field + QStringLiteral("-design.json"));
+            const QString resultPath = QDir(strictDomainRun.path()).filePath(
+                field + QStringLiteral("-result.json"));
+            const bool saved = saveJsonObject(designPath, invalidDesign);
+            const ProcessResult process = saved
+                ? runProcess(
+                      QDir(projectRoot).filePath(
+                          QStringLiteral(
+                              "packages/finepaper-noc-v3/runtime/bin/generate")),
+                      QStringList{
+                          QStringLiteral("validate"),
+                          QStringLiteral("--design"),
+                          designPath,
+                          QStringLiteral("--result"),
+                          resultPath
+                      },
+                      strictDomainRun.path(),
+                      30'000)
+                : ProcessResult{};
+            const JsonObjectLoadResult result = loadJsonObject(resultPath);
+            allRejected = allRejected
+                && saved
+                && process.started
+                && process.exitCode != 0
+                && result.success
+                && !result.object.value(QStringLiteral("success")).toBool();
+        }
+        check(allRejected,
+              QStringLiteral(
+                  "bundled V3 runtime strictly parses every Domain data plane as an array"));
+    }
+
+    QTemporaryDir invalidStrategyRun(
+        QStringLiteral("/tmp/finepaper-domain-invalid-strategy-XXXXXX"));
+    check(invalidStrategyRun.isValid(),
+          QStringLiteral("invalid Domain strategy directory is available"));
+    if (routerConfigured.success && invalidStrategyRun.isValid()) {
+        QJsonObject invalidStrategy = designToJson(crossingDesign);
+        QJsonArray policies = invalidStrategy.value(
+            QStringLiteral("crossingPolicies")).toArray();
+        for (qsizetype index = 0; index < policies.size(); ++index) {
+            QJsonObject policy = policies.at(index).toObject();
+            if (policy.value(QStringLiteral("id")).toString()
+                != QStringLiteral("power-main-to-low")) {
+                continue;
+            }
+            policy.insert(QStringLiteral("from"), QStringLiteral("power-low"));
+            policy.insert(QStringLiteral("to"), QStringLiteral("power-main"));
+            policies[index] = policy;
+        }
+        invalidStrategy.insert(QStringLiteral("crossingPolicies"), policies);
+        const QString designPath = QDir(invalidStrategyRun.path()).filePath(
+            QStringLiteral("design.json"));
+        const QString resultPath = QDir(invalidStrategyRun.path()).filePath(
+            QStringLiteral("result.json"));
+        const bool saved = saveJsonObject(designPath, invalidStrategy);
+        const ProcessResult process = saved
+            ? runProcess(
+                  QDir(projectRoot).filePath(
+                      QStringLiteral(
+                          "packages/finepaper-noc-v3/runtime/bin/generate")),
+                  QStringList{
+                      QStringLiteral("validate"),
+                      QStringLiteral("--design"),
+                      designPath,
+                      QStringLiteral("--result"),
+                      resultPath
+                  },
+                  invalidStrategyRun.path(),
+                  30'000)
+            : ProcessResult{};
+        const JsonObjectLoadResult result = loadJsonObject(resultPath);
+        const QJsonArray diagnostics = result.object.value(
+            QStringLiteral("diagnostics")).toArray();
+        const QString message = diagnostics.isEmpty()
+            ? QString()
+            : diagnostics.at(0).toObject().value(
+                  QStringLiteral("message")).toString();
+        check(saved
+                  && process.started
+                  && process.exitCode != 0
+                  && result.success
+                  && !result.object.value(QStringLiteral("success")).toBool()
+                  && message.contains(QStringLiteral("does not match")),
+              QStringLiteral(
+                  "bundled V3 runtime rejects an override policy with the reverse canonical edge orientation"));
     }
 
     FinepaperApplication complexApplication;
