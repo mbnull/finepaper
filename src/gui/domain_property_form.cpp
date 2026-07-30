@@ -37,7 +37,7 @@ void DomainPropertyForm::setSchema(
     const QVector<DomainPropertyDefinition>& definitions,
     const QVector<DomainDefinition>& draftDomains,
     const QJsonObject& values,
-    PropertyInitialization initialization) {
+    DomainPropertyFormOptions formOptions) {
     clearRows();
     m_rows.reserve(definitions.size());
     m_passthroughValues = values;
@@ -100,7 +100,9 @@ void DomainPropertyForm::setSchema(
         SchemaValueOptions options;
         options.multiple = definition.multiple;
         options.required = definition.required;
+        options.validationMode = formOptions.validationMode;
         options.referenceDomainType = definition.referenceDomainType;
+        options.allowCustomReferences = formOptions.allowCustomReferences;
         if (definition.referenceDomainType) {
             for (const DomainDefinition& domain : draftDomains) {
                 if (domain.type != *definition.referenceDomainType) {
@@ -125,7 +127,7 @@ void DomainPropertyForm::setSchema(
         std::optional<QJsonValue> initialValue;
         if (values.contains(definition.id)) {
             initialValue = values.value(definition.id);
-        } else if (initialization
+        } else if (formOptions.initialization
                        == PropertyInitialization::CreateWithDefaults
                    && definition.hasDefault) {
             initialValue = definition.defaultValue;
@@ -145,12 +147,23 @@ void DomainPropertyForm::setSchema(
         QString label = definition.label.trimmed().isEmpty()
             ? definition.id
             : definition.label;
-        if (definition.required) {
+        if (definition.required
+            && formOptions.validationMode == PropertyValidationMode::Complete) {
             label += QStringLiteral(" *");
         }
         m_form->addRow(label, editor);
         m_rows.append(PropertyRow{definition, editor});
     }
+}
+
+void DomainPropertyForm::setSchema(
+    const QVector<DomainPropertyDefinition>& definitions,
+    const QVector<DomainDefinition>& draftDomains,
+    const QJsonObject& values,
+    PropertyInitialization initialization) {
+    DomainPropertyFormOptions options;
+    options.initialization = initialization;
+    setSchema(definitions, draftDomains, values, options);
 }
 
 QJsonObject DomainPropertyForm::values() const {

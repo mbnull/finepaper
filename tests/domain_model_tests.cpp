@@ -210,7 +210,7 @@ NocDesign projectionDesign() {
             QStringLiteral("power"),
             QStringLiteral("pd_main"),
             QStringLiteral("pd_aux"),
-            QJsonObject{}
+            QJsonObject{{QStringLiteral("latencyCycles"), 4}}
         },
         DomainCrossingPolicy{
             QStringLiteral("endpoint_clock"),
@@ -409,6 +409,22 @@ int main(int argc, char** argv) {
         QStringLiteral("domain_policy.duplicate_id"),
         QStringLiteral("duplicated crossing policy ids"),
         [](NocDesign& design) { design.crossingPolicies.append(design.crossingPolicies[0]); });
+    expectDiagnostic(
+        QStringLiteral("domain_policy.duplicate_pair"),
+        QStringLiteral("two default policies for the same directed Domain pair"),
+        [](NocDesign& design) {
+            DomainCrossingPolicy duplicatePair = design.crossingPolicies[0];
+            duplicatePair.id = QStringLiteral("clock_async_alias");
+            design.crossingPolicies.append(std::move(duplicatePair));
+        });
+
+    NocDesign reversePolicy = domainDesign();
+    DomainCrossingPolicy reverse = reversePolicy.crossingPolicies[0];
+    reverse.id = QStringLiteral("clock_async_reverse");
+    std::swap(reverse.from, reverse.to);
+    reversePolicy.crossingPolicies.append(std::move(reverse));
+    check(!hasErrors(validateDesignStructure(reversePolicy)),
+          QStringLiteral("crossing policy pair uniqueness remains directed"));
 
     expectDiagnostic(
         QStringLiteral("domain_edge_override.unsupported_edge_kind"),
@@ -473,6 +489,13 @@ int main(int argc, char** argv) {
                   == QStringList{QStringLiteral("pd_aux")},
           QStringLiteral("Router Link Domain crossings expose their endpoint assignments"));
     check(linkCrossing
+              && linkCrossing->defaultPolicy
+              && *linkCrossing->defaultPolicy
+                  == QStringLiteral("power_transition")
+              && linkCrossing->defaultProperties
+                  == QJsonObject{{QStringLiteral("latencyCycles"), 4}},
+          QStringLiteral("a singleton directed crossing resolves its one exact default policy"));
+    check(linkCrossing
               && linkCrossing->overridePolicy == QStringLiteral("power_transition")
               && linkCrossing->overrideProperties
                   == QJsonObject{{QStringLiteral("isolationCells"), 2}},
@@ -494,6 +517,10 @@ int main(int argc, char** argv) {
                   == QStringList{QStringLiteral("clk_c")},
           QStringLiteral("Endpoint Attachment crossings are projected with normalized Domain sets"));
     check(attachmentCrossing
+              && !attachmentCrossing->defaultPolicy
+              && attachmentCrossing->defaultProperties.isEmpty(),
+          QStringLiteral("set-valued crossings do not guess one pairwise policy as the default"));
+    check(attachmentCrossing
               && attachmentCrossing->overridePolicy == QStringLiteral("endpoint_clock")
               && attachmentCrossing->overrideProperties
                   == QJsonObject{{QStringLiteral("synchronizerStages"), 3}},
@@ -509,6 +536,57 @@ int main(int argc, char** argv) {
                       && crossing.edge.id == QStringLiteral("ep1");
               }),
           QStringLiteral("equal Router and Endpoint Domain sets do not create a crossing"));
+
+    NocDesign missingDefaultPolicy = projectedDesign;
+    missingDefaultPolicy.crossingPolicies.erase(
+        missingDefaultPolicy.crossingPolicies.begin());
+    const QVector<DomainCrossingView> missingDefaultCrossings =
+        projectDomainCrossings(missingDefaultPolicy);
+    const DomainCrossingView* missingDefaultCrossing = findCrossing(
+        missingDefaultCrossings,
+        ElementKind::RouterLink,
+        projectedLinkId,
+        QStringLiteral("power"));
+    check(missingDefaultCrossing
+              && !missingDefaultCrossing->defaultPolicy
+              && missingDefaultCrossing->defaultProperties.isEmpty(),
+          QStringLiteral("a singleton crossing without an exact policy has no default"));
+
+    NocDesign reverseOnlyPolicy = missingDefaultPolicy;
+    reverseOnlyPolicy.crossingPolicies.append(DomainCrossingPolicy{
+        QStringLiteral("power_transition_reverse"),
+        QStringLiteral("power"),
+        QStringLiteral("pd_aux"),
+        QStringLiteral("pd_main"),
+        QJsonObject{{QStringLiteral("latencyCycles"), 7}}
+    });
+    const QVector<DomainCrossingView> reverseOnlyCrossings =
+        projectDomainCrossings(reverseOnlyPolicy);
+    const DomainCrossingView* reverseOnlyCrossing = findCrossing(
+        reverseOnlyCrossings,
+        ElementKind::RouterLink,
+        projectedLinkId,
+        QStringLiteral("power"));
+    check(reverseOnlyCrossing && !reverseOnlyCrossing->defaultPolicy,
+          QStringLiteral("default policy lookup preserves crossing direction"));
+
+    NocDesign ambiguousDefaultPolicy = projectedDesign;
+    DomainCrossingPolicy duplicateDefault =
+        ambiguousDefaultPolicy.crossingPolicies.front();
+    duplicateDefault.id = QStringLiteral("power_transition_duplicate");
+    ambiguousDefaultPolicy.crossingPolicies.append(
+        std::move(duplicateDefault));
+    const QVector<DomainCrossingView> ambiguousDefaultCrossings =
+        projectDomainCrossings(ambiguousDefaultPolicy);
+    const DomainCrossingView* ambiguousDefaultCrossing = findCrossing(
+        ambiguousDefaultCrossings,
+        ElementKind::RouterLink,
+        projectedLinkId,
+        QStringLiteral("power"));
+    check(ambiguousDefaultCrossing
+              && !ambiguousDefaultCrossing->defaultPolicy
+              && ambiguousDefaultCrossing->defaultProperties.isEmpty(),
+          QStringLiteral("ambiguous duplicate pair policies are never projected as a default"));
 
     const std::optional<RouterPosition> routerPosition = routerPositionFromId(
         QStringLiteral("r-1-0"));

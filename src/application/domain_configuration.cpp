@@ -35,9 +35,18 @@ void appendExpectedArray(QVector<Diagnostic>& diagnostics,
 }
 
 bool isDomainPath(const QString& path) {
+    QString relativePath = path;
+    const QString configurationRoot = QStringLiteral("/domainConfiguration");
+    if (relativePath == configurationRoot) {
+        return true;
+    }
+    if (relativePath.startsWith(configurationRoot + QLatin1Char('/'))) {
+        relativePath.remove(0, configurationRoot.size());
+    }
     for (const QString& field : fieldNames()) {
         const QString prefix = QLatin1Char('/') + field;
-        if (path == prefix || path.startsWith(prefix + QLatin1Char('/'))) {
+        if (relativePath == prefix
+            || relativePath.startsWith(prefix + QLatin1Char('/'))) {
             return true;
         }
     }
@@ -128,6 +137,10 @@ ParseResult parse(const QJsonObject& object,
     }
     result.success = !hasErrors(result.diagnostics);
     return result;
+}
+
+bool ownsDiagnostic(const Diagnostic& diagnostic) {
+    return isDomainPath(diagnostic.path);
 }
 
 } // namespace finepaper::domain_configuration

@@ -32,6 +32,7 @@ NocDesign replace(const NocDesign& design, DomainConfiguration configuration);
 ParseResult parse(const QJsonObject& object,
                   const NocDesign& baseDesign,
                   const QString& basePath = QStringLiteral("/domainConfiguration"));
+bool ownsDiagnostic(const Diagnostic& diagnostic);
 
 } // namespace domain_configuration
 } // namespace finepaper

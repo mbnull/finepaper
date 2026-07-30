@@ -28,11 +28,18 @@ struct SchemaChoice {
     bool operator==(const SchemaChoice&) const = default;
 };
 
+enum class PropertyValidationMode {
+    Complete,
+    Partial
+};
+
 struct SchemaValueOptions {
     bool multiple = false;
     bool required = false;
+    PropertyValidationMode validationMode = PropertyValidationMode::Complete;
     std::optional<QString> referenceDomainType;
     QVector<SchemaChoice> choices;
+    bool allowCustomReferences = false;
 };
 
 // SchemaValueEditor owns the distinction between an absent JSON property and a

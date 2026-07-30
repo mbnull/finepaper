@@ -23,7 +23,7 @@ Domain 数据属于 `NocDesign`，参与 dirty、undo、save、validate 和 gene
 1. `domains`：Domain 实例；
 2. `domainMemberships`：Router/Endpoint 的归属；
 3. `domainRelations`：实例之间的 typed 关系；
-4. `crossingPolicies`：同一 Type 两个实例之间的默认 crossing 策略；
+4. `crossingPolicies`：同一 Type 两个实例之间的默认 crossing 策略；策略 `id` 全局唯一，且有向 `(domainType, from, to)` 实例对只能有一个默认策略；
 5. `edgeOverrides`：单条派生边的策略覆盖。
 
 对应公共结构：
@@ -221,7 +221,11 @@ Finepaper Application 根据当前 Package 保证声明式约束：
 
 Router Link 和 Endpoint attachment 都由 Mesh 与挂载关系派生。对某一 Domain Type，如果边两端的 assignment 集合不同，则产生 crossing view。多归属 Type 比较规范化后的集合，而不是假设只有一个 Domain。
 
-`crossingPolicies` 表示两个 Domain 实例之间的默认实现意图；`edgeOverrides` 只在某条边需要不同处理时使用。这样无需给每条普通边持久化重复配置，同时仍能精确表达例外。
+`crossingPolicies` 表示两个 Domain 实例之间的默认实现意图；`edgeOverrides` 只在某条边需要不同处理时使用。策略 `id` 是全局稳定引用，同一有向 `(domainType, from, to)` 只能声明一个默认策略，反向实例对是另一个独立策略。这样无需给每条普通边持久化重复配置，同时仍能精确表达例外，也不会出现多个“默认值”之间的隐式优先级。
+
+当前 `edgeOverrides` 只支持 singleton crossing：规范化后的 `fromDomains` 与 `toDomains` 必须各自恰好包含一个实例，所引用 policy 的 `from/to` 必须与这两个实例精确、同向匹配。`multiple` cardinality 仍可以产生并展示 set-valued crossing，但只要任一侧为空或包含多个实例，绑定 override 会以 `domain_edge_override.unsupported_set_crossing` 明确失败，Core/Application 不会从集合中猜选一个实例对。
+
+未来若要让 set-valued crossing 可配置，需要先定义无歧义的集合策略模型，例如显式的实例对矩阵、集合级 policy 或确定的组合/优先级规则，并通过相应的 Design 格式演进开放；不能复用当前单个 policy 引用来隐式代表整个集合关系。
 
 Generator/Engine 接收完整 Design V2。Core 不把 clock、power 或厂商 Type 转成内部特例字段。
 
@@ -233,8 +237,8 @@ GUI、CLI 和未来 API 都只能通过 `FinepaperApplication` 修改 Domain：
 - `addDomain`；
 - `updateDomain`；
 - `removeDomain`；
-- `assignDomainsToElements`；
-- `clearDomainAssignment`。
+- `patchDomainAssignments`（同时表达 exact replacement、ensure-present 和 ensure-absent）；
+- `assignDomainsToElements` / `clearDomainAssignment` 作为现有兼容入口，内部仍复用同一 Application 校验边界。
 
 五组 Domain 数据可以通过公共 `DomainConfiguration` 一次性提交：
 
@@ -251,6 +255,8 @@ struct DomainConfiguration {
 `DomainConfiguration` 只是五组既有数组的内存 aggregate，不是 Design V2 的第六个持久化字段；保存时仍展开为 `domains`、`domainMemberships`、`domainRelations`、`crossingPolicies` 和 `edgeOverrides`。
 
 `replaceDomainConfiguration` 是 aggregate transaction：先在候选 Design 上整体替换五组数据，再执行 Core 与 Package 全量校验；任何结构、引用、schema 或 required 约束失败时返回原 Design，不暴露半更新状态。Router 和 Router Link 仍由 Mesh 派生，配置只能通过稳定引用选择它们，不能携带或创建 Router/Link 实体。
+
+GUI 的完整编辑器持有 `DomainConfigurationDraft`。每条草稿记录使用只存在于编辑会话的单调 token 定位，因此损坏旧设计中的重复 relation/policy/override 也能逐条修复；token 不是持久化字段。草稿 reducer 不逐条运行权威校验，允许 required relation、self/cyclic reference 等互相依赖的对象按任意顺序组装。只有最终 Apply 调用 `replaceDomainConfiguration`，所以 Design 永远不会暴露半套配置。
 
 Package V2 的 `createDesign` 请求可以显式携带完整配置。`domainConfiguration` 必须是 object，并显式包含全部五个数组；解析复用 Design V2 的严格 JSON codec：
 
@@ -270,6 +276,10 @@ Package V2 的 `createDesign` 请求可以显式携带完整配置。`domainConf
 
 显式配置存在时，Application 不再补 required 默认实例，也不合并 Domain property default；该配置是权威的完整快照，必须自行满足 Package 约束。未提供时继续执行 Package-driven required 默认物化。Package V1 请求出现 `domainConfiguration` 时必须明确失败。
 
+简单 required Type 可以继续使用默认物化作为脚手架；若 required reference/relation 令脚手架无法独立成立，GUI 应把尚未成功创建的候选 Design 交给同一个完整编辑器，并把最终五数组作为显式 `domainConfiguration` 重新提交。Application 不应为某个 clock/power 关系编造隐式对象或顺序规则。
+
+当前简单脚手架仍以通用 `<type>-default` 约定生成临时实例 ID。它不是 clock/power 特例，但仍属于下一阶段要移出 Application 的策略：应改为 Package 显式声明 scaffold/default-instance policy，或直接要求创建请求提供完整配置，避免 Core/Application 长期拥有命名规则。
+
 批量 assignment 必须原子执行：任一元素或 Domain 不合法时，整次操作不修改设计。修改 Domain 的稳定 `id/type` 不应通过普通 update 偷偷重写引用；需要独立 rename/migrate 操作时再增加显式 API。
 
 创建 Package V2 设计时，Application 可以按 Package schema 物化 required Type 的默认实例与归属，但不能按 `clock`、`power` 名称分支。Endpoint 删除应清理其 membership 和 attachment override；Mesh 缩小若会删除有 Domain 意图的 Router/Link，应明确拒绝并定位冲突，不能静默丢数据。
@@ -277,6 +287,11 @@ Package V2 的 `createDesign` 请求可以显式携带完整配置。`domainConf
 ## 7. GUI 交互目标
 
 - Domain Manager 按 Package schema 创建、编辑和删除任意 Type 实例；
+- 完整配置工作台同时提供 Instances、Memberships、Relations、Crossing Policies、Edge Overrides 五个 section，并持续显示整份草稿的 DRC；
+- 行级 Dialog 只负责局部字段与 schema 形状，完整草稿可以暂时无效；最终 Apply 必须是最新一次整体校验成功的快照；
+- 缺失 Application validator 时必须 fail closed；DRC 不得静默截断，关闭、Cancel 或 Revert 未 Apply 的五页草稿前必须显式确认；
+- Domain reference 在完整工作区允许输入 future/self/mutual ID，最终由 Package 校验引用存在性与 Type；普通快速编辑器仍使用严格候选列表；
+- policy properties 使用 Complete schema，edge override properties 使用 Partial schema；Partial 只持久化差异，不复制默认 policy 值；
 - `Color by: None / <Domain Type>` 切换画布图层；
 - Legend 显示颜色、名称、缩写和成员数，不能只靠颜色；
 - Router/Endpoint 多选后可以批量赋值，混合值显示 `Mixed`；
@@ -284,7 +299,7 @@ Package V2 的 `createDesign` 请求可以显式携带完整配置。`domainConf
 - Domain 颜色、当前图层和面板状态属于 Workspace presentation；
 - Domain 实例、归属、关系、policy 和 override 属于 `NocDesign`。
 
-切换 Domain 图层只刷新 presentation，不应清空重建整个 NodeEditor。Router 仍然是不可创建/删除的 Mesh 投影，Domain UI 不改变这一边界。
+切换 Domain 图层或提交 DomainConfiguration 只刷新 Domain presentation，不应清空重建整个 NodeEditor。Router 仍然是不可创建/删除/改 ID/任意连线的 Mesh 投影；Membership 只能选择这些派生 Router 和现有 Endpoint，Override 只能选择派生 RouterLink/EndpointAttachment，Domain UI 不改变这一边界。
 
 ## 8. 版本与迁移
 

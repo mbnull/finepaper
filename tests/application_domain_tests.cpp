@@ -1,4 +1,5 @@
 #include "application/application.h"
+#include "application/domain_configuration_draft.h"
 #include "storage/json.h"
 
 #include <QCoreApplication>
@@ -466,10 +467,177 @@ bool hasDomainConfiguration(const NocDesign& design,
         && design.edgeOverrides == configuration.edgeOverrides;
 }
 
+void checkDomainConfigurationDraft() {
+    const DomainDefinition duplicateDomain{
+        QStringLiteral("duplicate"),
+        QStringLiteral("clock"),
+        QStringLiteral("Damaged duplicate"),
+        QJsonObject{{QStringLiteral("frequencyMHz"), 800}}
+    };
+    const DomainMembership duplicateMembership{
+        ElementRef{ElementKind::Router, QStringLiteral("r-0-0")},
+        QHash<QString, QStringList>{
+            {QStringLiteral("clock"), QStringList{QStringLiteral("duplicate")}}
+        }
+    };
+    const DomainRelation duplicateRelation{
+        QStringLiteral("poweredBy"),
+        QStringLiteral("duplicate"),
+        QStringLiteral("power-default"),
+        QJsonObject{{QStringLiteral("latency"), 1}}
+    };
+    const DomainCrossingPolicy duplicatePolicy{
+        QStringLiteral("duplicate-policy"),
+        QStringLiteral("clock"),
+        QStringLiteral("duplicate"),
+        QStringLiteral("clock-default"),
+        QJsonObject{{QStringLiteral("stages"), 2}}
+    };
+    const DomainEdgeOverride duplicateOverride{
+        ElementRef{ElementKind::RouterLink, QStringLiteral("l-r-0-0-r-1-0")},
+        QStringLiteral("clock"),
+        QStringLiteral("duplicate-policy"),
+        QJsonObject{{QStringLiteral("stages"), 3}}
+    };
+
+    DomainConfiguration damaged;
+    damaged.domains = {duplicateDomain, duplicateDomain};
+    damaged.domainMemberships = {duplicateMembership, duplicateMembership};
+    damaged.domainRelations = {duplicateRelation, duplicateRelation};
+    damaged.crossingPolicies = {duplicatePolicy, duplicatePolicy};
+    damaged.edgeOverrides = {duplicateOverride, duplicateOverride};
+
+    DomainConfigurationDraft draft(damaged);
+    check(draft.configuration() == damaged,
+          QStringLiteral("Domain configuration draft round-trips all arrays without validation"));
+
+    QVector<DomainConfigurationDraft::Token> initialTokens;
+    const auto appendTokens = [&](const auto& rows) {
+        for (const auto& row : rows) {
+            initialTokens.append(row.token);
+        }
+    };
+    appendTokens(draft.domains());
+    appendTokens(draft.memberships());
+    appendTokens(draft.relations());
+    appendTokens(draft.policies());
+    appendTokens(draft.overrides());
+    bool tokensAreMonotonic = initialTokens.size() == 10;
+    for (qsizetype index = 1; index < initialTokens.size(); ++index) {
+        tokensAreMonotonic =
+            tokensAreMonotonic && initialTokens[index - 1] < initialTokens[index];
+    }
+    check(tokensAreMonotonic,
+          QStringLiteral("Domain configuration draft assigns globally monotonic row tokens"));
+
+    DomainDefinition repairedDomain = duplicateDomain;
+    repairedDomain.name = QStringLiteral("Repaired independently");
+    const auto firstDomainToken = draft.domains()[0].token;
+    const auto secondDomainToken = draft.domains()[1].token;
+    check(draft.updateDomain(secondDomainToken, repairedDomain)
+              && draft.domains()[0].value == duplicateDomain
+              && draft.domains()[0].token == firstDomainToken
+              && draft.domains()[1].value == repairedDomain
+              && draft.domains()[1].token == secondDomainToken,
+          QStringLiteral("duplicate damaged rows can be edited independently by token"));
+    check(draft.removeDomain(firstDomainToken)
+              && draft.domains().size() == 1
+              && draft.domains()[0].token == secondDomainToken
+              && !draft.removeDomain(firstDomainToken)
+              && !draft.updateDomain(firstDomainToken, duplicateDomain),
+          QStringLiteral("duplicate damaged rows can be removed without rekeying"));
+
+    DomainMembership repairedMembership = duplicateMembership;
+    repairedMembership.element.id = QStringLiteral("r-1-0");
+    const auto firstMembershipToken = draft.memberships()[0].token;
+    const auto secondMembershipToken = draft.memberships()[1].token;
+    check(draft.updateMembership(secondMembershipToken, repairedMembership)
+              && draft.removeMembership(firstMembershipToken)
+              && draft.memberships()[0].token == secondMembershipToken,
+          QStringLiteral("membership rows support token-based update and removal"));
+
+    DomainRelation repairedRelation = duplicateRelation;
+    repairedRelation.properties.insert(QStringLiteral("latency"), 2);
+    const auto firstRelationToken = draft.relations()[0].token;
+    const auto secondRelationToken = draft.relations()[1].token;
+    check(draft.updateRelation(secondRelationToken, repairedRelation)
+              && draft.removeRelation(firstRelationToken)
+              && draft.relations()[0].token == secondRelationToken,
+          QStringLiteral("relation rows support token-based update and removal"));
+
+    DomainCrossingPolicy repairedPolicy = duplicatePolicy;
+    repairedPolicy.properties.insert(QStringLiteral("stages"), 4);
+    const auto firstPolicyToken = draft.policies()[0].token;
+    const auto secondPolicyToken = draft.policies()[1].token;
+    check(draft.updatePolicy(secondPolicyToken, repairedPolicy)
+              && draft.removePolicy(firstPolicyToken)
+              && draft.policies()[0].token == secondPolicyToken,
+          QStringLiteral("policy rows support token-based update and removal"));
+
+    DomainEdgeOverride repairedOverride = duplicateOverride;
+    repairedOverride.properties.insert(QStringLiteral("stages"), 1);
+    const auto firstOverrideToken = draft.overrides()[0].token;
+    const auto secondOverrideToken = draft.overrides()[1].token;
+    check(draft.updateOverride(secondOverrideToken, repairedOverride)
+              && draft.removeOverride(firstOverrideToken)
+              && draft.overrides()[0].token == secondOverrideToken,
+          QStringLiteral("override rows support token-based update and removal"));
+
+    const auto addedDomainToken = draft.addDomain(DomainDefinition{
+        QStringLiteral("new-domain"),
+        QStringLiteral("clock"),
+        QStringLiteral("New domain"),
+        QJsonObject{}
+    });
+    const auto addedMembershipToken = draft.addMembership(duplicateMembership);
+    const auto addedRelationToken = draft.addRelation(duplicateRelation);
+    const auto addedPolicyToken = draft.addPolicy(duplicatePolicy);
+    const auto addedOverrideToken = draft.addOverride(duplicateOverride);
+    check(addedDomainToken > initialTokens.constLast()
+              && addedDomainToken < addedMembershipToken
+              && addedMembershipToken < addedRelationToken
+              && addedRelationToken < addedPolicyToken
+              && addedPolicyToken < addedOverrideToken,
+          QStringLiteral("new rows receive monotonically increasing tokens across all arrays"));
+
+    const auto survivingToken = draft.domains()[0].token;
+    draft.reset(damaged);
+    check(draft.configuration() == damaged
+              && draft.domains()[0].token > addedOverrideToken
+              && draft.domains()[0].token != survivingToken,
+          QStringLiteral("reset reloads the working copy without reusing session tokens"));
+}
+
+void checkDomainConfigurationDiagnosticOwnership() {
+    check(domain_configuration::ownsDiagnostic(Diagnostic{
+              QStringLiteral("error"),
+              QStringLiteral("domain.required_type_missing"),
+              QStringLiteral("missing"),
+              QStringLiteral("/domains"),
+              QStringLiteral("package")})
+              && domain_configuration::ownsDiagnostic(Diagnostic{
+                  QStringLiteral("error"),
+                  QStringLiteral("domain_relation.required"),
+                  QStringLiteral("missing"),
+                  QStringLiteral(
+                      "/domainConfiguration/domainRelations/0"),
+                  QStringLiteral("package")})
+              && !domain_configuration::ownsDiagnostic(Diagnostic{
+                  QStringLiteral("error"),
+                  QStringLiteral("topology.invalid_rows"),
+                  QStringLiteral("invalid"),
+                  QStringLiteral("/topology/rows"),
+                  QStringLiteral("finepaper")}),
+          QStringLiteral("Domain configuration diagnostic ownership is path-driven and reusable outside the GUI"));
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     QCoreApplication qtApplication(argc, argv);
+
+    checkDomainConfigurationDraft();
+    checkDomainConfigurationDiagnosticOwnership();
 
     QTemporaryDir fixture(QStringLiteral("/tmp/finepaper-application-domain-test-XXXXXX"));
     const bool fixtureReady = fixture.isValid() && prepareFixture(fixture.path())
@@ -990,6 +1158,40 @@ int main(int argc, char** argv) {
         ElementRef{ElementKind::Router, QStringLiteral("r-1-0")});
     check(application.validate(linkCrossing, false).success,
           QStringLiteral("declared relation, policy, and crossing override schemas validate"));
+
+    NocDesign duplicatePolicyPair = linkCrossing;
+    DomainCrossingPolicy policyAlias = duplicatePolicyPair.crossingPolicies[0];
+    policyAlias.id = QStringLiteral("cdc-alias");
+    duplicatePolicyPair.crossingPolicies.append(std::move(policyAlias));
+    const ValidationResult duplicatePolicyPairValidation = application.validate(
+        duplicatePolicyPair, false);
+    check(!duplicatePolicyPairValidation.success
+              && hasDiagnosticCode(
+                  duplicatePolicyPairValidation.diagnostics,
+                  QStringLiteral("domain_policy.duplicate_pair")),
+          QStringLiteral("Application validation rejects ambiguous default policies for one directed pair"));
+
+    NocDesign setValuedCrossing = mixedTags;
+    setValuedCrossing.crossingPolicies.append(DomainCrossingPolicy{
+        QStringLiteral("tag-transition"),
+        QStringLiteral("tag"),
+        QStringLiteral("tag-a"),
+        QStringLiteral("tag-b"),
+        QJsonObject{}
+    });
+    setValuedCrossing.edgeOverrides.append(DomainEdgeOverride{
+        ElementRef{ElementKind::RouterLink, routerLinkId},
+        QStringLiteral("tag"),
+        QStringLiteral("tag-transition"),
+        QJsonObject{}
+    });
+    const ValidationResult setValuedCrossingValidation = application.validate(
+        setValuedCrossing, false);
+    check(!setValuedCrossingValidation.success
+              && hasDiagnosticCode(
+                  setValuedCrossingValidation.diagnostics,
+                  QStringLiteral("domain_edge_override.unsupported_set_crossing")),
+          QStringLiteral("edge overrides reject set-valued crossings instead of choosing a contained Domain pair"));
 
     NocDesign invalidRelation = linkCrossing;
     invalidRelation.domainRelations[0].type = QStringLiteral("unknown");

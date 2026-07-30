@@ -172,6 +172,8 @@ struct DomainCrossingView {
     QString domainType;
     QStringList fromDomains;
     QStringList toDomains;
+    std::optional<QString> defaultPolicy;
+    QJsonObject defaultProperties;
     std::optional<QString> overridePolicy;
     QJsonObject overrideProperties;
 

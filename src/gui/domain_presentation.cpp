@@ -206,6 +206,8 @@ DomainPresentationSnapshot buildDomainPresentationSnapshot(
             if (!presentation.accentColors.isEmpty()) {
                 presentation.primaryAccent = presentation.accentColors.front();
             }
+            presentation.defaultPolicy = crossing.defaultPolicy;
+            presentation.defaultProperties = crossing.defaultProperties;
             presentation.overridePolicy = crossing.overridePolicy;
             presentation.overrideProperties = crossing.overrideProperties;
             snapshot.crossings.insert(crossing.edge, std::move(presentation));

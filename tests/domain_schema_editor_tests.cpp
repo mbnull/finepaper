@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLineEdit>
@@ -284,6 +285,119 @@ void multipleRowsAreSelectableAndOperableThroughTheirEditors() {
     form.close();
 }
 
+void completeAndPartialModesMatchAggregateValidationSemantics() {
+    finepaper::DomainPropertyDefinition requiredCount = property(
+        QStringLiteral("count"), finepaper::ParameterType::Integer);
+    requiredCount.required = true;
+
+    finepaper::DomainPropertyForm completeForm;
+    finepaper::DomainPropertyFormOptions completeOptions;
+    completeOptions.initialization =
+        finepaper::PropertyInitialization::ExactValues;
+    completeOptions.validationMode =
+        finepaper::PropertyValidationMode::Complete;
+    completeForm.setSchema({requiredCount}, {}, {}, completeOptions);
+    check(!completeForm.locallyValid(),
+          QStringLiteral("Complete mode requires absent schema-required properties"));
+
+    finepaper::DomainPropertyForm partialForm;
+    finepaper::DomainPropertyFormOptions partialOptions;
+    partialOptions.initialization =
+        finepaper::PropertyInitialization::ExactValues;
+    partialOptions.validationMode =
+        finepaper::PropertyValidationMode::Partial;
+    partialForm.setSchema({requiredCount}, {}, {}, partialOptions);
+    check(partialForm.locallyValid()
+              && !partialForm.values().contains(QStringLiteral("count")),
+          QStringLiteral("Partial mode permits a schema-required property to be absent"));
+
+    finepaper::DomainPropertyDefinition requiredTags = property(
+        QStringLiteral("tags"), finepaper::ParameterType::String, true);
+    requiredTags.required = true;
+    partialForm.setSchema(
+        {requiredTags},
+        {},
+        QJsonObject{{QStringLiteral("tags"), QJsonArray{}}},
+        partialOptions);
+    check(!partialForm.locallyValid(),
+          QStringLiteral("Partial mode still rejects an explicitly set empty required list"));
+}
+
+void customReferencesSupportWorkingCopyForwardReferences() {
+    finepaper::DomainPropertyDefinition parent = property(
+        QStringLiteral("parent"), finepaper::ParameterType::String);
+    parent.referenceDomainType = QStringLiteral("clock");
+
+    const QVector<finepaper::DomainDefinition> domains{
+        finepaper::DomainDefinition{
+            QStringLiteral("clock-a"),
+            QStringLiteral("clock"),
+            QStringLiteral("Clock A"),
+            {}}};
+    const QJsonObject forwardReference{
+        {QStringLiteral("parent"), QStringLiteral("clock-future")}};
+
+    finepaper::DomainPropertyForm strictForm;
+    strictForm.setSchema(
+        {parent},
+        domains,
+        forwardReference,
+        finepaper::PropertyInitialization::ExactValues);
+    auto* strictChoice = strictForm.findChild<QComboBox*>(
+        QStringLiteral("finepaper.schemaValue.parent.scalar.choice"));
+    check(strictChoice && !strictChoice->isEditable()
+              && !strictForm.locallyValid()
+              && strictForm.values().value(QStringLiteral("parent")).toString()
+                  == QStringLiteral("clock-future"),
+          QStringLiteral("strict quick editor preserves but rejects an unavailable reference"));
+
+    finepaper::DomainPropertyFormOptions workingCopyOptions;
+    workingCopyOptions.initialization =
+        finepaper::PropertyInitialization::ExactValues;
+    workingCopyOptions.allowCustomReferences = true;
+    finepaper::DomainPropertyForm workingCopyForm;
+    workingCopyForm.setSchema(
+        {parent}, domains, forwardReference, workingCopyOptions);
+    auto* customChoice = workingCopyForm.findChild<QComboBox*>(
+        QStringLiteral("finepaper.schemaValue.parent.scalar.choice"));
+    auto* customInput = workingCopyForm.findChild<QLineEdit*>(
+        QStringLiteral(
+            "finepaper.schemaValue.parent.scalar.choice.customReference"));
+    check(customChoice && customChoice->isEditable() && customInput
+              && workingCopyForm.locallyValid()
+              && workingCopyForm.values().value(QStringLiteral("parent")).toString()
+                  == QStringLiteral("clock-future"),
+          QStringLiteral("working-copy editor accepts a future reference as an editable Domain ID"));
+    if (customInput) {
+        customInput->setText(QStringLiteral("clock-mutual"));
+    }
+    check(workingCopyForm.locallyValid()
+              && workingCopyForm.values().value(QStringLiteral("parent")).toString()
+                  == QStringLiteral("clock-mutual"),
+          QStringLiteral("custom reference input returns the typed stable Domain ID"));
+
+    finepaper::DomainPropertyForm rawRecoveryForm;
+    rawRecoveryForm.setSchema(
+        {parent},
+        domains,
+        QJsonObject{{QStringLiteral("parent"), 17}},
+        workingCopyOptions);
+    check(!rawRecoveryForm.locallyValid()
+              && rawRecoveryForm.values().value(QStringLiteral("parent"))
+                  == QJsonValue(17),
+          QStringLiteral("custom references still preserve and reject a wrong-type raw value"));
+    auto* recoveryChoice = rawRecoveryForm.findChild<QComboBox*>(
+        QStringLiteral("finepaper.schemaValue.parent.scalar.choice"));
+    if (recoveryChoice) {
+        recoveryChoice->setCurrentIndex(
+            recoveryChoice->findData(QStringLiteral("clock-a")));
+    }
+    check(rawRecoveryForm.locallyValid()
+              && rawRecoveryForm.values().value(QStringLiteral("parent")).toString()
+                  == QStringLiteral("clock-a"),
+          QStringLiteral("choosing a valid reference explicitly recovers from raw stored data"));
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -297,6 +411,8 @@ int main(int argc, char** argv) {
     unknownPropertiesRoundTripWithoutLoss();
     explicitEmptyAndFalseValuesRoundTrip();
     multipleRowsAreSelectableAndOperableThroughTheirEditors();
+    completeAndPartialModesMatchAggregateValidationSemantics();
+    customReferencesSupportWorkingCopyForwardReferences();
 
     if (failures == 0) {
         QTextStream(stdout) << "Domain schema editor tests passed" << Qt::endl;

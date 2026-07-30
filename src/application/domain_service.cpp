@@ -1332,11 +1332,22 @@ QVector<Diagnostic> validateAgainstPackage(
                              QStringLiteral("package"));
             continue;
         }
+        if (crossing->fromDomains.size() != 1
+            || crossing->toDomains.size() != 1) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("domain_edge_override.unsupported_set_crossing"),
+                QStringLiteral("edge overrides currently require exactly one Domain on each side of the crossing"),
+                base + QStringLiteral("/edge"),
+                QStringLiteral("package"));
+            continue;
+        }
         const DomainCrossingPolicy* policy = policiesById.value(
             edgeOverride.policy, nullptr);
         if (policy
-            && (!crossing->fromDomains.contains(policy->from)
-                || !crossing->toDomains.contains(policy->to))) {
+            && (crossing->fromDomains.constFirst() != policy->from
+                || crossing->toDomains.constFirst() != policy->to)) {
             appendDiagnostic(diagnostics,
                              QStringLiteral("error"),
                              QStringLiteral("domain_edge_override.policy_pair_mismatch"),

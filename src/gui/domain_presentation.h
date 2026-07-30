@@ -56,6 +56,8 @@ struct DomainCrossingPresentation {
     QStringList accentDomainIds;
     QVector<QColor> accentColors;
     QColor primaryAccent;
+    std::optional<QString> defaultPolicy;
+    QJsonObject defaultProperties;
     std::optional<QString> overridePolicy;
     QJsonObject overrideProperties;
 

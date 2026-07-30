@@ -35,6 +35,16 @@ QString relationKey(const DomainRelation& relation) {
         + relation.from + QChar(0x1f) + relation.to;
 }
 
+QString crossingPolicyPairKey(const QString& domainType,
+                              const QString& from,
+                              const QString& to) {
+    return domainType + QChar(0x1f) + from + QChar(0x1f) + to;
+}
+
+QString crossingPolicyPairKey(const DomainCrossingPolicy& policy) {
+    return crossingPolicyPairKey(policy.domainType, policy.from, policy.to);
+}
+
 QString edgeOverrideKey(const DomainEdgeOverride& edgeOverride) {
     return referenceKey(edgeOverride.edge) + QChar(0x1f) + edgeOverride.domainType;
 }
@@ -348,6 +358,11 @@ QVector<DomainCrossingView> projectDomainCrossings(const NocDesign& design) {
         overrides.insert(edgeOverrideKey(edgeOverride), &edgeOverride);
     }
 
+    QHash<QString, QVector<const DomainCrossingPolicy*>> policiesByPair;
+    for (const DomainCrossingPolicy& policy : design.crossingPolicies) {
+        policiesByPair[crossingPolicyPairKey(policy)].append(&policy);
+    }
+
     QVector<DomainCrossingView> crossings;
     const auto appendCrossingsForEdge = [&](const ElementRef& edge,
                                             const ElementRef& from,
@@ -388,8 +403,21 @@ QVector<DomainCrossingView> projectDomainCrossings(const NocDesign& design) {
                 fromDomains,
                 toDomains,
                 std::nullopt,
+                {},
+                std::nullopt,
                 {}
             };
+            if (fromDomains.size() == 1 && toDomains.size() == 1) {
+                const auto policies = policiesByPair.constFind(
+                    crossingPolicyPairKey(
+                        type, fromDomains.constFirst(), toDomains.constFirst()));
+                if (policies != policiesByPair.constEnd()
+                    && policies->size() == 1) {
+                    const DomainCrossingPolicy* policy = policies->constFirst();
+                    crossing.defaultPolicy = policy->id;
+                    crossing.defaultProperties = policy->properties;
+                }
+            }
             const DomainEdgeOverride lookup{edge, type, {}, {}};
             const auto override = overrides.constFind(edgeOverrideKey(lookup));
             if (override != overrides.constEnd()) {
@@ -700,6 +728,7 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
     }
 
     QHash<QString, QString> policyTypes;
+    QSet<QString> policyPairs;
     for (qsizetype index = 0; index < design.crossingPolicies.size(); ++index) {
         const DomainCrossingPolicy& policy = design.crossingPolicies.at(index);
         const QString base = QStringLiteral("/crossingPolicies/%1").arg(index);
@@ -745,6 +774,20 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
                         QStringLiteral("domain_policy.to_type_mismatch"),
                         QStringLiteral("Crossing policy target has the wrong Domain type"),
                         base + QStringLiteral("/to"));
+        }
+        if (!policy.domainType.trimmed().isEmpty()
+            && !policy.from.trimmed().isEmpty()
+            && !policy.to.trimmed().isEmpty()) {
+            const QString pairKey = crossingPolicyPairKey(policy);
+            if (policyPairs.contains(pairKey)) {
+                appendError(
+                    diagnostics,
+                    QStringLiteral("domain_policy.duplicate_pair"),
+                    QStringLiteral("Crossing policy pair is duplicated for this Domain type"),
+                    base);
+            } else {
+                policyPairs.insert(pairKey);
+            }
         }
     }
 

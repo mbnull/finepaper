@@ -34,10 +34,16 @@ PackageDefinition presentationPackage() {
     fabricTier.appliesTo = {ElementKind::Router};
     fabricTier.cardinality = DomainCardinality::Single;
 
+    DomainTypeDefinition power;
+    power.id = QStringLiteral("power");
+    power.label = QStringLiteral("Power domains");
+    power.appliesTo = {ElementKind::Router, ElementKind::Endpoint};
+    power.cardinality = DomainCardinality::Single;
+
     PackageDefinition package;
     package.id = QStringLiteral("test.domain-presentation");
     package.version = QStringLiteral("1.0.0");
-    package.domainTypes = {securityZones, fabricTier};
+    package.domainTypes = {securityZones, fabricTier, power};
     return package;
 }
 
@@ -89,6 +95,18 @@ NocDesign presentationDesign() {
             QStringLiteral("fabric-tier"),
             QStringLiteral("Backbone"),
             {}
+        },
+        DomainDefinition{
+            QStringLiteral("pd-main"),
+            QStringLiteral("power"),
+            QStringLiteral("Main power"),
+            {}
+        },
+        DomainDefinition{
+            QStringLiteral("pd-aux"),
+            QStringLiteral("power"),
+            QStringLiteral("Auxiliary power"),
+            {}
         }
     };
     design.domainMemberships = {
@@ -102,6 +120,10 @@ NocDesign presentationDesign() {
                         QStringLiteral("zone-a"),
                         QStringLiteral("zone-a")
                     }
+                },
+                {
+                    QStringLiteral("power"),
+                    QStringList{QStringLiteral("pd-main")}
                 }
             }
         },
@@ -114,6 +136,10 @@ NocDesign presentationDesign() {
                         QStringLiteral("zone-c"),
                         QStringLiteral("zone-b")
                     }
+                },
+                {
+                    QStringLiteral("power"),
+                    QStringList{QStringLiteral("pd-aux")}
                 }
             }
         },
@@ -123,6 +149,10 @@ NocDesign presentationDesign() {
                 {
                     QStringLiteral("security-zone"),
                     QStringList{QStringLiteral("zone-a")}
+                },
+                {
+                    QStringLiteral("power"),
+                    QStringList{QStringLiteral("pd-main")}
                 }
             }
         }
@@ -130,6 +160,15 @@ NocDesign presentationDesign() {
 
     const QString routerLink = linkId(
         QStringLiteral("r-0-0"), QStringLiteral("r-1-0"));
+    design.crossingPolicies = {
+        DomainCrossingPolicy{
+            QStringLiteral("power-transition"),
+            QStringLiteral("power"),
+            QStringLiteral("pd-main"),
+            QStringLiteral("pd-aux"),
+            QJsonObject{{QStringLiteral("latencyCycles"), 4}}
+        }
+    };
     design.edgeOverrides = {
         DomainEdgeOverride{
             ElementRef{ElementKind::RouterLink, routerLink},
@@ -144,6 +183,12 @@ NocDesign presentationDesign() {
             QStringLiteral("security-zone"),
             QStringLiteral("endpoint-guard"),
             QJsonObject{{QStringLiteral("strength"), 2}}
+        },
+        DomainEdgeOverride{
+            ElementRef{ElementKind::RouterLink, routerLink},
+            QStringLiteral("power"),
+            QStringLiteral("power-transition"),
+            QJsonObject{{QStringLiteral("isolationCells"), 2}}
         }
     };
     return design;
@@ -279,6 +324,32 @@ int main(int argc, char** argv) {
               && linkCrossing->overrideProperties.value(QStringLiteral("mode"))
                   == QStringLiteral("isolation"),
           QStringLiteral("Router Link crossing exposes its edge override"));
+    check(linkCrossing
+              && !linkCrossing->defaultPolicy
+              && linkCrossing->defaultProperties.isEmpty(),
+          QStringLiteral("presentation preserves the absence of a default for set-valued crossings"));
+
+    const DomainPresentationSnapshot powerSnapshot =
+        buildDomainPresentationSnapshot(
+            resolved, package, QStringLiteral("power"));
+    const DomainCrossingPresentation* powerCrossing =
+        powerSnapshot.crossing(linkEdge);
+    check(powerCrossing
+              && powerCrossing->fromDomainIds
+                  == QStringList{QStringLiteral("pd-main")}
+              && powerCrossing->toDomainIds
+                  == QStringList{QStringLiteral("pd-aux")}
+              && powerCrossing->defaultPolicy
+              && *powerCrossing->defaultPolicy
+                  == QStringLiteral("power-transition")
+              && powerCrossing->defaultProperties
+                  == QJsonObject{{QStringLiteral("latencyCycles"), 4}}
+              && powerCrossing->overridePolicy
+              && *powerCrossing->overridePolicy
+                  == QStringLiteral("power-transition")
+              && powerCrossing->overrideProperties
+                  == QJsonObject{{QStringLiteral("isolationCells"), 2}},
+          QStringLiteral("presentation distinguishes resolved defaults from edge-local overrides"));
 
     const DomainCrossingPresentation* attachmentCrossing = snapshot.crossing(
         ElementRef{

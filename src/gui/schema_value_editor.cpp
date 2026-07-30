@@ -62,6 +62,17 @@ public:
             m_combo->installEventFilter(this);
             m_combo->setObjectName(m_objectNamePrefix + QStringLiteral(".choice"));
             if (m_options.referenceDomainType) {
+                if (m_options.allowCustomReferences) {
+                    m_combo->setEditable(true);
+                    m_combo->setInsertPolicy(QComboBox::NoInsert);
+                    m_editableComboLineEdit = m_combo->lineEdit();
+                    m_editableComboLineEdit->setObjectName(
+                        m_objectNamePrefix
+                        + QStringLiteral(".choice.customReference"));
+                    m_editableComboLineEdit->setPlaceholderText(
+                        QStringLiteral("Domain ID"));
+                    m_editableComboLineEdit->installEventFilter(this);
+                }
                 for (const SchemaChoice& choice : m_options.choices) {
                     m_combo->addItem(displayChoiceLabel(choice), choice.value);
                     m_combo->setItemData(m_combo->count() - 1,
@@ -81,6 +92,16 @@ public:
                 m_preserveInvalidRaw = false;
                 notifyChanged();
             });
+            if (m_editableComboLineEdit) {
+                connect(m_editableComboLineEdit, &QLineEdit::textEdited,
+                        this, [this] {
+                    if (m_updating) {
+                        return;
+                    }
+                    m_preserveInvalidRaw = false;
+                    notifyChanged();
+                });
+            }
             return;
         }
 
@@ -134,13 +155,19 @@ public:
             if (value.isString()) {
                 const QString stored = value.toString();
                 int index = m_combo->findData(stored);
-                if (index < 0) {
+                if (index < 0 && m_options.referenceDomainType
+                    && m_options.allowCustomReferences) {
+                    m_combo->setCurrentIndex(-1);
+                    m_combo->setEditText(stored);
+                } else if (index < 0) {
                     m_combo->addItem(
                         QStringLiteral("Unsupported: %1").arg(stored), stored);
                     index = m_combo->count() - 1;
                     m_combo->setItemData(index, true, invalidChoiceRole);
+                    m_combo->setCurrentIndex(index);
+                } else {
+                    m_combo->setCurrentIndex(index);
                 }
-                m_combo->setCurrentIndex(index);
             } else {
                 m_invalidRaw = value;
                 m_preserveInvalidRaw = true;
@@ -188,7 +215,7 @@ public:
             return m_invalidRaw;
         }
         if (m_combo) {
-            return m_combo->currentData().toString();
+            return comboValue();
         }
         if (m_boolean) {
             return m_boolean->isChecked();
@@ -211,6 +238,22 @@ public:
                         .arg(compactJsonValue(m_invalidRaw))};
         }
         if (m_combo) {
+            if (m_options.referenceDomainType
+                && m_options.allowCustomReferences) {
+                const int currentIndex = m_combo->currentIndex();
+                const bool displaysCurrentItem = currentIndex >= 0
+                    && m_combo->currentText()
+                        == m_combo->itemText(currentIndex);
+                if (displaysCurrentItem
+                    && m_combo->currentData(invalidChoiceRole).toBool()) {
+                    return {QStringLiteral(
+                        "Referenced Domain is unavailable or has the wrong type.")};
+                }
+                if (comboValue().trimmed().isEmpty()) {
+                    return {QStringLiteral("Enter a referenced Domain ID.")};
+                }
+                return {};
+            }
             if (m_combo->currentIndex() < 0) {
                 return {m_options.referenceDomainType
                             ? QStringLiteral("Choose a referenced Domain.")
@@ -256,7 +299,8 @@ public:
 private:
     bool eventFilter(QObject* watched, QEvent* event) override {
         if ((watched == m_combo || watched == m_boolean
-             || watched == m_lineEdit)
+             || watched == m_lineEdit
+             || watched == m_editableComboLineEdit)
             && (event->type() == QEvent::MouseButtonPress
                 || event->type() == QEvent::FocusIn)
             && activated) {
@@ -269,6 +313,21 @@ private:
         return m_options.referenceDomainType
             ? m_options.choices.size()
             : m_definition.values.size();
+    }
+
+    [[nodiscard]] QString comboValue() const {
+        if (!m_combo) {
+            return {};
+        }
+        if (!m_editableComboLineEdit) {
+            return m_combo->currentData().toString();
+        }
+        const QString text = m_combo->currentText();
+        const int displayedChoice = m_combo->findText(
+            text, Qt::MatchExactly);
+        return displayedChoice >= 0
+            ? m_combo->itemData(displayedChoice).toString()
+            : text;
     }
 
     void notifyChanged() {
@@ -284,6 +343,7 @@ private:
     bool m_preserveInvalidRaw = false;
     QJsonValue m_invalidRaw;
     QLineEdit* m_lineEdit = nullptr;
+    QLineEdit* m_editableComboLineEdit = nullptr;
     QComboBox* m_combo = nullptr;
     QCheckBox* m_boolean = nullptr;
 };
@@ -549,12 +609,15 @@ std::optional<QJsonValue> SchemaValueEditor::value() const {
 }
 
 QStringList SchemaValueEditor::localErrors() const {
+    const bool requiresPresence =
+        m_options.required
+        && m_options.validationMode == PropertyValidationMode::Complete;
     if (m_booleanEditor) {
         if (m_preserveInvalidBooleanValue) {
             return {QStringLiteral("Stored value has the wrong JSON type (%1).")
                         .arg(compactJsonValue(m_invalidBooleanValue))};
         }
-        if (m_options.required
+        if (requiresPresence
             && m_booleanEditor->checkState() == Qt::PartiallyChecked) {
             return {QStringLiteral("Value is required.")};
         }
@@ -562,7 +625,7 @@ QStringList SchemaValueEditor::localErrors() const {
     }
 
     if (!isPresent()) {
-        return m_options.required
+        return requiresPresence
             ? QStringList{QStringLiteral("Value is required.")}
             : QStringList{};
     }
