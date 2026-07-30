@@ -1,8 +1,10 @@
 #include "gui/main_window.h"
 #include "gui/animated_graphics_view.h"
 #include "gui/domain_manager_panel.h"
+#include "gui/endpoint_configuration_panel.h"
 #include "gui/noc_editor_style.h"
 #include "gui/noc_node_editor.h"
+#include "gui/schema_value_editor.h"
 #include "gui/workbench_config.h"
 
 #include <QAction>
@@ -14,7 +16,6 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
-#include <QDoubleSpinBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QElapsedTimer>
@@ -78,6 +79,28 @@ bool waitUntil(const std::function<bool()>& predicate, int timeoutMilliseconds =
     QApplication::processEvents(QEventLoop::AllEvents, 50);
     return predicate();
 }
+
+class EndpointCreationAutoAccepter final : public QObject {
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        auto* dialog = qobject_cast<QDialog*>(watched);
+        if (dialog && event->type() == QEvent::Show
+            && dialog->objectName()
+                == QStringLiteral("finepaper.endpointCreationDialog")) {
+            QTimer::singleShot(0, dialog, [dialog] {
+                auto* buttons = dialog->findChild<QDialogButtonBox*>(
+                    QStringLiteral("finepaper.endpointCreation.buttons"));
+                if (buttons) {
+                    if (QAbstractButton* accept =
+                            buttons->button(QDialogButtonBox::Ok)) {
+                        accept->click();
+                    }
+                }
+            });
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
 
 QAction* actionWithText(QWidget& widget, const QString& text) {
     for (QAction* action : widget.findChildren<QAction*>()) {
@@ -934,6 +957,8 @@ int main(int argc, char** argv) {
 
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication application(argc, argv);
+    EndpointCreationAutoAccepter endpointCreationAutoAccepter;
+    application.installEventFilter(&endpointCreationAutoAccepter);
     QCoreApplication::setOrganizationName(QStringLiteral("FinepaperTest"));
     QCoreApplication::setApplicationName(QStringLiteral("finepaper-gui-smoke"));
 
@@ -1100,8 +1125,8 @@ int main(int argc, char** argv) {
               && initialValidateAction && initialValidateAction->isEnabled()
               && initialGenerateAction && initialGenerateAction->isEnabled(),
           QStringLiteral("active NoC IP, design actions and Endpoint Palette stay aligned"));
-    check(applyParameters && applyParameters->isEnabled(),
-          QStringLiteral("Package parameters become editable with a design"));
+    check(applyParameters && !applyParameters->isEnabled(),
+          QStringLiteral("Package defaults are editable but do not enable a no-op Apply"));
     check(resizeMeshButton && resizeMeshButton->isEnabled()
               && resizeMeshAction && resizeMeshAction->isEnabled(),
           QStringLiteral("Mesh resize entry points follow active Package metadata"));
@@ -1122,6 +1147,10 @@ int main(int argc, char** argv) {
 
     auto* editorWidget = window.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor"));
     auto* nodeEditor = dynamic_cast<finepaper::NocNodeEditor*>(editorWidget);
+    auto* endpointConfigurationPanel = dynamic_cast<finepaper::EndpointConfigurationPanel*>(
+        window.findChild<QWidget*>(
+            QStringLiteral("finepaper.endpointConfigurationPanel")));
+    const QString endpointDraftDesignIdentity = QStringLiteral("design-session-1");
     auto* graphicsView = nodeEditor ? nodeEditor->findChild<QGraphicsView*>() : nullptr;
     auto* animatedView = dynamic_cast<finepaper::AnimatedGraphicsView*>(graphicsView);
     auto* graphicsScene = graphicsView
@@ -1478,6 +1507,18 @@ int main(int argc, char** argv) {
     check(firstAttachmentPort && secondAttachmentPort
               && *firstAttachmentPort != *secondAttachmentPort,
           QStringLiteral("multiple Endpoint attachments use distinct Package-defined EP ports"));
+    bool attachedEndpointDeletionRequested = false;
+    const auto originalEndpointDeletionRequested = nodeEditor
+        ? nodeEditor->endpointDeletionRequested
+        : std::function<bool(const QString&)>{};
+    if (nodeEditor) {
+        nodeEditor->endpointDeletionRequested = [&, originalEndpointDeletionRequested](
+                                                    const QString& endpointId) {
+            attachedEndpointDeletionRequested = true;
+            return originalEndpointDeletionRequested
+                ? originalEndpointDeletionRequested(endpointId) : false;
+        };
+    }
     if (graphicsView && graphicsScene && secondAttachedEndpoint) {
         const QPoint endpointPosition = graphicsView->mapFromScene(
             graphicsScene->nodeGraphicsObject(*secondAttachedEndpoint)
@@ -1496,6 +1537,11 @@ int main(int argc, char** argv) {
         }
         application.processEvents();
     }
+    if (nodeEditor) {
+        nodeEditor->endpointDeletionRequested = originalEndpointDeletionRequested;
+    }
+    check(attachedEndpointDeletionRequested,
+          QStringLiteral("attached Endpoint Delete uses the permanent-deletion callback"));
 
     const auto currentRouter00AfterSecond = nodeIdWithCaption(
         graphicsScene, QStringLiteral("r-0-0"));
@@ -2019,6 +2065,60 @@ int main(int argc, char** argv) {
         graphicsScene, QStringLiteral("r-0-1"));
     check(nodeEditor && nodeEditor->detachedEndpointDraftIds().isEmpty(),
           QStringLiteral("reconnecting a detached Endpoint commits and clears its recoverable draft"));
+    if (graphicsScene && endpointForDeleteKey) {
+        graphicsScene->clearSelection();
+        graphicsScene->nodeGraphicsObject(*endpointForDeleteKey)->setSelected(true);
+        graphicsScene->nodeSelected(*endpointForDeleteKey);
+        application.processEvents();
+    }
+    auto* endpointDraftWidth = static_cast<finepaper::SchemaValueEditor*>(
+        window.findChild<QWidget*>(
+            QStringLiteral("finepaper.endpointParameter.dataWidth")));
+    if (endpointDraftWidth) {
+        endpointDraftWidth->setValue(QJsonValue(96));
+        if (endpointDraftWidth->valueChanged) {
+            endpointDraftWidth->valueChanged();
+        }
+        application.processEvents();
+    }
+    check(endpointConfigurationPanel && endpointDraftWidth
+              && endpointConfigurationPanel->unappliedDraftEndpointIds(
+                     endpointDraftDesignIdentity).contains(exposedEndpointId),
+          QStringLiteral("editing an attached Endpoint creates an unapplied parameter draft"));
+
+    bool disconnectRemovalRequested = false;
+    bool disconnectPermanentDeletionRequested = false;
+    bool detachedEndpointDeletionRequested = false;
+    const auto originalDisconnectRemovalRequested = nodeEditor
+        ? nodeEditor->endpointRemovalRequested
+        : std::function<bool(const QString&)>{};
+    const auto originalDisconnectDeletionRequested = nodeEditor
+        ? nodeEditor->endpointDeletionRequested
+        : std::function<bool(const QString&)>{};
+    const auto originalDetachedDeletionRequested = nodeEditor
+        ? nodeEditor->detachedEndpointDeletionRequested
+        : std::function<void(const QString&)>{};
+    if (nodeEditor) {
+        nodeEditor->endpointRemovalRequested = [&, originalDisconnectRemovalRequested](
+                                                   const QString& endpointId) {
+            disconnectRemovalRequested = true;
+            return originalDisconnectRemovalRequested
+                ? originalDisconnectRemovalRequested(endpointId) : false;
+        };
+        nodeEditor->endpointDeletionRequested = [&, originalDisconnectDeletionRequested](
+                                                    const QString& endpointId) {
+            disconnectPermanentDeletionRequested = true;
+            return originalDisconnectDeletionRequested
+                ? originalDisconnectDeletionRequested(endpointId) : false;
+        };
+        nodeEditor->detachedEndpointDeletionRequested = [&, originalDetachedDeletionRequested](
+                                                            const QString& endpointId) {
+            detachedEndpointDeletionRequested = true;
+            if (originalDetachedDeletionRequested) {
+                originalDetachedDeletionRequested(endpointId);
+            }
+        };
+    }
     const auto connectionForDeleteKey = endpointForDeleteKey
         ? attachmentConnectionForEndpoint(graphicsScene, *endpointForDeleteKey)
         : std::nullopt;
@@ -2038,7 +2138,12 @@ int main(int argc, char** argv) {
         graphicsScene, QStringLiteral("Unattached\nMaster endpoint"));
     check(deleteSelection && detachedBodyEndpoint
               && !endpointAttachedToRouter(
-                  graphicsScene, QStringLiteral("r-0-1")),
+                  graphicsScene, QStringLiteral("r-0-1"))
+              && disconnectRemovalRequested
+              && !disconnectPermanentDeletionRequested
+              && endpointConfigurationPanel
+              && endpointConfigurationPanel->unappliedDraftEndpointIds(
+                     endpointDraftDesignIdentity).contains(exposedEndpointId),
           QStringLiteral("Delete on a selected Endpoint attachment line performs the same durable disconnect"));
     if (graphicsView && graphicsScene && detachedBodyEndpoint) {
         const QPoint endpointPosition = graphicsView->mapFromScene(
@@ -2058,9 +2163,19 @@ int main(int argc, char** argv) {
         }
         application.processEvents();
     }
+    if (nodeEditor) {
+        nodeEditor->endpointRemovalRequested = originalDisconnectRemovalRequested;
+        nodeEditor->endpointDeletionRequested = originalDisconnectDeletionRequested;
+        nodeEditor->detachedEndpointDeletionRequested =
+            originalDetachedDeletionRequested;
+    }
     check(!nodeIdWithCaptionPrefix(
-               graphicsScene, QStringLiteral("Unattached\nMaster endpoint")),
-          QStringLiteral("an unattached Endpoint draft can still be deleted"));
+               graphicsScene, QStringLiteral("Unattached\nMaster endpoint"))
+              && detachedEndpointDeletionRequested
+              && endpointConfigurationPanel
+              && !endpointConfigurationPanel->unappliedDraftEndpointIds(
+                      endpointDraftDesignIdentity).contains(exposedEndpointId),
+          QStringLiteral("permanently deleting an unattached Endpoint clears its parameter draft"));
 
     const auto routerForSecondEndpoint = nodeIdWithCaption(
         graphicsScene, QStringLiteral("r-0-0"));
@@ -2474,7 +2589,7 @@ int main(int argc, char** argv) {
     check(multiActivePackage
               && multiActivePackage->text().contains(
                   QStringLiteral("test.number-parameter@1.0.0"))
-              && multiPackageWindow.findChild<QDoubleSpinBox*>(
+              && multiPackageWindow.findChild<QWidget*>(
                   QStringLiteral("finepaper.parameter.frequencyScale")),
           QStringLiteral("creation dialog selects the NoC IP that owns the active design"));
 
@@ -2498,7 +2613,7 @@ int main(int argc, char** argv) {
     check(multiActivePackage
               && multiActivePackage->text().contains(
                   QStringLiteral("finepaper.noc@1.0.0"))
-              && !multiPackageWindow.findChild<QDoubleSpinBox*>(
+              && !multiPackageWindow.findChild<QWidget*>(
                   QStringLiteral("finepaper.parameter.frequencyScale")),
           QStringLiteral("confirmed replacement switches active Package without split-brain UI"));
     closeDiscarding(multiPackageWindow);
@@ -2514,12 +2629,17 @@ int main(int argc, char** argv) {
           QStringLiteral("number-parameter Package can start design creation"));
     createDesignThroughDialog(
         numberWindow, QStringLiteral("test.number-parameter@1.0.0"));
-    auto* numberEditor = numberWindow.findChild<QDoubleSpinBox*>(
-        QStringLiteral("finepaper.parameter.frequencyScale"));
-    check(numberEditor && qAbs(numberEditor->value() - 1.25) < 0.000001,
-          QStringLiteral("number Package parameters use QDoubleSpinBox"));
+    auto* numberEditor = static_cast<finepaper::SchemaValueEditor*>(
+        numberWindow.findChild<QWidget*>(
+            QStringLiteral("finepaper.parameter.frequencyScale")));
+    check(numberEditor && numberEditor->value()
+              && qAbs(numberEditor->value()->toDouble() - 1.25) < 0.000001,
+          QStringLiteral("number Package parameters use the shared schema editor"));
     if (numberEditor) {
-        numberEditor->setValue(2.75);
+        numberEditor->setValue(QJsonValue(2.75));
+        if (numberEditor->valueChanged) {
+            numberEditor->valueChanged();
+        }
     }
     auto* numberApply = numberWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.applyParameters"));
@@ -2527,9 +2647,11 @@ int main(int argc, char** argv) {
         numberApply->click();
         application.processEvents();
     }
-    numberEditor = numberWindow.findChild<QDoubleSpinBox*>(
-        QStringLiteral("finepaper.parameter.frequencyScale"));
-    check(numberEditor && qAbs(numberEditor->value() - 2.75) < 0.000001,
+    numberEditor = static_cast<finepaper::SchemaValueEditor*>(
+        numberWindow.findChild<QWidget*>(
+            QStringLiteral("finepaper.parameter.frequencyScale")));
+    check(numberEditor && numberEditor->value()
+              && qAbs(numberEditor->value()->toDouble() - 2.75) < 0.000001,
           QStringLiteral("number Package parameters round-trip as JSON numbers"));
 
     auto* numberResultsDock = numberWindow.findChild<QDockWidget*>(
@@ -2576,12 +2698,12 @@ int main(int argc, char** argv) {
               && retainedAvailablePackages->text().startsWith(
                   QStringLiteral("No runnable NoC IP Package"))
               && retainedPalette && retainedPalette->isEnabled()
-              && retainedApply && retainedApply->isEnabled()
+              && retainedApply && !retainedApply->isEnabled()
               && retainedValidate && !retainedValidate->isEnabled()
               && retainedGenerate && !retainedGenerate->isEnabled()
               && retainedNew && !retainedNew->isEnabled()
               && numberCreate && !numberCreate->isEnabled(),
-          QStringLiteral("failed reload retains editing metadata without claiming runtime availability"));
+          QStringLiteral("failed reload retains editing metadata without enabling a clean no-op or claiming runtime availability"));
     check(numberResultsDock && numberResultsDock->isVisible()
               && reloadErrorDrc && reloadErrorDrc->rowCount() > 0,
           QStringLiteral("Package reload errors automatically expose structured diagnostics"));

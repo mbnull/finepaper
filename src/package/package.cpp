@@ -121,6 +121,25 @@ QString optionalString(const QJsonObject& object,
     return value.toString();
 }
 
+QString optionalNonEmptyString(const QJsonObject& object,
+                               const QString& key,
+                               const QString& path,
+                               QVector<Diagnostic>& diagnostics) {
+    if (!object.contains(key)) {
+        return {};
+    }
+    const QJsonValue value = object.value(key);
+    if (!value.isString() || value.toString().trimmed().isEmpty()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_string"),
+                         QStringLiteral("%1 must be a non-empty string").arg(key),
+                         path + QLatin1Char('/') + key);
+        return {};
+    }
+    return value.toString().trimmed();
+}
+
 bool optionalBoolean(const QJsonObject& object,
                      const QString& key,
                      bool fallback,
@@ -235,6 +254,17 @@ ParameterDefinition parseParameter(const QJsonObject& object,
                                       definition.id,
                                       path,
                                       diagnostics);
+    definition.description = optionalNonEmptyString(
+        object, QStringLiteral("description"), path, diagnostics);
+    definition.unit = optionalNonEmptyString(
+        object, QStringLiteral("unit"), path, diagnostics);
+    definition.category = optionalNonEmptyString(
+        object, QStringLiteral("category"), path, diagnostics);
+    definition.advanced = optionalBoolean(object,
+                                          QStringLiteral("advanced"),
+                                          false,
+                                          path,
+                                          diagnostics);
     if (definition.type == ParameterType::Invalid) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("error"),

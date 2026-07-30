@@ -35,9 +35,39 @@ def fail_operation(message, result_path)
   exit 1
 end
 
-def number_parameter(values, id, fallback)
-  value = values[id]
-  value.is_a?(Numeric) ? value : fallback
+# Finepaper validates Package parameters and materializes their defaults before
+# invoking a Package process. Keep this boundary strict so the adapter never
+# carries a second, drifting copy of defaults from package.json.
+def required_parameter(values, id, owner)
+  raise "#{owner} parameters must be an object" unless values.is_a?(Hash)
+  raise "#{owner} parameter #{id} is required" unless values.key?(id)
+
+  values[id]
+end
+
+def required_integer_parameter(values, id, owner)
+  value = required_parameter(values, id, owner)
+  raise "#{owner} parameter #{id} must be an integer" unless value.is_a?(Integer)
+
+  value
+end
+
+def required_string_parameter(values, id, owner)
+  value = required_parameter(values, id, owner)
+  unless value.is_a?(String) && !value.empty?
+    raise "#{owner} parameter #{id} must be a non-empty string"
+  end
+
+  value
+end
+
+def required_boolean_parameter(values, id, owner)
+  value = required_parameter(values, id, owner)
+  unless value == true || value == false
+    raise "#{owner} parameter #{id} must be a boolean"
+  end
+
+  value
 end
 
 def require_hdl_identifier(value, description)
@@ -90,7 +120,8 @@ def legacy_input(design)
     raise 'mesh rows and columns must be positive integers'
   end
 
-  parameters = design.fetch('parameters', {})
+  parameters = design.fetch('parameters')
+  raise 'design parameters must be an object' unless parameters.is_a?(Hash)
   endpoints = design.fetch('endpoints', [])
   raise 'endpoints must be an array' unless endpoints.is_a?(Array)
   design_id = require_hdl_identifier(design.fetch('id'), 'design id')
@@ -99,7 +130,11 @@ def legacy_input(design)
   endpoint_modules = endpoints.sort_by { |endpoint| endpoint.fetch('id') }.map do |endpoint|
     id = require_hdl_identifier(endpoint.fetch('id'), 'endpoint id')
     type = endpoint.fetch('type')
-    endpoint_parameters = endpoint.fetch('parameters', {})
+    unless type.is_a?(String) && !type.empty?
+      raise "endpoint #{id} type must be a non-empty string"
+    end
+    endpoint_parameters = endpoint.fetch('parameters')
+    raise "endpoint #{id} parameters must be an object" unless endpoint_parameters.is_a?(Hash)
     router = endpoint.dig('attachment', 'router')
     raise "endpoint #{id} has no router attachment" unless router.is_a?(Hash)
 
@@ -117,10 +152,18 @@ def legacy_input(design)
       'type' => 'Endpoint',
       'parameters' => {
         'type' => type,
-        'protocol' => endpoint_parameters.fetch('protocol', 'axi4'),
-        'data_width' => number_parameter(endpoint_parameters, 'dataWidth', 64),
-        'buffer_depth' => number_parameter(endpoint_parameters, 'bufferDepth', 16),
-        'qos_enabled' => endpoint_parameters.fetch('qosEnabled', false)
+        'protocol' => required_string_parameter(
+          endpoint_parameters, 'protocol', "endpoint #{id}"
+        ),
+        'data_width' => required_integer_parameter(
+          endpoint_parameters, 'dataWidth', "endpoint #{id}"
+        ),
+        'buffer_depth' => required_integer_parameter(
+          endpoint_parameters, 'bufferDepth', "endpoint #{id}"
+        ),
+        'qos_enabled' => required_boolean_parameter(
+          endpoint_parameters, 'qosEnabled', "endpoint #{id}"
+        )
       }
     }
   end
@@ -142,9 +185,15 @@ def legacy_input(design)
       'instance' => 'noc_0',
       'state' => {
         'global_parameters' => {
-          'data_width' => number_parameter(parameters, 'dataWidth', 64),
-          'flit_width' => number_parameter(parameters, 'flitWidth', 128),
-          'addr_width' => number_parameter(parameters, 'addrWidth', 32),
+          'data_width' => required_integer_parameter(
+            parameters, 'dataWidth', 'design'
+          ),
+          'flit_width' => required_integer_parameter(
+            parameters, 'flitWidth', 'design'
+          ),
+          'addr_width' => required_integer_parameter(
+            parameters, 'addrWidth', 'design'
+          ),
           'mesh' => {
             'width' => columns,
             'height' => rows,

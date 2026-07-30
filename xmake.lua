@@ -124,6 +124,18 @@ target("finepaper-application-element-configuration-tests")
         trim_output = true
     })
 
+target("finepaper-application-endpoint-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/application_endpoint_tests.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
 target("finepaper-mesh-resize-plan-tests")
     add_rules("qt.console")
     set_kind("binary")
@@ -242,6 +254,23 @@ target("finepaper-endpoint-domain-assignment-dialog-tests")
         runenvs = {QT_QPA_PLATFORM = "offscreen"}
     })
 
+target("finepaper-endpoint-configuration-panel-tests")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/endpoint_configuration_panel_tests.cpp")
+    add_files("src/gui/endpoint_configuration_panel.cpp")
+    add_files("src/gui/endpoint_domain_assignment_dialog.cpp")
+    add_files("src/gui/package_parameter_form.cpp")
+    add_files("src/gui/schema_value_editor.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+
 target("finepaper-mesh-resize-dialog-tests")
     add_rules("qt.widgetapp")
     set_kind("binary")
@@ -274,10 +303,12 @@ target("finepaper-gui-smoke")
     add_files("src/gui/domain_presentation.cpp")
     add_files("src/gui/domain_property_form.cpp")
     add_files("src/gui/element_configuration_panel.cpp")
+    add_files("src/gui/endpoint_configuration_panel.cpp")
     add_files("src/gui/endpoint_domain_assignment_dialog.cpp")
     add_files("src/gui/mesh_resize_dialog.cpp")
     add_files("src/gui/noc_editor_style.cpp")
     add_files("src/gui/noc_node_editor.cpp")
+    add_files("src/gui/package_parameter_form.cpp")
     add_files("src/gui/schema_value_editor.cpp")
     add_files("src/gui/workbench_view_registry.cpp")
     add_includedirs("src")

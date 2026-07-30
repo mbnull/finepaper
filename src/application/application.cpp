@@ -714,6 +714,124 @@ DesignResult FinepaperApplication::removeEndpoint(const NocDesign& design,
     return validated;
 }
 
+DesignResult FinepaperApplication::updateEndpointParameters(
+    const NocDesign& design,
+    const QString& endpointId,
+    const QJsonObject& parameters) const {
+    NocDesign edited = design;
+    const auto endpoint = std::find_if(
+        edited.endpoints.begin(),
+        edited.endpoints.end(),
+        [&](const EndpointInstance& value) { return value.id == endpointId; });
+    if (endpoint == edited.endpoints.end()) {
+        DesignResult result;
+        result.design = design;
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("endpoint.not_found"),
+                         QStringLiteral("Endpoint does not exist"),
+                         QStringLiteral("/endpoints"));
+        return result;
+    }
+    endpoint->parameters = parameters;
+    DesignResult validated = validateEditedDesign(edited);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
+EndpointTypeChangePlan FinepaperApplication::planEndpointTypeChange(
+    const NocDesign& design,
+    const QString& endpointId,
+    const QString& targetType,
+    EndpointParameterMigration migration,
+    const QJsonObject& parameterPatch) const {
+    const auto package = m_catalog.resolve(design.package);
+    if (!package) {
+        EndpointTypeChangePlan plan;
+        plan.endpointId = endpointId;
+        plan.targetType = targetType.trimmed();
+        plan.parameterMigration = migration;
+        appendDiagnostic(plan.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.not_found"),
+                         QStringLiteral("design Package is not loaded"),
+                         QStringLiteral("/package"));
+        return plan;
+    }
+
+    EndpointTypeChangePlan plan = endpoint_configuration::buildTypeChangePlan(
+        design,
+        *package,
+        endpointId,
+        targetType,
+        migration,
+        parameterPatch);
+    if (hasErrors(plan.diagnostics)) {
+        return plan;
+    }
+
+    // Validate the exact post-impact candidate during preview so the caller
+    // never receives an apparently applicable plan that would fail after it
+    // echoes the required confirmation.
+    EndpointTypeChangeImpactConfirmation previewConfirmation;
+    previewConfirmation.removedAttachmentConfigurations =
+        plan.removedAttachmentConfigurations;
+    endpoint_configuration::MutationResult preview =
+        endpoint_configuration::applyTypeChange(
+            design, plan, previewConfirmation);
+    if (hasErrors(preview.diagnostics)) {
+        plan.diagnostics = std::move(preview.diagnostics);
+        return plan;
+    }
+    plan.diagnostics = std::move(preview.diagnostics);
+    const DesignResult validated = validateEditedDesign(preview.design);
+    plan.diagnostics += validated.diagnostics;
+    return plan;
+}
+
+DesignResult FinepaperApplication::changeEndpointType(
+    const NocDesign& design,
+    const QString& endpointId,
+    const QString& targetType,
+    EndpointParameterMigration migration,
+    const QJsonObject& parameterPatch,
+    const EndpointTypeChangeImpactConfirmation& confirmation) const {
+    const auto package = m_catalog.resolve(design.package);
+    if (!package) {
+        return validateEditedDesign(design);
+    }
+
+    const EndpointTypeChangePlan plan =
+        endpoint_configuration::buildTypeChangePlan(
+            design,
+            *package,
+            endpointId,
+            targetType,
+            migration,
+            parameterPatch);
+    if (hasErrors(plan.diagnostics)) {
+        return DesignResult{false, design, plan.diagnostics};
+    }
+    endpoint_configuration::MutationResult mutation =
+        endpoint_configuration::applyTypeChange(
+            design, plan, confirmation);
+    if (hasErrors(mutation.diagnostics)) {
+        return DesignResult{false, design, std::move(mutation.diagnostics)};
+    }
+    DesignResult validated = validateEditedDesign(mutation.design);
+    QVector<Diagnostic> combinedDiagnostics =
+        std::move(mutation.diagnostics);
+    combinedDiagnostics += validated.diagnostics;
+    validated.diagnostics = std::move(combinedDiagnostics);
+    validated.success = !hasErrors(validated.diagnostics);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
 DesignResult FinepaperApplication::updateParameters(const NocDesign& design,
                                                      const QJsonObject& parameters) const {
     NocDesign edited = design;

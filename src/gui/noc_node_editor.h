@@ -146,7 +146,12 @@ public:
     std::function<bool(const QString&, NocAttachmentTarget)> endpointMoveRequested;
     std::function<bool(const NocDetachedEndpointSnapshot&, NocAttachmentTarget)>
         detachedEndpointDropped;
+    // Disconnect temporarily removes the durable attachment while retaining
+    // a recoverable canvas draft. Permanent deletion is a distinct lifecycle
+    // event so Inspector parameter drafts are not lost on disconnect.
     std::function<bool(const QString&)> endpointRemovalRequested;
+    std::function<bool(const QString&)> endpointDeletionRequested;
+    std::function<void(const QString&)> detachedEndpointDeletionRequested;
     std::function<void(const NocEditorSelection&)> selectionChanged;
     std::function<void(const NocEditorSelectionSet&)> semanticSelectionChanged;
 

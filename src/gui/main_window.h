@@ -17,7 +17,6 @@ class QAction;
 class QCloseEvent;
 class QComboBox;
 class QDockWidget;
-class QFormLayout;
 class QGroupBox;
 class QLabel;
 class QLineEdit;
@@ -34,6 +33,8 @@ namespace finepaper {
 class EndpointPaletteList;
 class DomainManagerPanel;
 class ElementConfigurationPanel;
+class EndpointConfigurationPanel;
+class PackageParameterForm;
 
 class FinepaperMainWindow final : public QMainWindow {
 public:
@@ -58,11 +59,6 @@ private:
         std::optional<QString> slot;
     };
 
-    struct ParameterControl {
-        ParameterDefinition definition;
-        QWidget* editor = nullptr;
-    };
-
     void createUi();
     void createActions();
     void createCentralViews();
@@ -83,6 +79,8 @@ private:
     void setOperationBusy(bool busy, const QString& message = {});
     void setDirty(bool dirty);
     bool confirmDiscardPendingDomainAssignments(const QString& action);
+    bool confirmDiscardPendingEndpointDrafts(const QString& action);
+    void discardPendingEndpointDrafts();
     bool canSaveDetachedEndpointDrafts();
     bool maybeSave();
     void createDesign();
@@ -97,7 +95,8 @@ private:
     void presentGenerationResult(const GenerationResult& result);
     bool addEndpoint(const QString& endpointType, NocAttachmentTarget target);
     bool moveEndpoint(const QString& endpointId, NocAttachmentTarget target);
-    bool removeEndpoint(const QString& endpointId);
+    bool removeEndpoint(const QString& endpointId,
+                        bool discardConfigurationDraft = true);
     std::optional<QHash<QString, QStringList>> chooseEndpointDomainAssignments(
         const QString& endpointId,
         const QHash<QString, QStringList>& initialAssignments = {});
@@ -118,13 +117,13 @@ private:
                          bool modalOnError = true);
     void appendActivity(const QString& message);
     void selectCenterView(const QString& id);
+    void beginEndpointDraftDesignSession();
 
     const PackageDefinition* packageByKey(const QString& key) const;
     const PackageDefinition* packageForDesign() const;
     const PackageDefinition* runtimePackageByKey(const QString& key) const;
     const PackageDefinition* runtimePackageForDesign() const;
     QVector<PackageDefinition> runtimePackages() const;
-    QJsonValue valueFromControl(const ParameterControl& control) const;
     QString nextEndpointId(const QString& endpointType) const;
     AttachmentSlotChoice chooseAttachmentSlot(
         NocAttachmentTarget target,
@@ -137,10 +136,11 @@ private:
     QString m_designPath;
     bool m_dirty = false;
     bool m_operationBusy = false;
+    quint64 m_endpointDraftDesignSerial = 0;
+    QString m_endpointDraftDesignIdentity;
     QSet<QString> m_runtimeAvailablePackageKeys;
     std::optional<RouterPosition> m_selectedRouter;
     NocEditorSelectionSet m_editorSelection;
-    QVector<ParameterControl> m_parameterControls;
 
     QAction* m_newAction = nullptr;
     QAction* m_openAction = nullptr;
@@ -178,8 +178,9 @@ private:
     QLabel* m_designOverview = nullptr;
     QPushButton* m_resizeMeshButton = nullptr;
     QLabel* m_selectionSummary = nullptr;
+    EndpointConfigurationPanel* m_endpointConfigurationPanel = nullptr;
     QGroupBox* m_parameterGroup = nullptr;
-    QFormLayout* m_parameterForm = nullptr;
+    PackageParameterForm* m_parameterForm = nullptr;
     QPushButton* m_applyParametersButton = nullptr;
     ElementConfigurationPanel* m_elementConfigurationPanel = nullptr;
 

@@ -42,6 +42,17 @@ struct SchemaValueOptions {
     bool allowCustomReferences = false;
 };
 
+// JSON is the durable value format, but an editor draft can also contain a
+// temporarily invalid numeric token such as "-" or "1e".  Keep that raw text
+// outside the Design value so selection changes never destroy an in-progress
+// edit merely because it is not valid JSON yet.
+struct SchemaValueEditorDraft {
+    std::optional<QJsonValue> value;
+    std::optional<QString> invalidScalarText;
+
+    bool operator==(const SchemaValueEditorDraft&) const = default;
+};
+
 // SchemaValueEditor owns the distinction between an absent JSON property and a
 // present false/zero/empty-string/empty-array value.  It deliberately keeps
 // conversion and validation beside the widget instead of making callers infer
@@ -55,7 +66,9 @@ public:
     void setValue(
         std::optional<QJsonValue> value,
         std::optional<QJsonValue> absentSuggestion = std::nullopt);
+    void setDraftState(const SchemaValueEditorDraft& draft);
     [[nodiscard]] std::optional<QJsonValue> value() const;
+    [[nodiscard]] SchemaValueEditorDraft draftState() const;
     [[nodiscard]] QStringList localErrors() const;
     [[nodiscard]] bool locallyValid() const { return localErrors().isEmpty(); }
 

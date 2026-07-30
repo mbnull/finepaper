@@ -2188,10 +2188,18 @@ void NocNodeEditor::showNodeContextMenu(QtNodes::NodeId nodeId,
     const QString endpointId = metadata->id;
     connect(remove, &QAction::triggered, this, [this, pending, endpointId] {
         if (pending) {
+            const auto iterator = m_pendingEndpoints.constFind(endpointId);
+            const QString durableEndpointId =
+                iterator != m_pendingEndpoints.cend() && iterator->detached
+                ? iterator->detached->endpoint.id : QString();
             m_pendingEndpoints.remove(endpointId);
+            if (!durableEndpointId.isEmpty()
+                && detachedEndpointDeletionRequested) {
+                detachedEndpointDeletionRequested(durableEndpointId);
+            }
             rebuildGraph(false);
-        } else if (endpointRemovalRequested) {
-            endpointRemovalRequested(endpointId);
+        } else if (endpointDeletionRequested) {
+            endpointDeletionRequested(endpointId);
         }
     });
     menu->popup(globalPosition);

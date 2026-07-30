@@ -195,7 +195,21 @@ QJsonArray completeEndpointTypes() {
         QJsonObject{
             {QStringLiteral("id"), QStringLiteral("initiator")},
             {QStringLiteral("label"), QStringLiteral("Initiator")},
-            {QStringLiteral("parameters"), QJsonArray{}}
+            {QStringLiteral("parameters"), QJsonArray{
+                QJsonObject{
+                    {QStringLiteral("id"), QStringLiteral("outstandingTransactions")},
+                    {QStringLiteral("label"), QStringLiteral("Outstanding transactions")},
+                    {QStringLiteral("description"),
+                     QStringLiteral("Maximum requests accepted before backpressure")},
+                    {QStringLiteral("unit"), QStringLiteral("transactions")},
+                    {QStringLiteral("category"), QStringLiteral("Traffic")},
+                    {QStringLiteral("advanced"), true},
+                    {QStringLiteral("type"), QStringLiteral("integer")},
+                    {QStringLiteral("default"), 8},
+                    {QStringLiteral("minimum"), 1},
+                    {QStringLiteral("maximum"), 256}
+                }
+            }}
         },
         QJsonObject{
             {QStringLiteral("id"), QStringLiteral("target")},
@@ -333,6 +347,33 @@ int main(int argc, char** argv) {
     check(v1Result.success && v1Result.package && v1Result.package->domainTypes.isEmpty(),
           QStringLiteral("Package V1 succeeds without domainTypes"));
 
+    QJsonObject v1WithPresentationMetadata = v1Manifest;
+    v1WithPresentationMetadata.insert(
+        QStringLiteral("parameters"),
+        QJsonArray{QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("payloadWidth")},
+            {QStringLiteral("type"), QStringLiteral("integer")},
+            {QStringLiteral("default"), 64},
+            {QStringLiteral("description"),
+             QStringLiteral("  Default payload width  ")},
+            {QStringLiteral("unit"), QStringLiteral("bits")},
+            {QStringLiteral("category"), QStringLiteral("Fabric")},
+            {QStringLiteral("advanced"), true}
+        }});
+    const PackageLoadResult v1MetadataResult = loadManifest(
+        fixture.path(), v1WithPresentationMetadata);
+    const ParameterDefinition* v1MetadataParameter =
+        v1MetadataResult.package
+        ? v1MetadataResult.package->parameter(QStringLiteral("payloadWidth"))
+        : nullptr;
+    check(v1MetadataResult.success && v1MetadataResult.package
+              && v1MetadataParameter
+              && v1MetadataParameter->description
+                  == QStringLiteral("Default payload width")
+              && v1MetadataParameter->advanced,
+          QStringLiteral(
+              "parameter presentation metadata is optional in every Package format version"));
+
     QJsonObject v1WithElementProperties = v1Manifest;
     v1WithElementProperties.insert(
         QStringLiteral("elementPropertySets"), QJsonArray{});
@@ -455,11 +496,56 @@ int main(int argc, char** argv) {
                   && attachment->endpointTypes
                       == QStringList{QStringLiteral("initiator")},
               QStringLiteral("EndpointAttachment sets retain declared Endpoint type filters"));
-        check(completeV3Result.package->endpointType(QStringLiteral("initiator"))
-                  && completeV3Result.package->endpointType(
-                         QStringLiteral("initiator"))->parameters.isEmpty(),
-              QStringLiteral("Endpoint instance parameters remain on endpointTypes"));
+        const EndpointTypeDefinition* initiator =
+            completeV3Result.package->endpointType(QStringLiteral("initiator"));
+        const ParameterDefinition* endpointParameter =
+            initiator && !initiator->parameters.isEmpty()
+            ? &initiator->parameters.front()
+            : nullptr;
+        check(endpointParameter
+                  && endpointParameter->id
+                      == QStringLiteral("outstandingTransactions")
+                  && endpointParameter->description
+                      == QStringLiteral(
+                          "Maximum requests accepted before backpressure")
+                  && endpointParameter->unit
+                      == QStringLiteral("transactions")
+                  && endpointParameter->category
+                      == QStringLiteral("Traffic")
+                  && endpointParameter->advanced,
+              QStringLiteral(
+                  "Endpoint parameters retain Package-owned presentation metadata"));
     }
+
+    QJsonObject invalidParameterMetadataManifest = completeV3;
+    QJsonArray invalidMetadataEndpointTypes =
+        invalidParameterMetadataManifest.value(
+            QStringLiteral("endpointTypes")).toArray();
+    QJsonObject invalidMetadataEndpoint =
+        invalidMetadataEndpointTypes[0].toObject();
+    QJsonArray invalidMetadataParameters =
+        invalidMetadataEndpoint.value(QStringLiteral("parameters")).toArray();
+    QJsonObject invalidMetadataParameter =
+        invalidMetadataParameters[0].toObject();
+    invalidMetadataParameter.insert(QStringLiteral("description"), 7);
+    invalidMetadataParameter.insert(QStringLiteral("category"),
+                                    QStringLiteral("   "));
+    invalidMetadataParameter.insert(QStringLiteral("advanced"),
+                                    QStringLiteral("yes"));
+    invalidMetadataParameters[0] = invalidMetadataParameter;
+    invalidMetadataEndpoint.insert(QStringLiteral("parameters"),
+                                   invalidMetadataParameters);
+    invalidMetadataEndpointTypes[0] = invalidMetadataEndpoint;
+    invalidParameterMetadataManifest.insert(QStringLiteral("endpointTypes"),
+                                            invalidMetadataEndpointTypes);
+    expectFailure(fixture.path(),
+                  invalidParameterMetadataManifest,
+                  QStringLiteral("package.invalid_string"),
+                  QStringLiteral("invalid or empty parameter presentation strings"));
+    expectFailure(fixture.path(),
+                  invalidParameterMetadataManifest,
+                  QStringLiteral("package.invalid_boolean"),
+                  QStringLiteral("a non-boolean advanced parameter flag"));
 
     QJsonObject malformedElementSets = completeV3;
     malformedElementSets.insert(

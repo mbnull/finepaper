@@ -373,6 +373,21 @@ Package V3 在完整保留 `domainTypes` 的同时，必须显式提供 `element
 
 Property 支持 integer、number、boolean、string、enum、数值范围和 `multiple` 数组。每个 property 必须声明 default，因此 Mesh 扩容可以直接继承 Package baseline，而不需要为每个新 Router/Link 物化重复记录。Endpoint 自身的可配置参数继续归 `EndpointInstance.parameters` 所有；`elementPropertySets` 不允许直接应用到 Endpoint，避免出现两个互相竞争的参数 owner。
 
+### Endpoint 参数与类型迁移
+
+Endpoint 配置继续使用 `endpointTypes[].parameters` 作为唯一 schema，Application 在创建时物化 Package 默认值，创建后以原子操作替换完整的 `EndpointInstance.parameters`。通用表单只解释 `ParameterDefinition`，不能识别 `dataWidth`、`protocol`、`bufferDepth` 等具体 ID。Parameter schema 可提供 `description`、`unit`、`category` 和 `advanced` 展示元数据；这些字段只影响通用编辑器的说明与分组，不参与硬件语义或 Core 条件判断。
+
+Endpoint 类型切换不是简单修改 `type` 字符串，而是显式的 preview/confirm/apply 生命周期：
+
+- `ResetToDefaults` 从目标类型默认值开始；
+- `PreserveCompatible` 只保留目标 schema 中同 ID 且仍满足类型、范围和枚举约束的旧值，其余值回落到目标默认值；
+- 调用者可以在迁移结果上提供稀疏 parameter patch，但最终仍必须得到满足目标类型 schema 的完整参数对象；
+- 以 `endpointTypes` 过滤且不再适用于目标类型的 Endpoint Attachment configuration 必须进入精确 impact preview，只有调用者回传完全一致的记录后才允许删除；
+- Domain membership 当前按 `ElementKind::Endpoint` 适用，因此类型切换保留 membership，并由完整设计验证再次确认；Application 不根据 Endpoint 类型名字猜测 clock、power 或其他 Domain；
+- Endpoint Attachment 的 crossing override 与 Endpoint 参数属于不同 owner，类型切换不会静默重写 crossing state。
+
+创建 Endpoint 的 UI 应在一次清晰的配置流程中展示 ID、Package 声明的类型、Endpoint 参数和需要用户决策的 Domain assignment。若 required/single Domain 只有唯一可用实例，则 Application/UI 可直接采用 Package 驱动的确定结果，不应弹出没有选择价值的对话框。
+
 Design V3 必须显式包含 `elementConfigurations`。持久化值是相对 Package default 的稀疏 delta，而不是完整参数副本：
 
 ~~~cpp

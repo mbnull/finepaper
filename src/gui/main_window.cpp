@@ -3,15 +3,16 @@
 #include "gui/domain_manager_panel.h"
 #include "gui/domain_configuration_dialog.h"
 #include "gui/element_configuration_panel.h"
+#include "gui/endpoint_configuration_panel.h"
 #include "gui/endpoint_domain_assignment_dialog.h"
 #include "gui/mesh_resize_dialog.h"
+#include "gui/package_parameter_form.h"
 #include "gui/workbench_config.h"
 #include "storage/json.h"
 
 #include <QAbstractItemView>
 #include <QAction>
 #include <QActionGroup>
-#include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QDateTime>
@@ -19,7 +20,6 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
-#include <QDoubleSpinBox>
 #include <QDrag>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -60,7 +60,6 @@
 #include <QtConcurrentRun>
 
 #include <algorithm>
-#include <limits>
 #include <utility>
 
 namespace finepaper {
@@ -413,6 +412,8 @@ FinepaperMainWindow::~FinepaperMainWindow() {
         m_nodeEditor->endpointMoveRequested = {};
         m_nodeEditor->detachedEndpointDropped = {};
         m_nodeEditor->endpointRemovalRequested = {};
+        m_nodeEditor->endpointDeletionRequested = {};
+        m_nodeEditor->detachedEndpointDeletionRequested = {};
         m_nodeEditor->selectionChanged = {};
         m_nodeEditor->semanticSelectionChanged = {};
     }
@@ -430,6 +431,12 @@ FinepaperMainWindow::~FinepaperMainWindow() {
     if (m_elementConfigurationPanel) {
         m_elementConfigurationPanel->applyRequested = {};
         m_elementConfigurationPanel->resetRequested = {};
+    }
+    if (m_endpointConfigurationPanel) {
+        m_endpointConfigurationPanel->draftStateChanged = {};
+        m_endpointConfigurationPanel->planTypeChangeRequested = {};
+        m_endpointConfigurationPanel->updateParametersRequested = {};
+        m_endpointConfigurationPanel->changeTypeRequested = {};
     }
 }
 
@@ -547,7 +554,17 @@ void FinepaperMainWindow::createCentralViews() {
         return result.success;
     };
     m_nodeEditor->endpointRemovalRequested = [this](const QString& endpointId) {
-        return removeEndpoint(endpointId);
+        return removeEndpoint(endpointId, false);
+    };
+    m_nodeEditor->endpointDeletionRequested = [this](const QString& endpointId) {
+        return removeEndpoint(endpointId, true);
+    };
+    m_nodeEditor->detachedEndpointDeletionRequested = [this](
+        const QString& endpointId) {
+        if (m_endpointConfigurationPanel) {
+            m_endpointConfigurationPanel->discardDraft(
+                m_endpointDraftDesignIdentity, endpointId);
+        }
     };
     m_nodeEditor->semanticSelectionChanged = [this](
                                                 const NocEditorSelectionSet& selection) {
@@ -676,6 +693,17 @@ void FinepaperMainWindow::createInspectorDock() {
     selectionLayout->addWidget(m_selectionSummary);
     layout->addWidget(selectionGroup);
 
+    auto* endpointConfigurationGroup = new QGroupBox(
+        QStringLiteral("Endpoint Configuration"));
+    endpointConfigurationGroup->setObjectName(
+        QStringLiteral("finepaper.endpointConfigurationGroup"));
+    auto* endpointConfigurationLayout =
+        new QVBoxLayout(endpointConfigurationGroup);
+    m_endpointConfigurationPanel = new EndpointConfigurationPanel(
+        endpointConfigurationGroup);
+    endpointConfigurationLayout->addWidget(m_endpointConfigurationPanel);
+    layout->addWidget(endpointConfigurationGroup);
+
     auto* elementConfigurationGroup = new QGroupBox(
         QStringLiteral("Element Configuration"));
     elementConfigurationGroup->setObjectName(
@@ -690,12 +718,12 @@ void FinepaperMainWindow::createInspectorDock() {
     m_parameterGroup = new QGroupBox(QStringLiteral("NoC Parameters"));
     m_parameterGroup->setObjectName(QStringLiteral("finepaper.parameterGroup"));
     auto* parameterGroupLayout = new QVBoxLayout(m_parameterGroup);
-    auto* parameterContent = new QWidget;
-    m_parameterForm = new QFormLayout(parameterContent);
+    m_parameterForm = new PackageParameterForm(
+        QStringLiteral("finepaper.parameter"), m_parameterGroup);
     auto* parameterScroll = new QScrollArea;
     parameterScroll->setWidgetResizable(true);
     parameterScroll->setFrameShape(QFrame::NoFrame);
-    parameterScroll->setWidget(parameterContent);
+    parameterScroll->setWidget(m_parameterForm);
     m_applyParametersButton = new QPushButton(QStringLiteral("Apply Parameters"));
     m_applyParametersButton->setObjectName(QStringLiteral("finepaper.applyParameters"));
     parameterGroupLayout->addWidget(parameterScroll, 1);
@@ -707,6 +735,7 @@ void FinepaperMainWindow::createInspectorDock() {
 
     connect(m_applyParametersButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::applyParameters);
+    m_parameterForm->valueChanged = [this] { updateUiState(); };
     connect(m_resizeMeshButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::resizeMesh);
     m_elementConfigurationPanel->applyRequested = [this](
@@ -744,6 +773,78 @@ void FinepaperMainWindow::createInspectorDock() {
                 *m_design, std::move(element), propertySet),
             QStringLiteral("Reset Element Configuration"),
             DesignRefreshScope::InspectorOnly);
+    };
+    m_endpointConfigurationPanel->planTypeChangeRequested = [this](
+        QString endpointId,
+        QString targetType,
+        EndpointParameterMigration migration,
+        QJsonObject parameterPatch) {
+        if (!m_design) {
+            return EndpointTypeChangePlan{};
+        }
+        return m_application.planEndpointTypeChange(
+            *m_design,
+            endpointId,
+            targetType,
+            migration,
+            parameterPatch);
+    };
+    m_endpointConfigurationPanel->draftStateChanged = [this] {
+        updateUiState();
+    };
+    m_endpointConfigurationPanel->updateParametersRequested = [this](
+        QString endpointId,
+        QJsonObject parameters) {
+        if (m_operationBusy || !m_design || !packageForDesign()) {
+            return;
+        }
+        if (!confirmDiscardPendingDomainAssignments(
+                QStringLiteral("Applying Endpoint parameters"))) {
+            return;
+        }
+        const DesignResult result = m_application.updateEndpointParameters(
+            *m_design, endpointId, parameters);
+        if (result.success) {
+            m_endpointConfigurationPanel->discardDraft(
+                m_endpointDraftDesignIdentity, endpointId);
+        }
+        adoptDesignResult(
+            result,
+            QStringLiteral("Apply Endpoint Parameters %1").arg(endpointId),
+            DesignRefreshScope::InspectorOnly);
+    };
+    m_endpointConfigurationPanel->changeTypeRequested = [this](
+        QString endpointId,
+        QString targetType,
+        EndpointParameterMigration migration,
+        QJsonObject parameterPatch,
+        EndpointTypeChangeImpactConfirmation confirmation) {
+        if (m_operationBusy || !m_design || !packageForDesign()) {
+            return;
+        }
+        if (!confirmDiscardPendingDomainAssignments(
+                QStringLiteral("Changing an Endpoint type"))) {
+            return;
+        }
+        const DesignResult result = m_application.changeEndpointType(
+            *m_design,
+            endpointId,
+            targetType,
+            migration,
+            parameterPatch,
+            confirmation);
+        if (result.success) {
+            m_endpointConfigurationPanel->discardDraft(
+                m_endpointDraftDesignIdentity, endpointId);
+        }
+        adoptDesignResult(
+            result,
+            QStringLiteral("Change Endpoint Type %1").arg(endpointId));
+        if (result.success && m_nodeEditor) {
+            m_nodeEditor->selectElements({
+                ElementRef{ElementKind::Endpoint, endpointId}
+            });
+        }
     };
 }
 
@@ -1218,6 +1319,11 @@ void FinepaperMainWindow::reloadPackages() {
             QStringLiteral("Reloading Packages"))) {
         return;
     }
+    if (!confirmDiscardPendingEndpointDrafts(
+            QStringLiteral("Reloading Packages"))) {
+        return;
+    }
+    discardPendingEndpointDrafts();
     if (m_domainManager) {
         m_domainManager->setContext(nullptr, nullptr, nullptr, {});
     }
@@ -1293,11 +1399,6 @@ bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
     if (m_operationBusy || directory.trimmed().isEmpty()) {
         return false;
     }
-    if (!confirmDiscardPendingDomainAssignments(
-            QStringLiteral("Installing a Package"))) {
-        return false;
-    }
-
     const PackageLoadResult package = loadPackage(directory);
     if (!package.success || !package.package) {
         showDiagnostics(package.diagnostics, QStringLiteral("Install Package"));
@@ -1368,6 +1469,16 @@ bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
                 .arg(package.package->key(), loadedFrom));
         return false;
     }
+
+    if (!confirmDiscardPendingDomainAssignments(
+            QStringLiteral("Installing a Package"))) {
+        return false;
+    }
+    if (!confirmDiscardPendingEndpointDrafts(
+            QStringLiteral("Installing a Package"))) {
+        return false;
+    }
+    discardPendingEndpointDrafts();
 
     if (m_domainManager) {
         m_domainManager->setContext(nullptr, nullptr, nullptr, {});
@@ -1638,6 +1749,11 @@ void FinepaperMainWindow::updateUiState() {
     const bool hasDesignMetadata = hasDesign && packageForDesign();
     const bool hasDesignRuntime = hasDesign && runtimePackageForDesign();
     const bool hasRunnablePackages = !m_runtimeAvailablePackageKeys.isEmpty();
+    const bool hasEndpointDrafts = m_endpointConfigurationPanel
+        && !m_endpointDraftDesignIdentity.isEmpty()
+        && m_endpointConfigurationPanel->hasUnappliedDrafts(
+            m_endpointDraftDesignIdentity);
+    setWindowModified(m_dirty || hasEndpointDrafts);
 
     if (m_newAction) {
         m_newAction->setEnabled(hasRunnablePackages && !m_operationBusy);
@@ -1653,7 +1769,8 @@ void FinepaperMainWindow::updateUiState() {
     }
 
     if (m_saveAction) {
-        m_saveAction->setEnabled(hasDesign && m_dirty && !m_operationBusy);
+        m_saveAction->setEnabled(
+            hasDesign && (m_dirty || hasEndpointDrafts) && !m_operationBusy);
     }
     if (m_saveAsAction) {
         m_saveAsAction->setEnabled(hasDesign && !m_operationBusy);
@@ -1718,7 +1835,12 @@ void FinepaperMainWindow::updateUiState() {
     }
     if (m_applyParametersButton) {
         m_applyParametersButton->setEnabled(
-            hasDesignMetadata && !m_operationBusy && !m_parameterControls.isEmpty());
+            hasDesignMetadata && !m_operationBusy && m_parameterForm
+            && !m_parameterForm->isEmpty() && m_parameterForm->locallyValid()
+            && m_parameterForm->isModified());
+    }
+    if (m_endpointConfigurationPanel) {
+        m_endpointConfigurationPanel->setBusy(m_operationBusy);
     }
     if (m_generateButton) {
         m_generateButton->setEnabled(hasDesignRuntime && !m_operationBusy);
@@ -1798,6 +1920,48 @@ bool FinepaperMainWindow::confirmDiscardPendingDomainAssignments(
     return true;
 }
 
+bool FinepaperMainWindow::confirmDiscardPendingEndpointDrafts(
+    const QString& action) {
+    if (!m_endpointConfigurationPanel
+        || m_endpointDraftDesignIdentity.isEmpty()
+        || !m_endpointConfigurationPanel->hasUnappliedDrafts(
+            m_endpointDraftDesignIdentity)) {
+        return true;
+    }
+
+    const QStringList endpointIds =
+        m_endpointConfigurationPanel->unappliedDraftEndpointIds(
+            m_endpointDraftDesignIdentity);
+    QMessageBox confirmation(
+        QMessageBox::Warning,
+        QStringLiteral("Unapplied Endpoint configuration"),
+        QStringLiteral(
+            "%1 would use or replace the durable Design while the following "
+            "Endpoint configuration draft(s) have not been applied:\n\n%2\n\n"
+            "Return to the Endpoint Inspector and Apply them, or explicitly "
+            "discard the drafts now. Unapplied values are never saved, "
+            "validated, or generated silently.")
+            .arg(action, endpointIds.join(QStringLiteral(", "))),
+        QMessageBox::Discard | QMessageBox::Cancel,
+        this);
+    confirmation.setObjectName(
+        QStringLiteral("finepaper.pendingEndpointDraftConfirmation"));
+    confirmation.setDefaultButton(QMessageBox::Cancel);
+    if (confirmation.exec() != QMessageBox::Discard) {
+        return false;
+    }
+    return true;
+}
+
+void FinepaperMainWindow::discardPendingEndpointDrafts() {
+    if (!m_endpointConfigurationPanel
+        || m_endpointDraftDesignIdentity.isEmpty()) {
+        return;
+    }
+    m_endpointConfigurationPanel->clearDraftsForDesign(
+        m_endpointDraftDesignIdentity);
+}
+
 bool FinepaperMainWindow::canSaveDetachedEndpointDrafts() {
     const QStringList endpointIds = m_nodeEditor
         ? m_nodeEditor->detachedEndpointDraftIds() : QStringList{};
@@ -1823,12 +1987,11 @@ bool FinepaperMainWindow::canSaveDetachedEndpointDrafts() {
 }
 
 bool FinepaperMainWindow::maybeSave() {
-    if (!confirmDiscardPendingDomainAssignments(
-            QStringLiteral("Continuing"))) {
-        return false;
-    }
     if (!m_dirty || !m_design) {
-        return true;
+        return confirmDiscardPendingDomainAssignments(
+                   QStringLiteral("Continuing"))
+            && confirmDiscardPendingEndpointDrafts(
+                   QStringLiteral("Continuing"));
     }
     const QMessageBox::StandardButton choice = QMessageBox::warning(
         this,
@@ -1844,7 +2007,10 @@ bool FinepaperMainWindow::maybeSave() {
     if (choice == QMessageBox::Save) {
         return saveDesign();
     }
-    return true;
+    return confirmDiscardPendingDomainAssignments(
+               QStringLiteral("Continuing"))
+        && confirmDiscardPendingEndpointDrafts(
+               QStringLiteral("Continuing"));
 }
 
 const PackageDefinition* FinepaperMainWindow::packageByKey(const QString& key) const {
@@ -1972,6 +2138,7 @@ void FinepaperMainWindow::createDesign() {
     }
     if (result.success) {
         m_designPath.clear();
+        beginEndpointDraftDesignSession();
     }
     adoptDesignResult(result, QStringLiteral("Create Mesh"));
     selectCenterView(workbench::editorViewId);
@@ -1982,13 +2149,16 @@ void FinepaperMainWindow::resizeMesh() {
     if (m_operationBusy || !m_design || !package) {
         return;
     }
+    MeshResizeDialog dialog(*m_design, *package, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
     if (!confirmDiscardPendingDomainAssignments(
             QStringLiteral("Resizing the Mesh"))) {
         return;
     }
-
-    MeshResizeDialog dialog(*m_design, *package, this);
-    if (dialog.exec() != QDialog::Accepted) {
+    if (!confirmDiscardPendingEndpointDrafts(
+            QStringLiteral("Resizing the Mesh"))) {
         return;
     }
 
@@ -2000,6 +2170,9 @@ void FinepaperMainWindow::resizeMesh() {
         columns,
         dialog.newRouterMemberships(),
         dialog.impactConfirmation());
+    if (result.success) {
+        discardPendingEndpointDrafts();
+    }
     adoptDesignResult(
         result,
         QStringLiteral("Resize Mesh to %1 × %2").arg(rows).arg(columns));
@@ -2027,6 +2200,7 @@ bool FinepaperMainWindow::openDesignFile(const QString& path) {
         showDiagnostics(loaded.diagnostics, QStringLiteral("Open design"));
         return false;
     }
+    beginEndpointDraftDesignSession();
     m_design = loaded.design;
     m_designPath = path;
     refreshDesignViews();
@@ -2066,10 +2240,6 @@ bool FinepaperMainWindow::saveDesignAs() {
                                  QStringLiteral("Create or open a NoC design first."));
         return false;
     }
-    if (!confirmDiscardPendingDomainAssignments(
-            QStringLiteral("Saving the design"))) {
-        return false;
-    }
     if (!canSaveDetachedEndpointDrafts()) {
         return false;
     }
@@ -2090,6 +2260,10 @@ bool FinepaperMainWindow::saveDesignTo(const QString& path) {
             QStringLiteral("Saving the design"))) {
         return false;
     }
+    if (!confirmDiscardPendingEndpointDrafts(
+            QStringLiteral("Saving the design"))) {
+        return false;
+    }
     if (!canSaveDetachedEndpointDrafts()) {
         return false;
     }
@@ -2098,6 +2272,7 @@ bool FinepaperMainWindow::saveDesignTo(const QString& path) {
         showDiagnostics(diagnostics, QStringLiteral("Save design"));
         return false;
     }
+    discardPendingEndpointDrafts();
     m_designPath = path;
     setDirty(false);
     appendActivity(QStringLiteral("Saved design %1.").arg(path));
@@ -2120,6 +2295,11 @@ void FinepaperMainWindow::validateDesign() {
             QStringLiteral("Validating the design"))) {
         return;
     }
+    if (!confirmDiscardPendingEndpointDrafts(
+            QStringLiteral("Validating the design"))) {
+        return;
+    }
+    discardPendingEndpointDrafts();
     FinepaperApplication application = m_application;
     NocDesign design = *m_design;
     auto* watcher = new QFutureWatcher<ValidationResult>(this);
@@ -2168,16 +2348,21 @@ void FinepaperMainWindow::generateDesign() {
                                                 "Package before generation."));
         return;
     }
-    if (!confirmDiscardPendingDomainAssignments(
-            QStringLiteral("Generating RTL"))) {
-        return;
-    }
     const QString root = m_outputRoot->text().trimmed();
     if (root.isEmpty()) {
         QMessageBox::warning(this, QStringLiteral("Generate RTL"),
                              QStringLiteral("Choose an output root."));
         return;
     }
+    if (!confirmDiscardPendingDomainAssignments(
+            QStringLiteral("Generating RTL"))) {
+        return;
+    }
+    if (!confirmDiscardPendingEndpointDrafts(
+            QStringLiteral("Generating RTL"))) {
+        return;
+    }
+    discardPendingEndpointDrafts();
     appendActivity(QStringLiteral("Starting RTL generation in %1.").arg(root));
     FinepaperApplication application = m_application;
     NocDesign design = *m_design;
@@ -2234,17 +2419,24 @@ bool FinepaperMainWindow::addEndpoint(const QString& endpointType,
     if (!slotChoice.accepted) {
         return false;
     }
-    EndpointInstance endpoint;
-    endpoint.id = nextEndpointId(endpointType);
-    endpoint.type = endpointType;
-    endpoint.attachment.router = target.router;
-    endpoint.attachment.slot = slotChoice.slot;
-    const auto assignments = chooseEndpointDomainAssignments(endpoint.id);
-    if (!assignments) {
+    EndpointCreationDialog configuration(
+        *m_design,
+        *packageForDesign(),
+        endpointType,
+        nextEndpointId(endpointType),
+        this);
+    if (configuration.exec() != QDialog::Accepted) {
         return false;
     }
+    const EndpointCreationDraft draft = configuration.draft();
+    EndpointInstance endpoint;
+    endpoint.id = draft.id;
+    endpoint.type = draft.type;
+    endpoint.attachment.router = target.router;
+    endpoint.attachment.slot = slotChoice.slot;
+    endpoint.parameters = draft.parameters;
     const DesignResult result = m_application.addEndpoint(
-        *m_design, endpoint, *assignments);
+        *m_design, endpoint, draft.domainAssignments);
     adoptDesignResult(result,
                       QStringLiteral("Add Endpoint %1").arg(endpoint.id));
     return result.success;
@@ -2257,6 +2449,15 @@ FinepaperMainWindow::chooseEndpointDomainAssignments(
     const PackageDefinition* package = packageForDesign();
     if (!m_design || !package) {
         return std::nullopt;
+    }
+
+    const QVector<EndpointDomainAssignmentGroup> groups =
+        buildEndpointDomainAssignmentGroups(
+            *m_design, *package, initialAssignments);
+    if (!endpointDomainAssignmentsRequireUserDecision(
+            groups,
+            EndpointDomainAssignmentDecisionMode::Restore)) {
+        return endpointDomainAssignmentsFromGroups(groups);
     }
 
     EndpointDomainAssignmentDialog dialog(
@@ -2293,7 +2494,9 @@ bool FinepaperMainWindow::moveEndpoint(const QString& endpointId,
     return result.success;
 }
 
-bool FinepaperMainWindow::removeEndpoint(const QString& endpointId) {
+bool FinepaperMainWindow::removeEndpoint(
+    const QString& endpointId,
+    bool discardConfigurationDraft) {
     if (m_operationBusy || !m_design || !packageForDesign() || endpointId.isEmpty()) {
         return false;
     }
@@ -2302,6 +2505,11 @@ bool FinepaperMainWindow::removeEndpoint(const QString& endpointId) {
         return false;
     }
     const DesignResult result = m_application.removeEndpoint(*m_design, endpointId);
+    if (result.success && discardConfigurationDraft
+        && m_endpointConfigurationPanel) {
+        m_endpointConfigurationPanel->discardDraft(
+            m_endpointDraftDesignIdentity, endpointId);
+    }
     adoptDesignResult(result, QStringLiteral("Remove Endpoint %1").arg(endpointId));
     return result.success;
 }
@@ -2395,40 +2603,18 @@ FinepaperMainWindow::AttachmentSlotChoice FinepaperMainWindow::chooseAttachmentS
     return {true, slotIds.at(selectedIndex)};
 }
 
-QJsonValue FinepaperMainWindow::valueFromControl(const ParameterControl& control) const {
-    if (const auto* spin = qobject_cast<QSpinBox*>(control.editor)) {
-        return spin->value();
-    }
-    if (const auto* check = qobject_cast<QCheckBox*>(control.editor)) {
-        return check->isChecked();
-    }
-    if (const auto* spin = qobject_cast<QDoubleSpinBox*>(control.editor)) {
-        return spin->value();
-    }
-    if (const auto* combo = qobject_cast<QComboBox*>(control.editor)) {
-        return combo->currentData().isValid()
-                   ? combo->currentData().toString()
-                   : combo->currentText();
-    }
-    if (const auto* lineEdit = qobject_cast<QLineEdit*>(control.editor)) {
-        return lineEdit->text();
-    }
-    return {};
-}
-
 void FinepaperMainWindow::applyParameters() {
-    if (m_operationBusy || !m_design || !packageForDesign()) {
+    if (m_operationBusy || !m_design || !packageForDesign()
+        || !m_parameterForm || !m_parameterForm->locallyValid()
+        || !m_parameterForm->isModified()) {
         return;
     }
     if (!confirmDiscardPendingDomainAssignments(
             QStringLiteral("Applying NoC parameters"))) {
         return;
     }
-    QJsonObject parameters;
-    for (const ParameterControl& control : m_parameterControls) {
-        parameters.insert(control.definition.id, valueFromControl(control));
-    }
-    adoptDesignResult(m_application.updateParameters(*m_design, parameters),
+    adoptDesignResult(m_application.updateParameters(
+                          *m_design, m_parameterForm->values()),
                       QStringLiteral("Apply Parameters"));
 }
 
@@ -2446,6 +2632,20 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
             m_design ? &*m_design : nullptr,
             packageForDesign(),
             std::move(selectedElement),
+            m_operationBusy);
+    }
+    if (m_endpointConfigurationPanel) {
+        std::optional<QString> endpointId;
+        if (selection.items.size() == 1
+            && selection.items.front().kind
+                == NocEditorSelection::Kind::Endpoint) {
+            endpointId = selection.items.front().id;
+        }
+        m_endpointConfigurationPanel->setContext(
+            m_design ? &*m_design : nullptr,
+            packageForDesign(),
+            m_endpointDraftDesignIdentity,
+            std::move(endpointId),
             m_operationBusy);
     }
     m_selectedRouter.reset();
@@ -2710,56 +2910,13 @@ void FinepaperMainWindow::refreshDesignViews() {
 }
 
 void FinepaperMainWindow::rebuildParameterEditors() {
-    while (QLayoutItem* item = m_parameterForm->takeAt(0)) {
-        delete item->widget();
-        delete item;
-    }
-    m_parameterControls.clear();
     const PackageDefinition* package = packageForDesign();
     if (!m_design || !package) {
+        m_parameterForm->setSchema({}, {});
         updateUiState();
         return;
     }
-    for (const ParameterDefinition& definition : package->parameters) {
-        const QJsonValue value = m_design->parameters.value(definition.id);
-        QWidget* editor = nullptr;
-        if (definition.type == ParameterType::Integer) {
-            auto* spin = new QSpinBox;
-            spin->setRange(definition.minimum.value_or(-1000000000),
-                           definition.maximum.value_or(1000000000));
-            spin->setValue(value.toInt());
-            editor = spin;
-        } else if (definition.type == ParameterType::Number) {
-            auto* spin = new QDoubleSpinBox;
-            spin->setDecimals(12);
-            spin->setRange(
-                definition.minimum.value_or(std::numeric_limits<double>::lowest()),
-                definition.maximum.value_or(std::numeric_limits<double>::max()));
-            spin->setSingleStep(0.1);
-            spin->setValue(value.toDouble());
-            editor = spin;
-        } else if (definition.type == ParameterType::Boolean) {
-            auto* check = new QCheckBox;
-            check->setChecked(value.toBool());
-            editor = check;
-        } else if (definition.type == ParameterType::Enumeration) {
-            auto* combo = new QComboBox;
-            for (const QString& entry : definition.values) {
-                combo->addItem(entry, entry);
-            }
-            const int index = combo->findData(value.toString());
-            if (index >= 0) {
-                combo->setCurrentIndex(index);
-            }
-            editor = combo;
-        } else {
-            editor = new QLineEdit(value.toString());
-        }
-        editor->setObjectName(
-            QStringLiteral("finepaper.parameter.%1").arg(definition.id));
-        m_parameterForm->addRow(definition.label, editor);
-        m_parameterControls.append(ParameterControl{definition, editor});
-    }
+    m_parameterForm->setSchema(package->parameters, m_design->parameters);
     updateUiState();
 }
 
@@ -2817,6 +2974,15 @@ void FinepaperMainWindow::appendActivity(const QString& message) {
 void FinepaperMainWindow::selectCenterView(const QString& id) {
     if (!m_viewRegistry->select(id)) {
         m_viewRegistry->select(workbench::editorViewId);
+    }
+}
+
+void FinepaperMainWindow::beginEndpointDraftDesignSession() {
+    ++m_endpointDraftDesignSerial;
+    m_endpointDraftDesignIdentity = QStringLiteral("design-session-%1")
+        .arg(m_endpointDraftDesignSerial);
+    if (m_endpointConfigurationPanel) {
+        m_endpointConfigurationPanel->clearDrafts();
     }
 }
 

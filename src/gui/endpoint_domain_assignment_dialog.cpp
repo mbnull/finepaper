@@ -71,6 +71,9 @@ QVector<EndpointDomainAssignmentGroup> buildEndpointDomainAssignmentGroups(
         group.domainTypeLabel = typeLabel(type);
         group.cardinality = type.cardinality;
         group.required = type.required;
+        group.assignmentProvided =
+            normalizedInitial.contains(type.id)
+            && !normalizedInitial.value(type.id).isEmpty();
         group.selectedDomainIds = normalizedInitial.value(type.id);
 
         QSet<QString> seenIds;
@@ -117,20 +120,65 @@ QVector<EndpointDomainAssignmentGroup> buildEndpointDomainAssignmentGroups(
     return groups;
 }
 
-EndpointDomainAssignmentDialog::EndpointDomainAssignmentDialog(
+bool endpointDomainAssignmentsRequireUserDecision(
+    const QVector<EndpointDomainAssignmentGroup>& groups,
+    EndpointDomainAssignmentDecisionMode mode) {
+    for (const EndpointDomainAssignmentGroup& group : groups) {
+        const qsizetype availableCount = std::count_if(
+            group.choices.cbegin(), group.choices.cend(),
+            [](const EndpointDomainChoice& choice) { return choice.available; });
+        const bool hasStaleSelection = std::any_of(
+            group.selectedDomainIds.cbegin(), group.selectedDomainIds.cend(),
+            [&](const QString& domainId) {
+                return !containsAvailableChoice(group, domainId);
+            });
+        const bool invalidCardinality =
+            group.cardinality != DomainCardinality::Single
+            && group.cardinality != DomainCardinality::Multiple;
+        const bool tooManyForSingle =
+            group.cardinality == DomainCardinality::Single
+            && group.selectedDomainIds.size() > 1;
+        const bool missingRequired =
+            group.required
+            && (group.selectedDomainIds.isEmpty()
+                || (mode == EndpointDomainAssignmentDecisionMode::Restore
+                    && !group.assignmentProvided));
+        if (invalidCardinality || tooManyForSingle || hasStaleSelection
+            || missingRequired || (group.required && availableCount == 0)) {
+            return true;
+        }
+        if (mode == EndpointDomainAssignmentDecisionMode::Creation
+            && (availableCount > 1
+                || (!group.required && availableCount > 0))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+EndpointDomainAssignments endpointDomainAssignmentsFromGroups(
+    const QVector<EndpointDomainAssignmentGroup>& groups) {
+    EndpointDomainAssignments result;
+    for (const EndpointDomainAssignmentGroup& group : groups) {
+        if (!group.selectedDomainIds.isEmpty()) {
+            result.insert(group.domainType, group.selectedDomainIds);
+        }
+    }
+    return normalizeEndpointDomainAssignments(result);
+}
+
+EndpointDomainAssignmentEditor::EndpointDomainAssignmentEditor(
     const NocDesign& design,
     const PackageDefinition& package,
     EndpointDomainAssignments initialAssignments,
     QWidget* parent)
-    : QDialog(parent),
+    : QWidget(parent),
       m_groups(buildEndpointDomainAssignmentGroups(
           design, package, initialAssignments)) {
-    setObjectName(QStringLiteral("finepaper.endpointDomainAssignmentDialog"));
-    setWindowTitle(QStringLiteral("Endpoint Domain Assignments"));
-    setModal(true);
-    resize(620, 600);
+    setObjectName(QStringLiteral("finepaper.endpointDomainAssignmentEditor"));
 
     auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(0, 0, 0, 0);
     auto* introduction = new QLabel(
         QStringLiteral(
             "Choose the Domain membership of this Endpoint. Every row comes "
@@ -283,25 +331,10 @@ EndpointDomainAssignmentDialog::EndpointDomainAssignmentDialog(
     m_diagnostics->setTextFormat(Qt::PlainText);
     m_diagnostics->setTextInteractionFlags(Qt::TextSelectableByMouse);
     root->addWidget(m_diagnostics);
-
-    m_buttons = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    m_buttons->setObjectName(
-        QStringLiteral("finepaper.endpointDomainAssignment.buttons"));
-    m_acceptButton = m_buttons->button(QDialogButtonBox::Ok);
-    m_acceptButton->setObjectName(
-        QStringLiteral("finepaper.endpointDomainAssignment.accept"));
-    m_acceptButton->setText(QStringLiteral("Use Assignments"));
-    root->addWidget(m_buttons);
-
-    connect(m_buttons, &QDialogButtonBox::accepted,
-            this, [this] { accept(); });
-    connect(m_buttons, &QDialogButtonBox::rejected,
-            this, &QDialog::reject);
     updateValidation();
 }
 
-EndpointDomainAssignments EndpointDomainAssignmentDialog::assignments() const {
+EndpointDomainAssignments EndpointDomainAssignmentEditor::assignments() const {
     EndpointDomainAssignments result;
     for (const GroupEditor& editor : m_editors) {
         QStringList selected;
@@ -326,7 +359,7 @@ EndpointDomainAssignments EndpointDomainAssignmentDialog::assignments() const {
     return normalizeEndpointDomainAssignments(result);
 }
 
-QStringList EndpointDomainAssignmentDialog::localErrors() const {
+QStringList EndpointDomainAssignmentEditor::localErrors() const {
     const EndpointDomainAssignments selected = assignments();
     QStringList errors;
     for (const EndpointDomainAssignmentGroup& group : m_groups) {
@@ -372,6 +405,68 @@ QStringList EndpointDomainAssignmentDialog::localErrors() const {
     return errors;
 }
 
+void EndpointDomainAssignmentEditor::updateValidation() {
+    if (!m_diagnostics) {
+        return;
+    }
+    const QStringList errors = localErrors();
+    m_diagnostics->setText(
+        errors.isEmpty()
+            ? QStringLiteral("Assignments satisfy the Package requirements.")
+            : errors.join(QLatin1Char('\n')));
+    if (validationChanged) {
+        validationChanged();
+    }
+}
+
+EndpointDomainAssignmentDialog::EndpointDomainAssignmentDialog(
+    const NocDesign& design,
+    const PackageDefinition& package,
+    EndpointDomainAssignments initialAssignments,
+    QWidget* parent)
+    : QDialog(parent) {
+    setObjectName(QStringLiteral("finepaper.endpointDomainAssignmentDialog"));
+    setWindowTitle(QStringLiteral("Endpoint Domain Assignments"));
+    setModal(true);
+    resize(620, 600);
+
+    auto* root = new QVBoxLayout(this);
+    m_editor = new EndpointDomainAssignmentEditor(
+        design, package, std::move(initialAssignments), this);
+    root->addWidget(m_editor, 1);
+
+    m_buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    m_buttons->setObjectName(
+        QStringLiteral("finepaper.endpointDomainAssignment.buttons"));
+    m_acceptButton = m_buttons->button(QDialogButtonBox::Ok);
+    m_acceptButton->setObjectName(
+        QStringLiteral("finepaper.endpointDomainAssignment.accept"));
+    m_acceptButton->setText(QStringLiteral("Use Assignments"));
+    root->addWidget(m_buttons);
+
+    m_editor->validationChanged = [this] { updateValidation(); };
+    connect(m_buttons, &QDialogButtonBox::accepted,
+            this, [this] { accept(); });
+    connect(m_buttons, &QDialogButtonBox::rejected,
+            this, &QDialog::reject);
+    updateValidation();
+}
+
+EndpointDomainAssignments EndpointDomainAssignmentDialog::assignments() const {
+    return m_editor ? m_editor->assignments() : EndpointDomainAssignments{};
+}
+
+QStringList EndpointDomainAssignmentDialog::localErrors() const {
+    return m_editor ? m_editor->localErrors() : QStringList{};
+}
+
+const QVector<EndpointDomainAssignmentGroup>&
+EndpointDomainAssignmentDialog::groups() const {
+    static const QVector<EndpointDomainAssignmentGroup> empty;
+    return m_editor ? m_editor->groups() : empty;
+}
+
 void EndpointDomainAssignmentDialog::accept() {
     updateValidation();
     if (m_acceptButton && m_acceptButton->isEnabled()) {
@@ -380,15 +475,11 @@ void EndpointDomainAssignmentDialog::accept() {
 }
 
 void EndpointDomainAssignmentDialog::updateValidation() {
-    if (!m_diagnostics || !m_acceptButton) {
+    if (!m_acceptButton) {
         return;
     }
     const QStringList errors = localErrors();
     m_acceptButton->setEnabled(errors.isEmpty());
-    m_diagnostics->setText(
-        errors.isEmpty()
-            ? QStringLiteral("Assignments satisfy the Package requirements.")
-            : errors.join(QLatin1Char('\n')));
 }
 
 } // namespace finepaper

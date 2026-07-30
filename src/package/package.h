@@ -40,6 +40,13 @@ struct ParameterDefinition {
     QString id;
     ParameterType type = ParameterType::Invalid;
     QString label;
+    // Optional Package-owned presentation metadata. These fields do not alter
+    // parameter semantics; generic editors may use them to explain and group
+    // parameters without recognizing Package-specific ids.
+    QString description;
+    QString unit;
+    QString category;
+    bool advanced = false;
     bool hasDefault = false;
     QJsonValue defaultValue;
     std::optional<double> minimum;

@@ -4,9 +4,12 @@
 #include "package/package.h"
 
 #include <QDialog>
+#include <QWidget>
 #include <QString>
 #include <QStringList>
 #include <QVector>
+
+#include <functional>
 
 class QComboBox;
 class QDialogButtonBox;
@@ -31,8 +34,14 @@ struct EndpointDomainAssignmentGroup {
     bool required = false;
     QVector<EndpointDomainChoice> choices;
     QStringList selectedDomainIds;
+    bool assignmentProvided = false;
 
     bool operator==(const EndpointDomainAssignmentGroup&) const = default;
+};
+
+enum class EndpointDomainAssignmentDecisionMode {
+    Creation,
+    Restore
 };
 
 // Build the Package-driven assignment rows independently from QWidget code so
@@ -44,9 +53,19 @@ buildEndpointDomainAssignmentGroups(
     const PackageDefinition& package,
     const EndpointDomainAssignments& initialAssignments = {});
 
-class EndpointDomainAssignmentDialog final : public QDialog {
+// A modal choice is only useful when the Package leaves a real decision to the
+// user (or when persisted assignments need repair).  Required Domain Types
+// with one available instance are resolved automatically by the group builder.
+[[nodiscard]] bool endpointDomainAssignmentsRequireUserDecision(
+    const QVector<EndpointDomainAssignmentGroup>& groups,
+    EndpointDomainAssignmentDecisionMode mode =
+        EndpointDomainAssignmentDecisionMode::Creation);
+[[nodiscard]] EndpointDomainAssignments endpointDomainAssignmentsFromGroups(
+    const QVector<EndpointDomainAssignmentGroup>& groups);
+
+class EndpointDomainAssignmentEditor final : public QWidget {
 public:
-    EndpointDomainAssignmentDialog(
+    EndpointDomainAssignmentEditor(
         const NocDesign& design,
         const PackageDefinition& package,
         EndpointDomainAssignments initialAssignments = {},
@@ -58,8 +77,7 @@ public:
         return m_groups;
     }
 
-protected:
-    void accept() override;
+    std::function<void()> validationChanged;
 
 private:
     struct GroupEditor {
@@ -73,6 +91,27 @@ private:
     QVector<EndpointDomainAssignmentGroup> m_groups;
     QVector<GroupEditor> m_editors;
     QLabel* m_diagnostics = nullptr;
+};
+
+class EndpointDomainAssignmentDialog final : public QDialog {
+public:
+    EndpointDomainAssignmentDialog(
+        const NocDesign& design,
+        const PackageDefinition& package,
+        EndpointDomainAssignments initialAssignments = {},
+        QWidget* parent = nullptr);
+
+    [[nodiscard]] EndpointDomainAssignments assignments() const;
+    [[nodiscard]] QStringList localErrors() const;
+    [[nodiscard]] const QVector<EndpointDomainAssignmentGroup>& groups() const;
+
+protected:
+    void accept() override;
+
+private:
+    void updateValidation();
+
+    EndpointDomainAssignmentEditor* m_editor = nullptr;
     QDialogButtonBox* m_buttons = nullptr;
     QPushButton* m_acceptButton = nullptr;
 };

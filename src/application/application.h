@@ -3,6 +3,7 @@
 #include "application/domain_assignment.h"
 #include "application/domain_configuration.h"
 #include "application/element_configuration.h"
+#include "application/endpoint_configuration.h"
 #include "application/mesh_resize_plan.h"
 #include "execution/package_protocol.h"
 #include "noc/model.h"
@@ -81,6 +82,23 @@ public:
                               RouterPosition router,
                               std::optional<QString> slot = std::nullopt) const;
     DesignResult removeEndpoint(const NocDesign& design, const QString& endpointId) const;
+    DesignResult updateEndpointParameters(
+        const NocDesign& design,
+        const QString& endpointId,
+        const QJsonObject& parameters) const;
+    EndpointTypeChangePlan planEndpointTypeChange(
+        const NocDesign& design,
+        const QString& endpointId,
+        const QString& targetType,
+        EndpointParameterMigration migration,
+        const QJsonObject& parameterPatch = {}) const;
+    DesignResult changeEndpointType(
+        const NocDesign& design,
+        const QString& endpointId,
+        const QString& targetType,
+        EndpointParameterMigration migration,
+        const QJsonObject& parameterPatch = {},
+        const EndpointTypeChangeImpactConfirmation& confirmation = {}) const;
     DesignResult updateParameters(const NocDesign& design,
                                   const QJsonObject& parameters) const;
     DesignResult setElementConfiguration(

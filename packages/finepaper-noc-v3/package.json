@@ -9,29 +9,29 @@
     "columns": { "min": 1, "max": 16, "default": 2 }
   },
   "parameters": [
-    { "id": "dataWidth", "label": "Data width", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
-    { "id": "flitWidth", "label": "Flit width", "type": "integer", "default": 128, "minimum": 8, "maximum": 1024 },
-    { "id": "addrWidth", "label": "Address width", "type": "integer", "default": 32, "minimum": 8, "maximum": 64 }
+    { "id": "dataWidth", "label": "Data width", "description": "Default payload width exposed by the NoC fabric", "unit": "bits", "category": "Fabric", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
+    { "id": "flitWidth", "label": "Flit width", "description": "Physical transfer width of a single NoC flit", "unit": "bits", "category": "Fabric", "type": "integer", "default": 128, "minimum": 8, "maximum": 1024 },
+    { "id": "addrWidth", "label": "Address width", "description": "Address width carried by requests", "unit": "bits", "category": "Addressing", "advanced": true, "type": "integer", "default": 32, "minimum": 8, "maximum": 64 }
   ],
   "endpointTypes": [
     {
       "id": "master",
       "label": "Initiator endpoint",
       "parameters": [
-        { "id": "protocol", "label": "Protocol", "type": "enum", "default": "axi4", "values": ["axi4"] },
-        { "id": "dataWidth", "label": "Data width", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
-        { "id": "bufferDepth", "label": "Buffer depth", "type": "integer", "default": 16, "minimum": 1, "maximum": 1024 },
-        { "id": "qosEnabled", "label": "Enable QoS", "type": "boolean", "default": false }
+        { "id": "protocol", "label": "Protocol", "description": "Protocol presented by the initiator network interface", "category": "Interface", "type": "enum", "default": "axi4", "values": ["axi4"] },
+        { "id": "dataWidth", "label": "Data width", "description": "Endpoint payload width before packetization", "unit": "bits", "category": "Interface", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
+        { "id": "bufferDepth", "label": "Buffer depth", "description": "Ingress and response queue capacity", "unit": "flits", "category": "Queues", "type": "integer", "default": 16, "minimum": 1, "maximum": 1024 },
+        { "id": "qosEnabled", "label": "Enable QoS", "description": "Generate the endpoint QoS classification path", "category": "Traffic", "advanced": true, "type": "boolean", "default": false }
       ]
     },
     {
       "id": "slave",
       "label": "Target endpoint",
       "parameters": [
-        { "id": "protocol", "label": "Protocol", "type": "enum", "default": "axi4", "values": ["axi4"] },
-        { "id": "dataWidth", "label": "Data width", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
-        { "id": "bufferDepth", "label": "Buffer depth", "type": "integer", "default": 16, "minimum": 1, "maximum": 1024 },
-        { "id": "qosEnabled", "label": "Enable QoS", "type": "boolean", "default": false }
+        { "id": "protocol", "label": "Protocol", "description": "Protocol presented by the target network interface", "category": "Interface", "type": "enum", "default": "axi4", "values": ["axi4"] },
+        { "id": "dataWidth", "label": "Data width", "description": "Endpoint payload width after depacketization", "unit": "bits", "category": "Interface", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
+        { "id": "bufferDepth", "label": "Buffer depth", "description": "Request and egress queue capacity", "unit": "flits", "category": "Queues", "type": "integer", "default": 16, "minimum": 1, "maximum": 1024 },
+        { "id": "qosEnabled", "label": "Enable QoS", "description": "Generate the endpoint QoS classification path", "category": "Traffic", "advanced": true, "type": "boolean", "default": false }
       ]
     }
   ],
@@ -48,7 +48,7 @@
         "properties": {}
       },
       "properties": [
-        { "id": "frequencyMHz", "label": "Frequency (MHz)", "type": "number", "required": true, "default": 1000, "minimum": 1 }
+        { "id": "frequencyMHz", "label": "Frequency", "description": "Nominal clock frequency for members of this domain", "unit": "MHz", "category": "Clock", "type": "number", "required": true, "default": 1000, "minimum": 1 }
       ],
       "relations": [
         {
@@ -58,13 +58,13 @@
           "cardinality": "single",
           "required": false,
           "properties": [
-            { "id": "divider", "label": "Divider", "type": "integer", "required": true, "default": 1, "minimum": 1 }
+            { "id": "divider", "label": "Divider", "description": "Integer divisor relative to the source clock domain", "category": "Clock", "type": "integer", "required": true, "default": 1, "minimum": 1 }
           ]
         }
       ],
       "crossingProperties": [
-        { "id": "implementation", "label": "CDC implementation", "type": "enum", "required": true, "default": "async-fifo", "values": ["synchronizer", "async-fifo"] },
-        { "id": "synchronizerStages", "label": "Synchronizer stages", "type": "integer", "required": true, "default": 2, "minimum": 2, "maximum": 8 }
+        { "id": "implementation", "label": "CDC implementation", "description": "Circuit strategy used when traffic crosses this clock boundary", "category": "CDC", "type": "enum", "required": true, "default": "async-fifo", "values": ["synchronizer", "async-fifo"] },
+        { "id": "synchronizerStages", "label": "Synchronizer stages", "description": "Metastability filtering stages for synchronizer-based crossings", "category": "CDC", "advanced": true, "type": "integer", "required": true, "default": 2, "minimum": 2, "maximum": 8 }
       ]
     },
     {
@@ -79,13 +79,13 @@
         "properties": {}
       },
       "properties": [
-        { "id": "voltageMv", "label": "Voltage (mV)", "type": "integer", "required": true, "default": 900, "minimum": 1 },
-        { "id": "retention", "label": "State retention", "type": "boolean", "required": true, "default": false }
+        { "id": "voltageMv", "label": "Voltage", "description": "Nominal supply voltage for members of this domain", "unit": "mV", "category": "Power", "type": "integer", "required": true, "default": 900, "minimum": 1 },
+        { "id": "retention", "label": "State retention", "description": "Members retain architectural state while the domain is powered down", "category": "Power", "type": "boolean", "required": true, "default": false }
       ],
       "relations": [],
       "crossingProperties": [
-        { "id": "isolation", "label": "Isolation required", "type": "boolean", "required": true, "default": true },
-        { "id": "levelShift", "label": "Level shifting", "type": "enum", "required": true, "default": "auto", "values": ["none", "up", "down", "auto"] }
+        { "id": "isolation", "label": "Isolation required", "description": "Insert isolation behavior at this power boundary", "category": "Power crossing", "type": "boolean", "required": true, "default": true },
+        { "id": "levelShift", "label": "Level shifting", "description": "Voltage translation direction at this power boundary", "category": "Power crossing", "type": "enum", "required": true, "default": "auto", "values": ["none", "up", "down", "auto"] }
       ]
     }
   ],
@@ -95,9 +95,9 @@
       "label": "Router microarchitecture",
       "appliesTo": ["router"],
       "properties": [
-        { "id": "routingAlgorithm", "label": "Routing algorithm", "type": "enum", "default": "xy", "values": ["xy", "yx"] },
-        { "id": "virtualChannels", "label": "Virtual channels", "type": "integer", "default": 2, "minimum": 1, "maximum": 8 },
-        { "id": "bufferDepth", "label": "Buffer depth", "type": "integer", "default": 8, "minimum": 1, "maximum": 64 }
+        { "id": "routingAlgorithm", "label": "Routing algorithm", "description": "Deterministic dimension-order routing preference", "category": "Routing", "type": "enum", "default": "xy", "values": ["xy", "yx"] },
+        { "id": "virtualChannels", "label": "Virtual channels", "description": "Independent flow-control channels per Router port", "unit": "channels", "category": "Resources", "type": "integer", "default": 2, "minimum": 1, "maximum": 8 },
+        { "id": "bufferDepth", "label": "Buffer depth", "description": "Ingress storage allocated per virtual channel", "unit": "flits", "category": "Resources", "type": "integer", "default": 8, "minimum": 1, "maximum": 64 }
       ]
     }
   ],

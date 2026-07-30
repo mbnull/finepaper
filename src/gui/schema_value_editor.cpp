@@ -232,6 +232,31 @@ public:
             : QJsonValue();
     }
 
+    [[nodiscard]] std::optional<QString> invalidScalarText() const {
+        if (!m_lineEdit || m_preserveInvalidRaw
+            || (m_definition.type != ParameterType::Integer
+                && m_definition.type != ParameterType::Number)) {
+            return std::nullopt;
+        }
+        bool parsed = false;
+        const double number = QLocale::c().toDouble(
+            m_lineEdit->text().trimmed(), &parsed);
+        return parsed && std::isfinite(number)
+            ? std::nullopt
+            : std::optional<QString>(m_lineEdit->text());
+    }
+
+    void setInvalidScalarText(const QString& text) {
+        if (!m_lineEdit) {
+            return;
+        }
+        m_updating = true;
+        m_preserveInvalidRaw = false;
+        m_invalidRaw = {};
+        m_lineEdit->setText(text);
+        m_updating = false;
+    }
+
     [[nodiscard]] QStringList localErrors() const {
         if (m_preserveInvalidRaw) {
             return {QStringLiteral("Stored value has the wrong JSON type (%1).")
@@ -355,6 +380,24 @@ SchemaValueEditor::SchemaValueEditor(ParameterDefinition definition,
       m_definition(std::move(definition)),
       m_options(std::move(options)) {
     setObjectName(objectNamePrefix());
+    const QString accessibleName = m_definition.label.trimmed().isEmpty()
+        ? m_definition.id : m_definition.label;
+    setAccessibleName(accessibleName);
+    setAccessibleDescription(m_definition.description);
+    QStringList help;
+    if (!m_definition.description.trimmed().isEmpty()) {
+        help.append(m_definition.description);
+    }
+    if (!m_definition.unit.trimmed().isEmpty()) {
+        help.append(QStringLiteral("Unit: %1").arg(m_definition.unit));
+    }
+    if (!m_definition.category.trimmed().isEmpty()) {
+        help.append(QStringLiteral("Category: %1").arg(m_definition.category));
+    }
+    if (m_definition.advanced) {
+        help.append(QStringLiteral("Advanced Package parameter."));
+    }
+    setToolTip(help.join(QLatin1Char('\n')));
     m_rootLayout = new QVBoxLayout(this);
     m_rootLayout->setContentsMargins(0, 0, 0, 0);
     m_rootLayout->setSpacing(4);
@@ -582,6 +625,18 @@ void SchemaValueEditor::setValue(
     m_updating = false;
 }
 
+void SchemaValueEditor::setDraftState(
+    const SchemaValueEditorDraft& draft) {
+    setValue(draft.value);
+    if (!draft.invalidScalarText || !m_scalarEditor) {
+        return;
+    }
+    m_updating = true;
+    setPresent(true);
+    m_scalarEditor->setInvalidScalarText(*draft.invalidScalarText);
+    m_updating = false;
+}
+
 std::optional<QJsonValue> SchemaValueEditor::value() const {
     if (m_booleanEditor) {
         if (m_preserveInvalidBooleanValue) {
@@ -606,6 +661,15 @@ std::optional<QJsonValue> SchemaValueEditor::value() const {
         array.append(item);
     }
     return QJsonValue(array);
+}
+
+SchemaValueEditorDraft SchemaValueEditor::draftState() const {
+    SchemaValueEditorDraft draft;
+    draft.value = value();
+    if (m_scalarEditor) {
+        draft.invalidScalarText = m_scalarEditor->invalidScalarText();
+    }
+    return draft;
 }
 
 QStringList SchemaValueEditor::localErrors() const {

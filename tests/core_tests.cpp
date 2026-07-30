@@ -99,6 +99,16 @@ QJsonObject configurableRequest() {
         QStringLiteral("package")).toObject();
     package.insert(QStringLiteral("version"), QStringLiteral("3.0.0"));
     configurable.insert(QStringLiteral("package"), package);
+    QJsonArray endpoints = configurable.value(
+        QStringLiteral("endpoints")).toArray();
+    QJsonObject memory = endpoints[2].toObject();
+    QJsonObject memoryParameters = memory.value(
+        QStringLiteral("parameters")).toObject();
+    memoryParameters.insert(QStringLiteral("bufferDepth"), 37);
+    memoryParameters.insert(QStringLiteral("qosEnabled"), true);
+    memory.insert(QStringLiteral("parameters"), memoryParameters);
+    endpoints[2] = memory;
+    configurable.insert(QStringLiteral("endpoints"), endpoints);
     return configurable;
 }
 
@@ -288,6 +298,32 @@ int main(int argc, char** argv) {
               && finepaper.packages().at(1).key()
                   == QStringLiteral("finepaper.noc@3.0.0"),
           QStringLiteral("V1 compatibility and V3 configurable Packages load together"));
+    const auto configurablePackage = std::find_if(
+        finepaper.packages().cbegin(), finepaper.packages().cend(),
+        [](const PackageDefinition& package) {
+            return package.key() == QStringLiteral("finepaper.noc@3.0.0");
+        });
+    const EndpointTypeDefinition* masterType =
+        configurablePackage != finepaper.packages().cend()
+        ? configurablePackage->endpointType(QStringLiteral("master"))
+        : nullptr;
+    const ParameterDefinition* qosParameter = nullptr;
+    if (masterType) {
+        const auto parameter = std::find_if(
+            masterType->parameters.cbegin(), masterType->parameters.cend(),
+            [](const ParameterDefinition& value) {
+                return value.id == QStringLiteral("qosEnabled");
+            });
+        if (parameter != masterType->parameters.cend()) {
+            qosParameter = &(*parameter);
+        }
+    }
+    check(qosParameter
+              && qosParameter->category == QStringLiteral("Traffic")
+              && qosParameter->advanced
+              && !qosParameter->description.isEmpty(),
+          QStringLiteral(
+              "bundled V3 Endpoint schemas expose Package-owned presentation metadata"));
 
     QTemporaryDir duplicatePackageFixture(
         QStringLiteral("/tmp/finepaper-duplicate-package-XXXXXX"));
@@ -517,14 +553,30 @@ int main(int argc, char** argv) {
             intentDesign = loadDesign(
                 QDir(generation.outputDirectory).filePath(intent->path));
         }
+        const auto intentMemory = intentDesign.success
+            ? std::find_if(
+                  intentDesign.design.endpoints.cbegin(),
+                  intentDesign.design.endpoints.cend(),
+                  [](const EndpointInstance& endpoint) {
+                      return endpoint.id == QStringLiteral("memory");
+                  })
+            : intentDesign.design.endpoints.cend();
         check(generation.success
                   && primaryText.contains(
                       QStringLiteral("route=yx vc=4 depth=16"))
+                  && primaryText.contains(
+                      QStringLiteral(
+                          "data_width=128 buffer_depth=37 qos=enabled"))
                   && intentDesign.success
                   && intentDesign.design.elementConfigurations
-                      == routerConfigured.design.elementConfigurations,
+                      == routerConfigured.design.elementConfigurations
+                  && intentMemory != intentDesign.design.endpoints.cend()
+                  && intentMemory->parameters.value(
+                         QStringLiteral("bufferDepth")).toInt() == 37
+                  && intentMemory->parameters.value(
+                         QStringLiteral("qosEnabled")).toBool(),
               QStringLiteral(
-                  "bundled V3 Generator consumes Router overrides and emits the complete Design intent"));
+                  "bundled V3 Generator consumes Router and Endpoint parameters and emits the complete Design intent"));
     }
 
     FinepaperApplication complexApplication;

@@ -211,6 +211,124 @@ void uniqueRequiredChoicesAreSelectedWithoutHardcodedTypeKnowledge() {
           QStringLiteral("automatic choices are derived from arbitrary Package type ids"));
 }
 
+void userDecisionDetectionSkipsOnlyFullyAutomaticAssignments() {
+    PackageDefinition automaticPackage;
+    automaticPackage.domainTypes = {
+        type(QStringLiteral("voltage-rail"), DomainCardinality::Single, true),
+        type(QStringLiteral("timing-set"), DomainCardinality::Multiple, true)};
+    NocDesign automaticDesign;
+    automaticDesign.domains = {
+        domain(QStringLiteral("rail-main"), QStringLiteral("voltage-rail")),
+        domain(QStringLiteral("timing-main"), QStringLiteral("timing-set"))};
+    const QVector<EndpointDomainAssignmentGroup> automaticGroups =
+        buildEndpointDomainAssignmentGroups(
+            automaticDesign, automaticPackage);
+    check(!endpointDomainAssignmentsRequireUserDecision(automaticGroups),
+          QStringLiteral("unique required assignments do not create a redundant modal decision"));
+    check(endpointDomainAssignmentsFromGroups(automaticGroups)
+              == EndpointDomainAssignments{
+                  {QStringLiteral("timing-set"),
+                   {QStringLiteral("timing-main")}},
+                  {QStringLiteral("voltage-rail"),
+                   {QStringLiteral("rail-main")}}},
+          QStringLiteral("automatic assignment extraction preserves arbitrary Package type ids"));
+
+    PackageDefinition optionalPackage = automaticPackage;
+    optionalPackage.domainTypes.append(
+        type(QStringLiteral("optional-tag"),
+             DomainCardinality::Multiple,
+             false));
+    NocDesign optionalDesign = automaticDesign;
+    optionalDesign.domains.append(
+        domain(QStringLiteral("tag-a"), QStringLiteral("optional-tag")));
+    check(endpointDomainAssignmentsRequireUserDecision(
+              buildEndpointDomainAssignmentGroups(
+                  optionalDesign, optionalPackage)),
+          QStringLiteral("an available optional assignment remains a real user choice"));
+
+    NocDesign ambiguousDesign = automaticDesign;
+    ambiguousDesign.domains.append(
+        domain(QStringLiteral("rail-backup"),
+               QStringLiteral("voltage-rail")));
+    check(endpointDomainAssignmentsRequireUserDecision(
+              buildEndpointDomainAssignmentGroups(
+                  ambiguousDesign, automaticPackage)),
+          QStringLiteral("multiple required candidates require a user decision"));
+
+    NocDesign missingDesign = automaticDesign;
+    missingDesign.domains.erase(missingDesign.domains.cbegin());
+    check(endpointDomainAssignmentsRequireUserDecision(
+              buildEndpointDomainAssignmentGroups(
+                  missingDesign, automaticPackage)),
+          QStringLiteral("a missing required instance opens the repair UI"));
+
+    check(endpointDomainAssignmentsRequireUserDecision(
+              buildEndpointDomainAssignmentGroups(
+                  automaticDesign,
+                  automaticPackage,
+                  EndpointDomainAssignments{
+                      {QStringLiteral("voltage-rail"),
+                       {QStringLiteral("deleted-rail")}}})),
+          QStringLiteral("stale persisted assignments require explicit repair"));
+}
+
+void restoreModePreservesValidAssignmentsWithoutReasking() {
+    const PackageDefinition package = domainPackage();
+    const NocDesign design = choiceDesign();
+    const EndpointDomainAssignments validInitial{
+        {QStringLiteral("power"), {QStringLiteral("p-a")}},
+        {QStringLiteral("clock"), {QStringLiteral("c-a")}},
+        {QStringLiteral("tag"), {QStringLiteral("tag-a")}}};
+    const QVector<EndpointDomainAssignmentGroup> validGroups =
+        buildEndpointDomainAssignmentGroups(design, package, validInitial);
+    check(endpointDomainAssignmentsRequireUserDecision(
+              validGroups,
+              EndpointDomainAssignmentDecisionMode::Creation),
+          QStringLiteral("creation still presents optional and ambiguous choices"));
+    check(!endpointDomainAssignmentsRequireUserDecision(
+              validGroups,
+              EndpointDomainAssignmentDecisionMode::Restore),
+          QStringLiteral("reconnect preserves complete available assignments despite other candidates"));
+    check(endpointDomainAssignmentsFromGroups(validGroups) == validInitial,
+          QStringLiteral("restore mode returns the exact normalized persisted assignments"));
+
+    const QVector<EndpointDomainAssignmentGroup> missingRequired =
+        buildEndpointDomainAssignmentGroups(
+            design,
+            package,
+            EndpointDomainAssignments{
+                {QStringLiteral("clock"), {QStringLiteral("c-a")}}});
+    check(endpointDomainAssignmentsRequireUserDecision(
+              missingRequired,
+              EndpointDomainAssignmentDecisionMode::Restore),
+          QStringLiteral("restore mode opens repair UI for a missing required assignment"));
+
+    const QVector<EndpointDomainAssignmentGroup> stale =
+        buildEndpointDomainAssignmentGroups(
+            design,
+            package,
+            EndpointDomainAssignments{
+                {QStringLiteral("power"), {QStringLiteral("deleted-power")}},
+                {QStringLiteral("clock"), {QStringLiteral("c-a")}}});
+    check(endpointDomainAssignmentsRequireUserDecision(
+              stale,
+              EndpointDomainAssignmentDecisionMode::Restore),
+          QStringLiteral("restore mode opens repair UI for stale assignments"));
+
+    const QVector<EndpointDomainAssignmentGroup> invalidSingle =
+        buildEndpointDomainAssignmentGroups(
+            design,
+            package,
+            EndpointDomainAssignments{
+                {QStringLiteral("power"),
+                 {QStringLiteral("p-a"), QStringLiteral("p-b")}},
+                {QStringLiteral("clock"), {QStringLiteral("c-a")}}});
+    check(endpointDomainAssignmentsRequireUserDecision(
+              invalidSingle,
+              EndpointDomainAssignmentDecisionMode::Restore),
+          QStringLiteral("restore mode repairs cardinality violations instead of silently normalizing them"));
+}
+
 void missingAndStaleAssignmentsRequireExplicitRepair() {
     NocDesign noClock = choiceDesign();
     noClock.domains.erase(
@@ -263,6 +381,8 @@ int main(int argc, char** argv) {
     projectionIsPackageDrivenAndPreservesInitialState();
     ambiguousRequiredChoicesGateAcceptance();
     uniqueRequiredChoicesAreSelectedWithoutHardcodedTypeKnowledge();
+    userDecisionDetectionSkipsOnlyFullyAutomaticAssignments();
+    restoreModePreservesValidAssignmentsWithoutReasking();
     missingAndStaleAssignmentsRequireExplicitRepair();
     if (failures == 0) {
         QTextStream(stdout)
