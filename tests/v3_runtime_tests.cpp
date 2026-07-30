@@ -67,6 +67,16 @@ int main(int argc, char** argv) {
         ruby,
         projectRoot,
         QStringLiteral(
+            "packages/finepaper-noc-v3/runtime/test/test_power_implementation_plan.rb"));
+    runRubyTest(
+        ruby,
+        projectRoot,
+        QStringLiteral(
+            "packages/finepaper-noc-v3/runtime/test/test_power_intent_renderer.rb"));
+    runRubyTest(
+        ruby,
+        projectRoot,
+        QStringLiteral(
             "packages/finepaper-noc-v3/runtime/test/test_power_intent_adapter.rb"));
     runRubyTest(
         ruby,

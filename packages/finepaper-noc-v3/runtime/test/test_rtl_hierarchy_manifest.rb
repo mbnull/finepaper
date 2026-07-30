@@ -369,8 +369,16 @@ class TestV3RtlHierarchyManifest < Minitest::Test
     clock_signals = rendering.fetch('clockDomains').map do |domain|
       domain.fetch('clockSignal')
     end
+    reset_signals = rendering.fetch('clockDomains').map do |domain|
+      domain.fetch('resetSignal')
+    end
+    internal_signal = rendering.fetch('routerTraffic').values.first
+                               .fetch('sourceSignal') + '_flit'
     assert_equal 2, clock_signals.size
-    collisions = ['rst_n', *clock_signals, 'ep_left_flit_in']
+    collisions = [
+      'rst_n', 'DATA_WIDTH', *clock_signals, *reset_signals,
+      'ep_left_flit_in', internal_signal
+    ]
 
     Dir.mktmpdir('finepaper-v3-power-control-collision-') do |directory|
       collisions.each_with_index do |signal, index|
@@ -383,6 +391,71 @@ class TestV3RtlHierarchyManifest < Minitest::Test
         end
         assert_equal 'rtl_hierarchy.logic_control_port_collision', error.code
         refute Dir.exist?(output)
+      end
+    end
+  end
+
+  def test_generator_rejects_systemverilog_keywords_as_control_ports
+    Dir.mktmpdir('finepaper-v3-power-control-keyword-') do |directory|
+      %w[case end wire].each_with_index do |signal, index|
+        noc = hierarchy_noc(power_intent_plan([
+          power_control('conflict', signal, 'top-port')
+        ]))
+        output = File.join(directory, index.to_s)
+        error = assert_raises(FinepaperNoc::RtlHierarchyManifestError) do
+          RtlGenerator.new(noc, TEMPLATE_DIR).generate_partitioned(output)
+        end
+        assert_equal 'rtl_hierarchy.reserved_logic_control_identifier',
+                     error.code
+        refute Dir.exist?(output)
+      end
+    end
+  end
+
+  def test_shared_namespace_names_match_the_emitted_top
+    noc = hierarchy_noc
+    generator = RtlGenerator.new(noc, TEMPLATE_DIR)
+    context = generator.build_domain_rtl_context
+    generator.validate_domain_rtl_context!(context)
+    rendering = generator.build_domain_rtl_rendering(context)
+    rtl_ids = noc.xps.to_h do |xp|
+      [['router', "r-#{xp.x}-#{xp.y}"], xp.id]
+    end
+    namespace = FinepaperNoc::PowerIntent::ControlPortPreflight.top_namespace(
+      context: context,
+      endpoint_ports: noc.endpoints.to_h { |endpoint| [endpoint.id, nil] },
+      rtl_element_ids: rtl_ids
+    )
+
+    Dir.mktmpdir('finepaper-v3-shared-top-namespace-') do |directory|
+      generator.generate_partitioned(directory)
+      top = File.read(File.join(directory, 'hierarchy_fixture_top.v'))
+
+      rendering.fetch('clockDomains').each do |domain|
+        assert_includes namespace, domain.fetch('clockSignal')
+        assert_includes namespace, domain.fetch('resetSignal')
+        assert_match(/input\s+logic\s+#{Regexp.escape(domain.fetch('clockSignal'))}\b/,
+                     top)
+        assert_match(/logic\s+#{Regexp.escape(domain.fetch('resetSignal'))}\s*;/,
+                     top)
+      end
+      generator.send(:rendered_bridges, rendering).each do |bridge|
+        expected_base =
+          FinepaperNoc::PowerIntent::ControlPortPreflight.traffic_bundle_base(
+            edge_kind: bridge.dig('edge', 'kind'),
+            producer: bridge.fetch('producer'),
+            consumer: bridge.fetch('consumer'),
+            rtl_element_ids: rtl_ids
+          )
+        assert_equal expected_base, bridge.fetch('baseSignal')
+        [bridge.fetch('sourceSignal'), bridge.fetch('destinationSignal')]
+          .uniq.each do |bundle|
+            %w[flit valid ready].each do |suffix|
+              signal = "#{bundle}_#{suffix}"
+              assert_includes namespace, signal
+              assert_match(/\b#{Regexp.escape(signal)}\b/, top)
+            end
+          end
       end
     end
   end
@@ -401,9 +474,8 @@ class TestV3RtlHierarchyManifest < Minitest::Test
       plan[key] = value
       generator = RtlGenerator.new(hierarchy_noc(plan), TEMPLATE_DIR)
       context = generator.build_domain_rtl_context
-      rendering = generator.build_domain_rtl_rendering(context)
       error = assert_raises(FinepaperNoc::RtlHierarchyManifestError) do
-        generator.send(:build_logic_control_ports, rendering)
+        generator.send(:build_logic_control_ports, context)
       end
       assert_equal code, error.code
     end
@@ -412,9 +484,8 @@ class TestV3RtlHierarchyManifest < Minitest::Test
     invalid_signal.dig('controls', 0)['signal'] = 'bad.signal'
     generator = RtlGenerator.new(hierarchy_noc(invalid_signal), TEMPLATE_DIR)
     context = generator.build_domain_rtl_context
-    rendering = generator.build_domain_rtl_rendering(context)
     error = assert_raises(FinepaperNoc::RtlHierarchyManifestError) do
-      generator.send(:build_logic_control_ports, rendering)
+      generator.send(:build_logic_control_ports, context)
     end
     assert_equal 'rtl_hierarchy.invalid_logic_control_identifier', error.code
   end

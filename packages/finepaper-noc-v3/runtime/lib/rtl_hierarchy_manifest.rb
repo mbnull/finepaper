@@ -527,14 +527,16 @@ module FinepaperNoc
     end
 
     def compile_power_boundary(source_supply, destination_supply, bridge)
+      if bridge
+        return {
+          'status' => 'deferred',
+          'reasonCode' =>
+            'rtl_hierarchy.infrastructure_bridge_supply_unowned'
+        }
+      end
       return {'status' => 'none'} if source_supply == destination_supply
-      return {'status' => 'resolvable'} unless bridge
 
-      {
-        'status' => 'deferred',
-        'reasonCode' =>
-          'rtl_hierarchy.infrastructure_bridge_supply_unowned'
-      }
+      {'status' => 'resolvable'}
     end
 
     def reference!(value, path)

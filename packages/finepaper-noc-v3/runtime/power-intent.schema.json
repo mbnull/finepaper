@@ -253,6 +253,7 @@
           "$ref": "#/$defs/nonEmptyString"
         },
         "mode": {
+          "description": "An always-on Domain requires an external primary power supply; a switchable Domain owns the power switch that drives its internal primary supply.",
           "enum": ["always-on", "switchable"]
         },
         "defaultState": {
@@ -381,6 +382,7 @@
       }
     },
     "isolation": {
+      "description": "Isolation applied to boundary signals driven by this switchable Domain; the control and always-on supply are explicit and no placement is inferred.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -406,6 +408,7 @@
       }
     },
     "levelShifter": {
+      "description": "Placement policy for level shifters on boundary signals driven by this Domain.",
       "type": "object",
       "additionalProperties": false,
       "required": ["location"],
@@ -507,7 +510,8 @@
           "minItems": 1,
           "uniqueItems": true,
           "items": {
-            "$ref": "#/$defs/nonEmptyString"
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_$.:/-]*$"
           }
         },
         "direction": {
@@ -523,6 +527,9 @@
               }
             },
             "required": ["kind"]
+          },
+          "then": {
+            "required": ["direction"]
           },
           "else": {
             "not": {

@@ -3,16 +3,13 @@ require 'fileutils'
 require 'json'
 require_relative '../../../../lib/domain_rtl_context'
 require_relative '../../../../lib/domain_rtl_evidence'
+require_relative '../../../../lib/power_intent/control_port_preflight'
 require_relative '../../../../lib/rtl_hierarchy_manifest'
 
 class RtlGenerator
   TIMING_ROLE = 'timing-domain'.freeze
   SUPPLY_ROLE = 'supply-domain'.freeze
   ASYNC_FIFO_RECIPE = 'clock-async-fifo'.freeze
-  POWER_INTENT_PLAN_FORMAT = 'finepaper.noc-power-intent-plan'.freeze
-  POWER_INTENT_PLAN_VERSION = 1
-  HDL_IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_$]*\z/
-  CONTROL_CHARACTERS = /\p{Cc}/
 
   DIRECTION_ORDER = [
     { name: :east, abbr: 'e' },
@@ -63,7 +60,7 @@ class RtlGenerator
     domain_context = build_domain_rtl_context
     validate_domain_rtl_context!(domain_context)
     domain_rendering = build_domain_rtl_rendering(domain_context)
-    logic_control_ports = build_logic_control_ports(domain_rendering)
+    logic_control_ports = build_logic_control_ports(domain_context)
     FileUtils.mkdir_p(output_dir)
 
     lookup = xp_module_lookup
@@ -170,146 +167,25 @@ class RtlGenerator
     end
   end
 
-  def build_logic_control_ports(domain_rendering)
-    plan = @noc.power_intent_plan
-    return [] if plan.nil?
-
-    power_plan_expect!(plan.is_a?(Hash),
-                       'rtl_hierarchy.invalid_power_intent_plan',
-                       '/powerIntentPlan',
-                       'power intent plan must be an object')
-    power_plan_expect!(plan['format'] == POWER_INTENT_PLAN_FORMAT,
-                       'rtl_hierarchy.invalid_power_intent_plan_format',
-                       '/powerIntentPlan/format',
-                       "expected #{POWER_INTENT_PLAN_FORMAT}")
-    power_plan_expect!(plan['formatVersion'] == POWER_INTENT_PLAN_VERSION,
-                       'rtl_hierarchy.invalid_power_intent_plan_version',
-                       '/powerIntentPlan/formatVersion',
-                       "expected format version #{POWER_INTENT_PLAN_VERSION}")
-    power_plan_expect!(plan['design'] == @noc.name,
-                       'rtl_hierarchy.power_intent_design_mismatch',
-                       '/powerIntentPlan/design',
-                       'power intent plan design differs from the emitted RTL')
-    controls = plan['controls']
-    power_plan_expect!(controls.is_a?(Array),
-                       'rtl_hierarchy.invalid_power_intent_controls',
-                       '/powerIntentPlan/controls',
-                       'power intent controls must be an array')
-
-    ids = {}
-    signals = {}
-    top_ports = controls.each_with_index.filter_map do |entry, index|
-      path = "/powerIntentPlan/controls/#{index}"
-      control = parse_power_logic_control!(entry, path)
-      id = control.fetch('id')
-      signal = control.fetch('signal')
-      power_plan_expect!(!ids.key?(id),
-                         'rtl_hierarchy.duplicate_power_control',
-                         "#{path}/id", "duplicate power control #{id}")
-      power_plan_expect!(!signals.key?(signal),
-                         'rtl_hierarchy.duplicate_power_control_signal',
-                         "#{path}/signal",
-                         "duplicate power control signal #{signal}")
-      ids[id] = true
-      signals[signal] = true
-      next unless control.fetch('source') == 'top-port'
-
-      {
-        'id' => id.dup,
-        'signal' => signal.dup,
-        'source' => 'top-port',
-        'direction' => 'input'
-      }
+  def build_logic_control_ports(context)
+    endpoint_ports = @noc.endpoints.to_h do |endpoint|
+      names = endpoint.ports&.map(&:name)
+      [endpoint.id, names]
     end
-
-    reserved = existing_top_port_names(domain_rendering)
-    top_ports.each_with_index do |control, index|
-      signal = control.fetch('signal')
-      owner = reserved[signal]
-      power_plan_expect!(!owner, 'rtl_hierarchy.logic_control_port_collision',
-                         "/logicControlPorts/#{index}/signal",
-                         "logic control signal #{signal} collides with #{owner}")
-      reserved[signal] = "power control #{control.fetch('id')}"
-    end
-    top_ports.sort_by { |control| [control.fetch('id'), control.fetch('signal')] }
-  end
-
-  def parse_power_logic_control!(entry, path)
-    power_plan_expect!(entry.is_a?(Hash),
-                       'rtl_hierarchy.invalid_power_control', path,
-                       'power control must be an object')
-    required = %w[id signal source activeSense]
-    allowed = required + ['ownerDomain']
-    unknown = entry.keys - allowed
-    missing = required - entry.keys
-    power_plan_expect!(unknown.empty?, 'rtl_hierarchy.unknown_power_control_field',
-                       "#{path}/#{unknown.first}",
-                       "unknown power control field #{unknown.first}")
-    power_plan_expect!(missing.empty?, 'rtl_hierarchy.missing_power_control_field',
-                       "#{path}/#{missing.first}",
-                       "missing power control field #{missing.first}")
-    id = power_plan_string!(entry.fetch('id'), "#{path}/id")
-    signal = power_plan_string!(entry.fetch('signal'), "#{path}/signal")
-    power_plan_expect!(signal.match?(HDL_IDENTIFIER),
-                       'rtl_hierarchy.invalid_logic_control_identifier',
-                       "#{path}/signal",
-                       'power control signal must be an HDL identifier')
-    source = entry.fetch('source')
-    power_plan_expect!(%w[top-port upf-port].include?(source),
-                       'rtl_hierarchy.invalid_power_control_source',
-                       "#{path}/source",
-                       'power control source must be top-port or upf-port')
-    active_sense = entry.fetch('activeSense')
-    power_plan_expect!(%w[high low].include?(active_sense),
-                       'rtl_hierarchy.invalid_power_control_sense',
-                       "#{path}/activeSense",
-                       'power control activeSense must be high or low')
-    if entry.key?('ownerDomain')
-      power_plan_string!(entry.fetch('ownerDomain'), "#{path}/ownerDomain")
-    end
-    {'id' => id, 'signal' => signal, 'source' => source}
-  end
-
-  def power_plan_string!(value, path)
-    valid = value.is_a?(String) && value.match?(/\S/) &&
-            !value.match?(CONTROL_CHARACTERS)
-    power_plan_expect!(valid, 'rtl_hierarchy.invalid_power_control_string',
-                       path,
-                       'expected a non-empty string without control characters')
-    value
-  end
-
-  def existing_top_port_names(domain_rendering)
-    owners = {'rst_n' => 'reset port rst_n'}
-    domain_rendering.fetch('clockDomains').each do |domain|
-      signal = domain.fetch('clockSignal')
-      owners[signal] = "clock Domain #{domain.fetch('domain')}"
-    end
-    @noc.endpoints.each do |endpoint|
-      endpoint_top_port_names(endpoint).each do |signal|
-        owners[signal] = "Endpoint #{endpoint.id}"
-      end
-    end
-    owners
-  end
-
-  def endpoint_top_port_names(endpoint)
-    if endpoint.ports&.any?
-      return endpoint.ports.map { |port| "#{endpoint.id}_#{port.name}" }
-    end
-
-    %w[
-      flit_in flit_in_valid flit_in_ready
-      flit_out flit_out_valid flit_out_ready
-    ].map { |suffix| "#{endpoint.id}_#{suffix}" }
-  end
-
-  def power_plan_expect!(condition, code, path, message)
-    unless condition
-      raise FinepaperNoc::RtlHierarchyManifestError.new(code, path, message)
-    end
-
-    condition
+    namespace = FinepaperNoc::PowerIntent::ControlPortPreflight.top_namespace(
+      context: context,
+      endpoint_ports: endpoint_ports,
+      rtl_element_ids: emitted_rtl_element_ids
+    )
+    FinepaperNoc::PowerIntent::ControlPortPreflight.validate!(
+      plan: @noc.power_intent_plan,
+      design: @noc.name,
+      namespace: namespace
+    )
+  rescue FinepaperNoc::PowerIntent::ControlPortPreflightError => error
+    raise FinepaperNoc::RtlHierarchyManifestError.new(
+      error.code, error.path, error.detail
+    )
   end
 
   def validate_domain_entity!(context, kind, id)
@@ -398,6 +274,12 @@ class RtlGenerator
     "r-#{xp.x}-#{xp.y}"
   end
 
+  def emitted_rtl_element_ids
+    @noc.xps.to_h do |xp|
+      [['router', domain_router_id(xp)], xp.id]
+    end
+  end
+
   def domain_link_id(connection)
     endpoints = domain_link_endpoints(connection)
     "link-#{domain_router_id(endpoints.fetch(0))}--#{domain_router_id(endpoints.fetch(1))}"
@@ -420,9 +302,14 @@ class RtlGenerator
       )
     end
 
+    infrastructure =
+      FinepaperNoc::PowerIntent::ControlPortPreflight.timing_infrastructure(
+        context
+      ).to_h { |record| [record.fetch('domain'), record] }
     clock_port_mode = active_domains.one? ? 'legacy-single-clock' : 'domain-token'
     clock_domains = active_domains.map do |domain|
       token = domain.fetch('token')
+      signals = infrastructure.fetch(domain.fetch('domain'))
       reset_release_stages = context.parameter_value(
         domain, 'reset-release-stages', expected_type: 'integer'
       )
@@ -436,9 +323,8 @@ class RtlGenerator
         'domain' => domain.fetch('domain'),
         'name' => domain.fetch('name'),
         'token' => token,
-        'clockSignal' => clock_port_mode == 'legacy-single-clock' ?
-          'clk' : "clk_#{token}",
-        'resetSignal' => "rst_n_#{token}",
+        'clockSignal' => signals.fetch('clockSignal'),
+        'resetSignal' => signals.fetch('resetSignal'),
         'resetReleaseStages' => reset_release_stages
       }
     end
@@ -458,6 +344,7 @@ class RtlGenerator
     router_domain_to_rtl = @noc.xps.to_h do |xp|
       [domain_router_id(xp), xp.id]
     end
+    rtl_element_ids = emitted_rtl_element_ids
     router_signals = @noc.xps.to_h do |xp|
       [xp.id, entity_signals.fetch(['router', domain_router_id(xp)])]
     end
@@ -480,7 +367,10 @@ class RtlGenerator
         end
         producer_id = router_domain_to_rtl.fetch(producer.fetch('id'))
         consumer_id = router_domain_to_rtl.fetch(consumer.fetch('id'))
-        base = "link_#{producer_id}_to_#{consumer_id}"
+        base = FinepaperNoc::PowerIntent::ControlPortPreflight.traffic_bundle_base(
+          edge_kind: 'router-link', producer: producer, consumer: consumer,
+          rtl_element_ids: rtl_element_ids
+        )
         router_traffic[[producer_id, consumer_id]] = compile_traffic_bridge(
           context, 'router-link', edge_id, orientation, traffic, base,
           entity_signals
@@ -499,11 +389,21 @@ class RtlGenerator
       [endpoint.id, {
         'routerToEndpoint' => compile_traffic_bridge(
           context, 'endpoint-attachment', edge_id, 'from-to',
-          router_to_endpoint, "router_to_ni_#{endpoint.id}", entity_signals
+          router_to_endpoint,
+          FinepaperNoc::PowerIntent::ControlPortPreflight.traffic_bundle_base(
+            edge_kind: 'endpoint-attachment',
+            producer: router_to_endpoint.fetch('producer'),
+            consumer: router_to_endpoint.fetch('consumer')
+          ), entity_signals
         ),
         'endpointToRouter' => compile_traffic_bridge(
           context, 'endpoint-attachment', edge_id, 'to-from',
-          endpoint_to_router, "ni_#{endpoint.id}_to_router", entity_signals
+          endpoint_to_router,
+          FinepaperNoc::PowerIntent::ControlPortPreflight.traffic_bundle_base(
+            edge_kind: 'endpoint-attachment',
+            producer: endpoint_to_router.fetch('producer'),
+            consumer: endpoint_to_router.fetch('consumer')
+          ), entity_signals
         )
       }]
     end

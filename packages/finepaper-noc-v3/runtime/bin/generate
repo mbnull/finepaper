@@ -14,12 +14,18 @@ require_relative '../lib/domain_realizer'
 require_relative '../lib/domain_rtl_context'
 require_relative '../lib/domain_rtl_evidence'
 require_relative '../lib/power_intent/compiler'
+require_relative '../lib/power_intent/control_port_preflight'
+require_relative '../lib/power_intent/implementation_plan'
+require_relative '../lib/power_intent/renderer'
 
 HDL_IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_]*\z/
 DOMAIN_ELEMENT_KINDS = %w[router endpoint].freeze
 DOMAIN_EDGE_KINDS = %w[router-link endpoint-attachment].freeze
 POWER_INTENT_EXTENSION = 'finepaper.noc.powerIntent'
 POWER_INTENT_PLAN_SUFFIX = '_power_intent_plan.json'
+POWER_IMPLEMENTATION_SUFFIX = '_power_implementation.json'
+POWER_INTENT_UPF_SUFFIX = '_power_intent.upf'
+POWER_INTENT_EVIDENCE_SUFFIX = '_power_intent_evidence.json'
 
 def write_result(path, success:, artifacts: [], diagnostics: [])
   FileUtils.mkdir_p(File.dirname(path))
@@ -661,6 +667,12 @@ def artifact_list(output_dir, design_name)
              'rtl-hierarchy'
            elsif File.basename(path) == "#{design_name}#{POWER_INTENT_PLAN_SUFFIX}"
              'power-intent-plan'
+           elsif File.basename(path) == "#{design_name}#{POWER_IMPLEMENTATION_SUFFIX}"
+             'power-implementation-plan'
+           elsif File.basename(path) == "#{design_name}#{POWER_INTENT_UPF_SUFFIX}"
+             'power-intent-upf'
+           elsif File.basename(path) == "#{design_name}#{POWER_INTENT_EVIDENCE_SUFFIX}"
+             'power-intent-evidence'
            elsif %w[.v .sv].include?(File.extname(path).downcase)
              'rtl'
            else
@@ -723,6 +735,29 @@ begin
   translated_input = legacy_input(
     design, implementation_plan, power_intent_plan
   )
+  endpoint_ports = translated_input.fetch('modules').to_h do |endpoint|
+    [endpoint.fetch('id'), nil]
+  end
+  endpoint_paths_by_id = design.fetch('endpoints', []).each_with_index.to_h do |endpoint, index|
+    [endpoint.fetch('id'), "/design/endpoints/#{index}/id"]
+  end
+  namespace = FinepaperNoc::PowerIntent::ControlPortPreflight.top_namespace(
+    context: rtl_context,
+    endpoint_ports: endpoint_ports,
+    endpoint_paths_by_id: endpoint_paths_by_id
+  )
+  if power_intent_plan
+    source_controls = power_intent_document.fetch('controls')
+    control_paths_by_id = source_controls.each_with_index.to_h do |control, index|
+      [control.fetch('id'), "/controls/#{index}"]
+    end
+    FinepaperNoc::PowerIntent::ControlPortPreflight.validate!(
+      plan: power_intent_plan,
+      design: design.fetch('id'),
+      namespace: namespace,
+      control_paths_by_id: control_paths_by_id
+    )
+  end
   legacy_root = File.expand_path('../legacy-generator', __dir__)
   legacy_program = File.join(legacy_root, 'bin', command == 'validate' ? 'drc' : 'generate')
   raise 'legacy generator is missing from this Package' unless File.file?(legacy_program)
@@ -766,6 +801,55 @@ begin
         "#{design_id}#{POWER_INTENT_PLAN_SUFFIX}"
       )
       File.write(power_intent_path, JSON.pretty_generate(power_intent_plan) + "\n")
+
+      hierarchy_path = File.join(
+        File.expand_path(options[:output]),
+        "#{design_id}_rtl_hierarchy.json"
+      )
+      raise 'legacy generator did not emit the RTL hierarchy' unless File.file?(hierarchy_path)
+
+      hierarchy = JSON.parse(File.read(hierarchy_path))
+      power_implementation =
+        FinepaperNoc::PowerIntent::ImplementationPlanBuilder.build(
+          context: rtl_context,
+          power_plan: power_intent_plan,
+          hierarchy: hierarchy
+        )
+      rendered_power_intent = FinepaperNoc::PowerIntent::Renderer.render(
+        plan: power_implementation
+      )
+      power_implementation_path = File.join(
+        File.expand_path(options[:output]),
+        "#{design_id}#{POWER_IMPLEMENTATION_SUFFIX}"
+      )
+      File.write(
+        power_implementation_path,
+        JSON.pretty_generate(power_implementation) + "\n"
+      )
+      upf_path = File.join(
+        File.expand_path(options[:output]),
+        "#{design_id}#{POWER_INTENT_UPF_SUFFIX}"
+      )
+      File.write(upf_path, rendered_power_intent.fetch('upf'))
+      evidence_path = File.join(
+        File.expand_path(options[:output]),
+        "#{design_id}#{POWER_INTENT_EVIDENCE_SUFFIX}"
+      )
+      File.write(
+        evidence_path,
+        JSON.pretty_generate(rendered_power_intent.fetch('receipt')) + "\n"
+      )
+    else
+      [
+        POWER_INTENT_PLAN_SUFFIX,
+        POWER_IMPLEMENTATION_SUFFIX,
+        POWER_INTENT_UPF_SUFFIX,
+        POWER_INTENT_EVIDENCE_SUFFIX
+      ].each do |suffix|
+        FileUtils.rm_f(File.join(
+          File.expand_path(options[:output]), "#{design_id}#{suffix}"
+        ))
+      end
     end
   end
   artifacts = command == 'generate' ? artifact_list(File.expand_path(options[:output]), design_id) : []
@@ -778,6 +862,18 @@ rescue FinepaperNoc::DomainRtlContextError => error
   fail_operation(error.message, options[:result], code: error.code, path: error.path)
 rescue FinepaperNoc::DomainRtlEvidenceError => error
   fail_operation(error.message, options[:result], code: error.code, path: error.path)
+rescue FinepaperNoc::PowerIntent::ControlPortPreflightError => error
+  diagnostic_path = if error.power_intent_relative?
+                      design_extension_path(POWER_INTENT_EXTENSION, error.path)
+                    else
+                      error.path
+                    end
+  fail_operation(
+    error.message,
+    options[:result],
+    code: error.code,
+    path: diagnostic_path
+  )
 rescue FinepaperNoc::PowerIntent::Error => error
   fail_operation(
     error.message,
@@ -785,6 +881,12 @@ rescue FinepaperNoc::PowerIntent::Error => error
     code: error.code,
     path: design_extension_path(POWER_INTENT_EXTENSION, error.path)
   )
+rescue FinepaperNoc::PowerIntent::PowerImplementationPlanError => error
+  fail_operation(error.message, options[:result], code: error.code,
+                 path: error.path)
+rescue FinepaperNoc::PowerIntent::Renderer::Error => error
+  fail_operation(error.message, options[:result], code: error.code,
+                 path: error.path)
 rescue StandardError => error
   fail_operation(error.message, options[:result])
 end

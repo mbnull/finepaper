@@ -31,6 +31,12 @@ class PowerIntentCompilerTest < Minitest::Test
                                'cells', 'minItems')
     assert_equal true, schema.dig('$defs', 'interfaceCell', 'properties',
                                   'cells', 'uniqueItems')
+    assert_equal '^[A-Za-z_][A-Za-z0-9_$.:/-]*$',
+                 schema.dig('$defs', 'interfaceCell', 'properties', 'cells',
+                            'items', 'pattern')
+    assert_equal ['direction'],
+                 schema.dig('$defs', 'interfaceCell', 'allOf', 0, 'then',
+                            'required')
     assert_equal %w[external-port internal-switched],
                  schema.dig('$defs', 'supply', 'properties', 'exposure', 'enum')
     assert schema.dig('$defs', 'supply', 'allOf')
@@ -291,6 +297,16 @@ class PowerIntentCompilerTest < Minitest::Test
         doc.dig('technology', 'interfaceCells').find do |entry|
           entry.fetch('kind') == 'isolation'
         end['direction'] = 'up'
+      end],
+      ['missing level-shifter direction',
+       'power_intent.missing_cell_direction', lambda do |doc|
+        doc.dig('technology', 'interfaceCells').find do |entry|
+          entry.fetch('kind') == 'level-shifter'
+        end.delete('direction')
+      end],
+      ['invalid library cell name', 'power_intent.invalid_library_cell', lambda do |doc|
+        doc.dig('technology', 'interfaceCells').first.fetch('cells')[0] =
+          'unsafe cell'
       end]
     ]
 
@@ -403,7 +419,7 @@ class PowerIntentCompilerTest < Minitest::Test
         target['port'] = 'vdd_b_port'
       end],
       ['unowned internal supply', 'power_intent.invalid_internal_supply_driver', lambda do |doc|
-        target = supply(doc, 'vdd_a')
+        target = supply(doc, 'vret')
         target['exposure'] = 'internal-switched'
         target.delete('port')
       end],
@@ -414,6 +430,18 @@ class PowerIntentCompilerTest < Minitest::Test
       end]
     ]
     assert_failures(cases)
+  end
+
+  def test_always_on_domain_rejects_an_internal_switched_primary_supply
+    document = power_intent
+    domain(document, 'power-always')['primaryPower'] = 'vdd_b'
+
+    error = assert_raises(FinepaperNoc::PowerIntent::Error) do
+      compile(document: document)
+    end
+
+    assert_equal 'power_intent.invalid_always_on_primary_supply', error.code
+    assert_equal '/domains/2/primaryPower', error.path
   end
 
   def test_default_system_state_and_state_reachability_fail_closed

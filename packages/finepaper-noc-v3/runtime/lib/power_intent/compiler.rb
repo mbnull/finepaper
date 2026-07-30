@@ -332,16 +332,28 @@ module FinepaperNoc
       def parse_interface_cell(value, path)
         cell = object!(value, path)
         exact_keys!(cell, %w[id kind cells], %w[direction], path)
+        kind = enum!(cell['kind'],
+                     %w[isolation level-shifter retention power-switch],
+                     "#{path}/kind")
         cells = parse_array(cell['cells'], "#{path}/cells", nonempty: true) do |entry, cell_path|
-          string!(entry, cell_path)
+          library_cell_name!(entry, cell_path)
         end
         expect!(cells.uniq.size == cells.size, 'power_intent.duplicate_cell',
                 "#{path}/cells", 'cell names must be unique')
+        if kind == 'level-shifter'
+          expect!(cell.key?('direction'),
+                  'power_intent.missing_cell_direction',
+                  "#{path}/direction",
+                  'a level-shifter mapping requires direction')
+        else
+          expect!(!cell.key?('direction'),
+                  'power_intent.invalid_cell_direction',
+                  "#{path}/direction",
+                  'direction applies only to level-shifter mappings')
+        end
         result = {
           'id' => string!(cell['id'], "#{path}/id"),
-          'kind' => enum!(cell['kind'],
-                          %w[isolation level-shifter retention power-switch],
-                          "#{path}/kind"),
+          'kind' => kind,
           'cells' => cells.sort
         }
         result['direction'] = enum!(cell['direction'], %w[up down], "#{path}/direction") if cell.key?('direction')
@@ -438,6 +450,12 @@ module FinepaperNoc
                             "#{path}/primaryPower")
         ground = supply_ref!(domain.fetch('primaryGround'), 'ground',
                              "#{path}/primaryGround")
+        if domain.fetch('mode') == 'always-on'
+          expect!(power.fetch('exposure') == 'external-port',
+                  'power_intent.invalid_always_on_primary_supply',
+                  "#{path}/primaryPower",
+                  'an always-on Domain cannot use an internal switched supply')
+        end
         nominal_voltage = nominal_voltage!(plan_domain)
         power_states = power.fetch('states').to_h do |state|
           [state.fetch('id'), state]
@@ -761,10 +779,12 @@ module FinepaperNoc
         requirements = {
           'isolation' => false,
           'retention' => @plan_domains.values.any? do |domain|
-            domain.dig('parameters', 'retains-state', 'value') == true
+            !domain.fetch('members').empty? &&
+              domain.dig('parameters', 'retains-state', 'value') == true
           end,
-          'powerSwitch' => @domain_configs.values.any? do |domain|
-            domain.fetch('mode') == 'switchable'
+          'powerSwitch' => @domain_configs.any? do |id, domain|
+            !@plan_domains.fetch(id).fetch('members').empty? &&
+              domain.fetch('mode') == 'switchable'
           end,
           'levelShifterDirections' => []
         }
@@ -935,6 +955,14 @@ module FinepaperNoc
         expect!(value.match?(HDL_IDENTIFIER),
                 'power_intent.invalid_hdl_identifier', path,
                 'expected a simple HDL identifier')
+        value
+      end
+
+      def library_cell_name!(value, path)
+        value = string!(value, path)
+        expect!(value.match?(/\A[A-Za-z_][A-Za-z0-9_$.:\/-]*\z/),
+                'power_intent.invalid_library_cell', path,
+                'expected a Tcl-safe library cell name')
         value
       end
 

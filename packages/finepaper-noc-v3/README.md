@@ -21,6 +21,12 @@ topology fixed to a rectangular Mesh.
   Application.
 - `clock` and `power` are ordinary Package-declared Domain types. Finepaper
   Core has no special branch for either name.
+- The optional, versioned `finepaper.noc.powerIntent` Design extension owns
+  supplies, logic controls, Domain power states, system-state vectors, power
+  switches, retention, isolation, level-shifter placement, and optional
+  technology-cell mappings. Its JSON Schema and compiler live inside this
+  Package; Application transports the extension without recognizing those
+  fields.
 - `router.microarchitecture` provides sparse per-Router overrides for routing
   algorithm, virtual-channel count, and buffer depth.
 - Endpoint parameters remain owned by each Endpoint instance. Their labels,
@@ -67,10 +73,41 @@ topology fixed to a rectangular Mesh.
 - Generation emits
   `<design>_domain_implementation_evidence.json`, which maps active Domain
   ports/reset instances and every physical edge to concrete RTL hierarchy and
-  typed parameters. It also lists every unmaterialized plan item. Power
-  isolation, level shifting, and derived-clock relations are currently
-  explicit deferred items, so `claims.completePlan` remains false when they are
-  present; the backend does not generate placeholder power logic.
+  typed parameters. It also lists every item not materialized directly in RTL;
+  the backend does not insert placeholder isolation or level-shifter cells.
+- When the Power extension is present, generation additionally emits the
+  canonical logical `<design>_power_intent_plan.json`, hierarchy-bound
+  `<design>_power_implementation.json`, IEEE 1801-2013 / UPF 2.1
+  `<design>_power_intent.upf`, and
+  `<design>_power_intent_evidence.json`. Direct Power crossings use the actual
+  signal driver (including reverse `ready`) and exact emitted instance/pin
+  facts. Only strategies backed by a typed recipe and complete Package intent
+  produce UPF commands.
+- Regenerating the same Design after removing the extension removes only that
+  Design's four optional Power artifacts, so stale UPF or evidence cannot be
+  advertised as current output.
+- A `top-port` Power control is a real generated RTL input and is recorded in
+  the hierarchy manifest; an `upf-port` control is created and connected only
+  in UPF. Validation and generation share one top-level namespace preflight so
+  controls cannot collide with generated ports, parameters, internal bundles,
+  or SystemVerilog keywords. The same preflight rejects aliases between any
+  generated top-level identifiers before the legacy process or output creation.
+- A boundary that combines CDC and Power remains explicitly deferred until
+  the asynchronous FIFO infrastructure has an owned supply Domain. The UPF
+  renderer emits no isolation or level-shifter command for that boundary.
+  Reset synchronizers and every asynchronous FIFO also carry separate deferred
+  supply-ownership coverage because the current Design contract does not assign
+  that infrastructure; this applies even when both FIFO endpoints share one
+  supply Domain. Switchable Router Domains retain explicit deferred evidence
+  for safe shutdown sequencing and power-state-aware routing connectivity.
+  System-state vectors are preserved in the receipt rather than translated into
+  an invented command.
+- The renderer performs strict contract and Tcl-token validation, and tests
+  execute the output against a strict `tclsh` command-shape stub. The evidence
+  deliberately records commercial EDA semantic validation as `not-performed`;
+  technology binding status and count come from commands actually emitted, and
+  generated output is never labeled physically complete while deferred items
+  remain.
 - `<design>_design_intent.json` is retained as a compatibility/debug snapshot;
   it is not the Domain implementation contract.
 - `runtimeCapabilities.domainConfiguration` declares complete consumption of

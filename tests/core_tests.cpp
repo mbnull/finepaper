@@ -12,6 +12,7 @@
 #include <QHash>
 #include <QJsonArray>
 #include <QRegularExpression>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QThread>
@@ -103,6 +104,680 @@ QString readArtifact(const GenerationResult& result, const Artifact* artifact) {
     QFile file(QDir(result.outputDirectory).filePath(artifact->path));
     return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll())
                                           : QString{};
+}
+
+JsonObjectLoadResult loadArtifactObject(const GenerationResult& result,
+                                        const Artifact* artifact) {
+    if (!artifact) {
+        return {};
+    }
+    const JsonObjectLoadResult loaded = loadJsonObject(
+        QDir(result.outputDirectory).filePath(artifact->path));
+    if (!loaded.success) {
+        const QString detail = loaded.diagnostics.isEmpty()
+            ? QStringLiteral("no diagnostic")
+            : QStringLiteral("%1: %2")
+                  .arg(loaded.diagnostics.first().code,
+                       loaded.diagnostics.first().message);
+        check(false,
+              QStringLiteral("artifact %1 must parse as JSON object (%2)")
+                  .arg(artifact->path, detail));
+    }
+    return loaded;
+}
+
+QJsonObject powerSupply(const QString& id,
+                        const QString& net,
+                        const QString& exposure,
+                        int voltageMv,
+                        bool switchable = false) {
+    QJsonArray states = {
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("on")},
+            {QStringLiteral("condition"), QStringLiteral("full-on")},
+            {QStringLiteral("voltageMv"), voltageMv}
+        }
+    };
+    if (switchable) {
+        states.append(QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("off")},
+            {QStringLiteral("condition"), QStringLiteral("off")}
+        });
+    }
+    QJsonObject supply = {
+        {QStringLiteral("id"), id},
+        {QStringLiteral("kind"), QStringLiteral("power")},
+        {QStringLiteral("exposure"), exposure},
+        {QStringLiteral("net"), net},
+        {QStringLiteral("states"), states}
+    };
+    if (exposure == QStringLiteral("external-port")) {
+        supply.insert(QStringLiteral("port"), net);
+    }
+    return supply;
+}
+
+QJsonObject powerControl(const QString& id, const QString& signal) {
+    return QJsonObject{
+        {QStringLiteral("id"), id},
+        {QStringLiteral("signal"), signal},
+        {QStringLiteral("source"), QStringLiteral("top-port")},
+        {QStringLiteral("activeSense"), QStringLiteral("high")},
+        {QStringLiteral("ownerDomain"), QStringLiteral("power-main")}
+    };
+}
+
+QJsonObject technologyCell(const QString& id,
+                           const QString& kind,
+                           const QString& cell,
+                           const QString& direction = {}) {
+    QJsonObject mapping = {
+        {QStringLiteral("id"), id},
+        {QStringLiteral("kind"), kind},
+        {QStringLiteral("cells"), QJsonArray{cell}}
+    };
+    if (!direction.isEmpty()) {
+        mapping.insert(QStringLiteral("direction"), direction);
+    }
+    return mapping;
+}
+
+QJsonObject completePowerIntent() {
+    return QJsonObject{
+        {QStringLiteral("format"), QStringLiteral("finepaper.noc-power-intent")},
+        {QStringLiteral("formatVersion"), 1},
+        {QStringLiteral("supplies"), QJsonArray{
+            powerSupply(QStringLiteral("vdd-main"),
+                        QStringLiteral("VDD_MAIN"),
+                        QStringLiteral("external-port"), 900),
+            powerSupply(QStringLiteral("vdd-low-in"),
+                        QStringLiteral("VDD_LOW_IN"),
+                        QStringLiteral("external-port"), 750),
+            powerSupply(QStringLiteral("vdd-low-sw"),
+                        QStringLiteral("VDD_LOW_SW"),
+                        QStringLiteral("internal-switched"), 750, true),
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("vss")},
+                {QStringLiteral("kind"), QStringLiteral("ground")},
+                {QStringLiteral("exposure"), QStringLiteral("external-port")},
+                {QStringLiteral("port"), QStringLiteral("VSS")},
+                {QStringLiteral("net"), QStringLiteral("VSS")},
+                {QStringLiteral("states"), QJsonArray{
+                    QJsonObject{
+                        {QStringLiteral("id"), QStringLiteral("on")},
+                        {QStringLiteral("condition"), QStringLiteral("full-on")},
+                        {QStringLiteral("voltageMv"), 0}
+                    }
+                }}
+            }
+        }},
+        {QStringLiteral("controls"), QJsonArray{
+            powerControl(QStringLiteral("low-enable"),
+                         QStringLiteral("low_enable")),
+            powerControl(QStringLiteral("low-isolate"),
+                         QStringLiteral("low_isolate")),
+            powerControl(QStringLiteral("low-save"),
+                         QStringLiteral("low_save")),
+            powerControl(QStringLiteral("low-restore"),
+                         QStringLiteral("low_restore"))
+        }},
+        {QStringLiteral("domains"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("domain"), QStringLiteral("power-main")},
+                {QStringLiteral("primaryPower"), QStringLiteral("vdd-main")},
+                {QStringLiteral("primaryGround"), QStringLiteral("vss")},
+                {QStringLiteral("mode"), QStringLiteral("always-on")},
+                {QStringLiteral("defaultState"), QStringLiteral("on")},
+                {QStringLiteral("states"), QJsonArray{
+                    QJsonObject{
+                        {QStringLiteral("id"), QStringLiteral("on")},
+                        {QStringLiteral("powerState"), QStringLiteral("on")},
+                        {QStringLiteral("groundState"), QStringLiteral("on")},
+                        {QStringLiteral("behavior"), QStringLiteral("operational")}
+                    }
+                }},
+                {QStringLiteral("levelShifter"), QJsonObject{
+                    {QStringLiteral("location"), QStringLiteral("automatic")}
+                }}
+            },
+            QJsonObject{
+                {QStringLiteral("domain"), QStringLiteral("power-low")},
+                {QStringLiteral("primaryPower"), QStringLiteral("vdd-low-sw")},
+                {QStringLiteral("primaryGround"), QStringLiteral("vss")},
+                {QStringLiteral("mode"), QStringLiteral("switchable")},
+                {QStringLiteral("defaultState"), QStringLiteral("on")},
+                {QStringLiteral("states"), QJsonArray{
+                    QJsonObject{
+                        {QStringLiteral("id"), QStringLiteral("on")},
+                        {QStringLiteral("powerState"), QStringLiteral("on")},
+                        {QStringLiteral("groundState"), QStringLiteral("on")},
+                        {QStringLiteral("behavior"), QStringLiteral("operational")}
+                    },
+                    QJsonObject{
+                        {QStringLiteral("id"), QStringLiteral("sleep")},
+                        {QStringLiteral("powerState"), QStringLiteral("off")},
+                        {QStringLiteral("groundState"), QStringLiteral("on")},
+                        {QStringLiteral("behavior"), QStringLiteral("retained")}
+                    }
+                }},
+                {QStringLiteral("powerSwitch"), QJsonObject{
+                    {QStringLiteral("inputSupply"), QStringLiteral("vdd-low-in")},
+                    {QStringLiteral("outputSupply"), QStringLiteral("vdd-low-sw")},
+                    {QStringLiteral("control"), QStringLiteral("low-enable")},
+                    {QStringLiteral("onSense"), QStringLiteral("high")}
+                }},
+                {QStringLiteral("retention"), QJsonObject{
+                    {QStringLiteral("supply"), QStringLiteral("vdd-main")},
+                    {QStringLiteral("saveControl"), QStringLiteral("low-save")},
+                    {QStringLiteral("restoreControl"), QStringLiteral("low-restore")},
+                    {QStringLiteral("saveEdge"), QStringLiteral("posedge")},
+                    {QStringLiteral("restoreEdge"), QStringLiteral("negedge")},
+                    {QStringLiteral("location"), QStringLiteral("self")}
+                }},
+                {QStringLiteral("isolation"), QJsonObject{
+                    {QStringLiteral("control"), QStringLiteral("low-isolate")},
+                    {QStringLiteral("supply"), QStringLiteral("vdd-main")},
+                    {QStringLiteral("clampValue"), 0},
+                    {QStringLiteral("location"), QStringLiteral("parent")}
+                }},
+                {QStringLiteral("levelShifter"), QJsonObject{
+                    {QStringLiteral("location"), QStringLiteral("automatic")}
+                }}
+            }
+        }},
+        {QStringLiteral("defaultSystemState"), QStringLiteral("run")},
+        {QStringLiteral("systemStates"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("run")},
+                {QStringLiteral("domainStates"), QJsonArray{
+                    QJsonObject{
+                        {QStringLiteral("domain"), QStringLiteral("power-main")},
+                        {QStringLiteral("state"), QStringLiteral("on")}
+                    },
+                    QJsonObject{
+                        {QStringLiteral("domain"), QStringLiteral("power-low")},
+                        {QStringLiteral("state"), QStringLiteral("on")}
+                    }
+                }}
+            },
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("sleep")},
+                {QStringLiteral("domainStates"), QJsonArray{
+                    QJsonObject{
+                        {QStringLiteral("domain"), QStringLiteral("power-main")},
+                        {QStringLiteral("state"), QStringLiteral("on")}
+                    },
+                    QJsonObject{
+                        {QStringLiteral("domain"), QStringLiteral("power-low")},
+                        {QStringLiteral("state"), QStringLiteral("sleep")}
+                    }
+                }}
+            }
+        }},
+        {QStringLiteral("technology"), QJsonObject{
+            {QStringLiteral("profile"), QStringLiteral("upf-interface-cells")},
+            {QStringLiteral("interfaceCells"), QJsonArray{
+                technologyCell(QStringLiteral("iso"),
+                               QStringLiteral("isolation"),
+                               QStringLiteral("LIB.ISO")),
+                technologyCell(QStringLiteral("ls-up"),
+                               QStringLiteral("level-shifter"),
+                               QStringLiteral("LIB.LS_UP"),
+                               QStringLiteral("up")),
+                technologyCell(QStringLiteral("ls-down"),
+                               QStringLiteral("level-shifter"),
+                               QStringLiteral("LIB.LS_DOWN"),
+                               QStringLiteral("down")),
+                technologyCell(QStringLiteral("ret"),
+                               QStringLiteral("retention"),
+                               QStringLiteral("LIB.RET")),
+                technologyCell(QStringLiteral("switch"),
+                               QStringLiteral("power-switch"),
+                               QStringLiteral("LIB.SWITCH"))
+            }}
+        }}
+    };
+}
+
+void checkCompletePowerGeneration(const GenerationResult& generation) {
+    const Artifact* intentArtifact = artifactWithType(
+        generation, QStringLiteral("power-intent-plan"));
+    const Artifact* implementationArtifact = artifactWithType(
+        generation, QStringLiteral("power-implementation-plan"));
+    const Artifact* upfArtifact = artifactWithType(
+        generation, QStringLiteral("power-intent-upf"));
+    const Artifact* evidenceArtifact = artifactWithType(
+        generation, QStringLiteral("power-intent-evidence"));
+    const Artifact* hierarchyArtifact = artifactWithType(
+        generation, QStringLiteral("rtl-hierarchy"));
+    const JsonObjectLoadResult loadedIntent = loadArtifactObject(
+        generation, intentArtifact);
+    const JsonObjectLoadResult loadedImplementation = loadArtifactObject(
+        generation, implementationArtifact);
+    const JsonObjectLoadResult loadedEvidence = loadArtifactObject(
+        generation, evidenceArtifact);
+    const JsonObjectLoadResult loadedHierarchy = loadArtifactObject(
+        generation, hierarchyArtifact);
+    const QJsonObject intent = loadedIntent.object;
+    const QJsonObject implementation = loadedImplementation.object;
+    const QJsonObject evidence = loadedEvidence.object;
+    const QJsonObject hierarchy = loadedHierarchy.object;
+    const QString upf = readArtifact(generation, upfArtifact);
+    const QString top = readArtifact(generation, primaryArtifact(generation));
+
+    check(generation.success
+              && intentArtifact
+              && implementationArtifact
+              && upfArtifact
+              && evidenceArtifact
+              && hierarchyArtifact
+              && loadedIntent.success
+              && loadedImplementation.success
+              && loadedEvidence.success
+              && loadedHierarchy.success
+              && QSet<QString>{
+                     intentArtifact ? intentArtifact->path : QString{},
+                     implementationArtifact ? implementationArtifact->path
+                                            : QString{},
+                     upfArtifact ? upfArtifact->path : QString{},
+                     evidenceArtifact ? evidenceArtifact->path : QString{}
+                 }.size() == 4
+              && upfArtifact->path.endsWith(QStringLiteral(".upf")),
+          QStringLiteral(
+              "Core exposes every Package-generated Power intent artifact type"));
+    check(intent.value(QStringLiteral("format")).toString()
+                  == QStringLiteral("finepaper.noc-power-intent-plan")
+              && intent.value(QStringLiteral("formatVersion")).toInt() == 1
+              && implementation.value(QStringLiteral("format")).toString()
+                  == QStringLiteral("finepaper.noc-power-implementation-plan")
+              && implementation.value(QStringLiteral("formatVersion")).toInt()
+                  == 1
+              && evidence.value(QStringLiteral("format")).toString()
+                  == QStringLiteral(
+                      "finepaper.noc-power-intent-render-receipt")
+              && evidence.value(QStringLiteral("formatVersion")).toInt() == 1,
+          QStringLiteral(
+              "Power artifacts preserve their versioned JSON contracts through Core"));
+
+    const auto hasExactStringIds = [](const QJsonArray& values,
+                                      const QString& field,
+                                      const QSet<QString>& expected) {
+        if (values.size() != expected.size()) {
+            return false;
+        }
+        QSet<QString> actual;
+        for (const QJsonValue& value : values) {
+            if (!value.isObject()) {
+                return false;
+            }
+            const QJsonValue id = value.toObject().value(field);
+            if (!id.isString() || id.toString().isEmpty()
+                || actual.contains(id.toString())) {
+                return false;
+            }
+            actual.insert(id.toString());
+        }
+        return actual == expected;
+    };
+    check(hasExactStringIds(
+              intent.value(QStringLiteral("supplies")).toArray(),
+              QStringLiteral("id"),
+              QSet<QString>{
+                      QStringLiteral("vdd-low-in"),
+                      QStringLiteral("vdd-low-sw"),
+                      QStringLiteral("vdd-main"),
+                      QStringLiteral("vss")
+                  })
+              && hasExactStringIds(
+                  intent.value(QStringLiteral("controls")).toArray(),
+                  QStringLiteral("id"),
+                  QSet<QString>{
+                      QStringLiteral("low-enable"),
+                      QStringLiteral("low-isolate"),
+                      QStringLiteral("low-restore"),
+                      QStringLiteral("low-save")
+                  })
+              && hasExactStringIds(
+                  intent.value(QStringLiteral("domains")).toArray(),
+                  QStringLiteral("domain"),
+                  QSet<QString>{
+                      QStringLiteral("power-low"),
+                      QStringLiteral("power-main")
+                  })
+              && hasExactStringIds(
+                  intent.value(QStringLiteral("systemStates")).toArray(),
+                  QStringLiteral("id"),
+                  QSet<QString>{
+                      QStringLiteral("run"), QStringLiteral("sleep")
+                  })
+              && hasExactStringIds(
+                  intent.value(QStringLiteral("technology")).toObject()
+                      .value(QStringLiteral("interfaceCells")).toArray(),
+                  QStringLiteral("id"),
+                  QSet<QString>{
+                      QStringLiteral("iso"),
+                      QStringLiteral("ls-down"),
+                      QStringLiteral("ls-up"),
+                      QStringLiteral("ret"),
+                      QStringLiteral("switch")
+                  })
+              && intent.value(QStringLiteral("defaultSystemState")).toString()
+                  == QStringLiteral("run")
+              && intent.value(QStringLiteral("implementationPlan")).toObject()
+                     .value(QStringLiteral("format")).toString()
+                  == QStringLiteral(
+                      "finepaper.noc-domain-implementation-plan"),
+          QStringLiteral(
+              "Power intent plan preserves every Package-owned fixture record"));
+
+    const QJsonObject mainSupply = objectWithStringField(
+        intent.value(QStringLiteral("supplies")).toArray(),
+        QStringLiteral("id"), QStringLiteral("vdd-main"));
+    const QJsonObject switchedSupply = objectWithStringField(
+        intent.value(QStringLiteral("supplies")).toArray(),
+        QStringLiteral("id"), QStringLiteral("vdd-low-sw"));
+    const QJsonObject mainOnState = objectWithStringField(
+        mainSupply.value(QStringLiteral("states")).toArray(),
+        QStringLiteral("id"), QStringLiteral("on"));
+    const QJsonObject switchedOnState = objectWithStringField(
+        switchedSupply.value(QStringLiteral("states")).toArray(),
+        QStringLiteral("id"), QStringLiteral("on"));
+    const QJsonObject lowEnable = objectWithStringField(
+        intent.value(QStringLiteral("controls")).toArray(),
+        QStringLiteral("id"), QStringLiteral("low-enable"));
+    const QJsonObject lowDomain = objectWithStringField(
+        intent.value(QStringLiteral("domains")).toArray(),
+        QStringLiteral("domain"), QStringLiteral("power-low"));
+    const QJsonObject sleepSystemState = objectWithStringField(
+        intent.value(QStringLiteral("systemStates")).toArray(),
+        QStringLiteral("id"), QStringLiteral("sleep"));
+    const QJsonObject lowSleepState = objectWithStringField(
+        sleepSystemState.value(QStringLiteral("domainStates")).toArray(),
+        QStringLiteral("domain"), QStringLiteral("power-low"));
+    const QJsonObject isolationCell = objectWithStringField(
+        intent.value(QStringLiteral("technology")).toObject()
+            .value(QStringLiteral("interfaceCells")).toArray(),
+        QStringLiteral("id"), QStringLiteral("iso"));
+    const QJsonObject upShifterCell = objectWithStringField(
+        intent.value(QStringLiteral("technology")).toObject()
+            .value(QStringLiteral("interfaceCells")).toArray(),
+        QStringLiteral("id"), QStringLiteral("ls-up"));
+    check(mainSupply.value(QStringLiteral("exposure")).toString()
+                  == QStringLiteral("external-port")
+              && mainSupply.value(QStringLiteral("port")).toString()
+                  == QStringLiteral("VDD_MAIN")
+              && mainOnState.value(QStringLiteral("voltageMv")).toInt(-1)
+                  == 900
+              && switchedSupply.value(QStringLiteral("exposure")).toString()
+                  == QStringLiteral("internal-switched")
+              && !switchedSupply.contains(QStringLiteral("port"))
+              && switchedOnState.value(QStringLiteral("voltageMv")).toInt(-1)
+                  == 750
+              && lowEnable.value(QStringLiteral("signal")).toString()
+                  == QStringLiteral("low_enable")
+              && lowEnable.value(QStringLiteral("source")).toString()
+                  == QStringLiteral("top-port")
+              && lowDomain.value(QStringLiteral("mode")).toString()
+                  == QStringLiteral("switchable")
+              && lowDomain.value(QStringLiteral("powerSwitch")).toObject()
+                     .value(QStringLiteral("outputSupply")).toString()
+                  == QStringLiteral("vdd-low-sw")
+              && lowDomain.value(QStringLiteral("retention")).toObject()
+                     .value(QStringLiteral("saveControl")).toString()
+                  == QStringLiteral("low-save")
+              && lowDomain.value(QStringLiteral("isolation")).toObject()
+                     .value(QStringLiteral("control")).toString()
+                  == QStringLiteral("low-isolate")
+              && lowSleepState.value(QStringLiteral("state")).toString()
+                  == QStringLiteral("sleep")
+              && isolationCell.value(QStringLiteral("cells")).toArray()
+                  == QJsonArray{QStringLiteral("LIB.ISO")}
+              && upShifterCell.value(QStringLiteral("direction")).toString()
+                  == QStringLiteral("up")
+              && upShifterCell.value(QStringLiteral("cells")).toArray()
+                  == QJsonArray{QStringLiteral("LIB.LS_UP")},
+          QStringLiteral(
+              "Power intent plan preserves critical supply, control, state, and technology values"));
+
+    const QSet<QString> expectedCdcPowerDirections = {
+        QStringLiteral("router-link/")
+            + linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))
+            + QStringLiteral("/from-to"),
+        QStringLiteral("router-link/")
+            + linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))
+            + QStringLiteral("/to-from"),
+        QStringLiteral("router-link/")
+            + linkId(QStringLiteral("r-0-1"), QStringLiteral("r-1-1"))
+            + QStringLiteral("/from-to"),
+        QStringLiteral("router-link/")
+            + linkId(QStringLiteral("r-0-1"), QStringLiteral("r-1-1"))
+            + QStringLiteral("/to-from")
+    };
+    QSet<QString> hierarchyCdcPowerDirections;
+    int hierarchyCdcPowerDirectionCount = 0;
+    for (const QJsonValue& value : hierarchy.value(
+             QStringLiteral("edgeDirections")).toArray()) {
+        const QJsonObject direction = value.toObject();
+        const QJsonObject edge = direction.value(
+            QStringLiteral("edge")).toObject();
+        const QJsonObject boundary = direction.value(
+            QStringLiteral("powerBoundary")).toObject();
+        const QJsonObject bridge = direction.value(
+            QStringLiteral("bridge")).toObject();
+        if (edge.value(QStringLiteral("kind")).toString()
+                == QStringLiteral("router-link")
+            && direction.value(QStringLiteral("sourceClockDomain")).toString()
+                != direction.value(
+                    QStringLiteral("destinationClockDomain")).toString()
+            && bridge.value(QStringLiteral("module")).toString()
+                == QStringLiteral("fp_async_ready_valid_fifo")
+            && bridge.value(QStringLiteral("placement")).toString()
+                == QStringLiteral("infrastructure")
+            && boundary.value(QStringLiteral("status")).toString()
+                == QStringLiteral("deferred")
+            && boundary.value(QStringLiteral("reasonCode")).toString()
+                == QStringLiteral(
+                    "rtl_hierarchy.infrastructure_bridge_supply_unowned")) {
+            ++hierarchyCdcPowerDirectionCount;
+            hierarchyCdcPowerDirections.insert(
+                edge.value(QStringLiteral("kind")).toString()
+                + QLatin1Char('/')
+                + edge.value(QStringLiteral("id")).toString()
+                + QLatin1Char('/')
+                + direction.value(QStringLiteral("orientation")).toString());
+        }
+    }
+
+    int directOrientations = 0;
+    int combinedOrientations = 0;
+    int completeDirectOrientations = 0;
+    int completeCombinedOrientations = 0;
+    QSet<QString> implementationCdcPowerDirections;
+    for (const QJsonValue& value : implementation.value(
+             QStringLiteral("edgeOrientations")).toArray()) {
+        const QJsonObject orientation = value.toObject();
+        const QJsonObject edge = orientation.value(
+            QStringLiteral("edge")).toObject();
+        const QString boundaryStatus = orientation.value(
+            QStringLiteral("powerBoundary")).toObject().value(
+            QStringLiteral("status")).toString();
+        const QString boundaryReason = orientation.value(
+            QStringLiteral("powerBoundary")).toObject().value(
+            QStringLiteral("reasonCode")).toString();
+        const QString directionKey =
+            edge.value(QStringLiteral("kind")).toString()
+            + QLatin1Char('/')
+            + edge.value(QStringLiteral("id")).toString()
+            + QLatin1Char('/')
+            + orientation.value(QStringLiteral("orientation")).toString();
+        const bool direct = edge.value(QStringLiteral("kind")).toString()
+                == QStringLiteral("endpoint-attachment")
+            && edge.value(QStringLiteral("id")).toString()
+                == QStringLiteral("z_cpu");
+        const bool combined = edge.value(QStringLiteral("kind")).toString()
+                == QStringLiteral("router-link")
+            && boundaryStatus == QStringLiteral("deferred");
+        if (direct) {
+            ++directOrientations;
+        } else if (combined) {
+            ++combinedOrientations;
+            implementationCdcPowerDirections.insert(directionKey);
+        } else {
+            continue;
+        }
+
+        const QJsonArray flows = orientation.value(
+            QStringLiteral("signalFlows")).toArray();
+        const int expectedFlowCount = direct ? 3 : 6;
+        int strategyCount = 0;
+        int expectedStrategies = 0;
+        bool complete = flows.size() == expectedFlowCount;
+        for (const QJsonValue& flowValue : flows) {
+            const QJsonObject flow = flowValue.toObject();
+            for (const QString& strategyName : {
+                     QStringLiteral("isolation"),
+                     QStringLiteral("levelShifter")}) {
+                const QJsonObject strategy = flow.value(strategyName).toObject();
+                const QString status = strategy.value(
+                    QStringLiteral("status")).toString();
+                const QString token = strategy.value(
+                    QStringLiteral("token")).toString();
+                ++strategyCount;
+                if (direct) {
+                    const bool emitted = status == QStringLiteral("expected");
+                    const bool notRequired =
+                        status == QStringLiteral("not-required");
+                    expectedStrategies += emitted ? 1 : 0;
+                    complete = complete
+                        && (emitted || notRequired)
+                        && !token.isEmpty()
+                        && (upf.contains(token) == emitted);
+                } else {
+                    complete = complete
+                        && status == QStringLiteral("deferred")
+                        && !token.isEmpty()
+                        && !upf.contains(token);
+                }
+            }
+        }
+        complete = complete && strategyCount == expectedFlowCount * 2;
+        if (direct && boundaryStatus == QStringLiteral("resolvable")
+            && expectedStrategies > 0 && complete) {
+            ++completeDirectOrientations;
+        } else if (combined
+                   && boundaryReason
+                       == QStringLiteral(
+                           "rtl_hierarchy.infrastructure_bridge_supply_unowned")
+                   && hierarchyCdcPowerDirections.contains(directionKey)
+                   && complete) {
+            ++completeCombinedOrientations;
+        }
+    }
+    check(directOrientations == 2
+              && completeDirectOrientations == directOrientations,
+          QStringLiteral(
+              "direct Endpoint Power crossings produce traceable UPF strategies"));
+    check(hierarchyCdcPowerDirectionCount
+                  == expectedCdcPowerDirections.size()
+              && hierarchyCdcPowerDirections == expectedCdcPowerDirections
+              && implementationCdcPowerDirections
+                  == expectedCdcPowerDirections
+              && combinedOrientations == expectedCdcPowerDirections.size()
+              && completeCombinedOrientations == combinedOrientations,
+          QStringLiteral(
+              "combined CDC and Power Router crossings remain explicit and absent from UPF"));
+
+    QSet<QString> commandKinds;
+    const QJsonArray commands = evidence.value(
+        QStringLiteral("commands")).toArray();
+    bool commandLedgerIsComplete =
+        evidence.value(QStringLiteral("commands")).isArray()
+        && evidence.value(QStringLiteral("commandCount")).toInt(-1)
+        == commands.size();
+    QStringList ledgerCommandLines;
+    for (qsizetype index = 0; index < commands.size(); ++index) {
+        const QJsonValue value = commands.at(index);
+        const QJsonObject command = value.toObject();
+        const QJsonValue sequence = command.value(QStringLiteral("sequence"));
+        const QJsonValue emitted = command.value(QStringLiteral("emitted"));
+        const QString kind = command.value(QStringLiteral("kind")).toString();
+        const QJsonArray arguments = command.value(
+            QStringLiteral("arguments")).toArray();
+        commandLedgerIsComplete = commandLedgerIsComplete
+            && value.isObject()
+            && sequence.isDouble()
+            && sequence.toInteger(-1) == index
+            && emitted.isBool()
+            && emitted.toBool()
+            && !kind.isEmpty()
+            && command.value(QStringLiteral("arguments")).isArray();
+        QStringList commandWords = {kind};
+        for (const QJsonValue& argument : arguments) {
+            commandLedgerIsComplete = commandLedgerIsComplete
+                && argument.isString();
+            commandWords.append(argument.toString());
+        }
+        ledgerCommandLines.append(commandWords.join(QLatin1Char(' ')));
+        commandKinds.insert(kind);
+    }
+    const bool isUpfDocument =
+        upf.startsWith(QStringLiteral("# Generated power intent:"))
+        && upf.contains(QStringLiteral("\nupf_version 2.1\n"))
+        && !upf.trimmed().startsWith(QLatin1Char('{'));
+    QStringList upfCommandLines;
+    for (const QString& line : upf.split(QLatin1Char('\n'))) {
+        if (!line.isEmpty() && !line.startsWith(QLatin1Char('#'))) {
+            upfCommandLines.append(line);
+        }
+    }
+    const QSet<QString> requiredCommands{
+        QStringLiteral("create_power_switch"),
+        QStringLiteral("set_retention"),
+        QStringLiteral("set_isolation"),
+        QStringLiteral("set_level_shifter")
+    };
+    check(isUpfDocument
+              && upf.contains(QStringLiteral("create_power_switch"))
+              && upf.contains(QStringLiteral("set_retention"))
+              && upf.contains(QStringLiteral("set_isolation"))
+              && upf.contains(QStringLiteral("set_level_shifter"))
+              && commandLedgerIsComplete
+              && ledgerCommandLines == upfCommandLines
+              && commandKinds.contains(requiredCommands),
+          QStringLiteral(
+              "generated UPF and its evidence ledger agree on every Power command class"));
+    const QJsonValue coverageComplete = evidence.value(
+        QStringLiteral("implementationCoverage")).toObject().value(
+        QStringLiteral("complete"));
+    check(coverageComplete.isBool()
+              && !coverageComplete.toBool()
+              && evidence.value(QStringLiteral("implementationCoverage"))
+                     .toObject().value(QStringLiteral("summary")).toObject()
+                     .value(QStringLiteral("deferred")).toInt() > 0
+              && evidence.value(QStringLiteral("validation")).toObject().value(
+                     QStringLiteral("commercialSemanticValidation")).toString()
+                  == QStringLiteral("not-performed"),
+          QStringLiteral(
+              "Power evidence does not overclaim deferred or commercial validation"));
+
+    static const QRegularExpression powerControlPortPattern(
+        QStringLiteral(
+            R"(\binput\s+logic\s+(low_enable|low_isolate|low_save|low_restore)\b)"));
+    QSet<QString> materializedControlSignals;
+    QRegularExpressionMatchIterator controlMatches =
+        powerControlPortPattern.globalMatch(top);
+    while (controlMatches.hasNext()) {
+        materializedControlSignals.insert(controlMatches.next().captured(1));
+    }
+    check(materializedControlSignals
+              == QSet<QString>{
+                  QStringLiteral("low_enable"),
+                  QStringLiteral("low_isolate"),
+                  QStringLiteral("low_save"),
+                  QStringLiteral("low_restore")
+              },
+          QStringLiteral(
+              "every declared top-port Power control is materialized in top RTL"));
 }
 
 struct RtlInstanceRecord {
@@ -1372,6 +2047,37 @@ int main(int argc, char** argv) {
                   && deferredLevelShifter,
               QStringLiteral(
                   "Domain RTL evidence marks unmaterialized Power stages as explicit deferred work"));
+    }
+
+    NocDesign completePowerDesign = crossingDesign;
+    for (DomainMembership& membership : completePowerDesign.domainMemberships) {
+        if (membership.element.kind == ElementKind::Endpoint
+            && membership.element.id == QStringLiteral("z_cpu")) {
+            membership.assignments.insert(
+                QStringLiteral("clock"),
+                QStringList{QStringLiteral("clock-main")});
+            membership.assignments.insert(
+                QStringLiteral("power"),
+                QStringList{QStringLiteral("power-low")});
+        }
+    }
+    completePowerDesign.packageData.insert(
+        QStringLiteral("finepaper.noc.powerIntent"),
+        completePowerIntent());
+    const ValidationResult completePowerValidation = routerConfigured.success
+        ? finepaper.validate(completePowerDesign, true)
+        : ValidationResult{};
+    check(completePowerValidation.success,
+          QStringLiteral(
+              "Core validates a complete Package-owned Power intent extension"));
+    QTemporaryDir completePowerOutput(
+        QStringLiteral("/tmp/finepaper-complete-power-test-XXXXXX"));
+    check(completePowerOutput.isValid(),
+          QStringLiteral("complete Power output directory is available"));
+    if (completePowerValidation.success && completePowerOutput.isValid()) {
+        checkCompletePowerGeneration(finepaper.generate(
+            completePowerDesign,
+            GenerationOptions{completePowerOutput.path()}));
     }
 
     NocDesign reorderedDomainDesign = crossingDesign;
