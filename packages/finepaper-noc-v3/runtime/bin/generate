@@ -10,6 +10,7 @@ require 'json'
 require 'open3'
 require 'optparse'
 require 'tmpdir'
+require_relative '../lib/domain_realizer'
 
 HDL_IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_]*\z/
 DOMAIN_ELEMENT_KINDS = %w[router endpoint].freeze
@@ -24,16 +25,18 @@ def write_result(path, success:, artifacts: [], diagnostics: [])
                    ) + "\n")
 end
 
-def fail_operation(message, result_path)
+def fail_operation(message, result_path, code: 'finepaper_noc.adapter_failed', path: nil)
   warn "error: #{message}"
+  diagnostic = {
+    'severity' => 'error',
+    'code' => code,
+    'message' => message,
+    'source' => 'finepaper.noc'
+  }
+  diagnostic['path'] = path if path
   write_result(result_path,
                success: false,
-               diagnostics: [{
-                 'severity' => 'error',
-                 'code' => 'finepaper_noc.adapter_failed',
-                 'message' => message,
-                 'source' => 'finepaper.noc'
-               }]) if result_path
+               diagnostics: [diagnostic]) if result_path
   exit 1
 end
 
@@ -620,6 +623,8 @@ def artifact_list(output_dir, design_name)
              'filelist'
            elsif File.basename(path) == "#{design_name}_domain_constraints.json"
              'constraints'
+           elsif File.basename(path) == "#{design_name}_domain_implementation.json"
+             'implementation-plan'
            elsif %w[.v .sv].include?(File.extname(path).downcase)
              'rtl'
            else
@@ -653,11 +658,19 @@ fail_operation('--output is required for generate', options[:result]) if command
 
 begin
   design = JSON.parse(File.read(options[:design]))
+  realizer = FinepaperNoc::DomainRealizer.load(
+    File.expand_path('../domain-realization.json', __dir__)
+  )
+  realizer.validate_design!(design)
   translated_input = legacy_input(design)
   compiled_domains = domain_constraints(
     design,
     design.dig('topology', 'rows'),
     design.dig('topology', 'columns')
+  )
+  implementation_plan = realizer.realize(
+    constraints: compiled_domains,
+    design: design
   )
   legacy_root = File.expand_path('../legacy-generator', __dir__)
   legacy_program = File.join(legacy_root, 'bin', command == 'validate' ? 'drc' : 'generate')
@@ -690,12 +703,19 @@ begin
         "#{design_id}_domain_constraints.json"
       )
       File.write(constraints_path, JSON.pretty_generate(compiled_domains) + "\n")
+      implementation_path = File.join(
+        File.expand_path(options[:output]),
+        "#{design_id}_domain_implementation.json"
+      )
+      File.write(implementation_path, JSON.pretty_generate(implementation_plan) + "\n")
     end
   end
   artifacts = command == 'generate' ? artifact_list(File.expand_path(options[:output]), design_id) : []
   raise 'legacy generator did not produce any artifacts' if command == 'generate' && artifacts.empty?
 
   write_result(options[:result], success: true, artifacts: artifacts)
+rescue FinepaperNoc::DomainRealizationError => error
+  fail_operation(error.message, options[:result], code: error.code, path: error.path)
 rescue StandardError => error
   fail_operation(error.message, options[:result])
 end

@@ -599,6 +599,13 @@ int main(int argc, char** argv) {
                     && artifact.path.endsWith(
                         QStringLiteral("_domain_constraints.json"));
             });
+        const auto implementation = std::find_if(
+            generation.artifacts.cbegin(), generation.artifacts.cend(),
+            [](const Artifact& artifact) {
+                return artifact.type == QStringLiteral("implementation-plan")
+                    && artifact.path.endsWith(
+                        QStringLiteral("_domain_implementation.json"));
+            });
         QString primaryText;
         if (primary != generation.artifacts.cend()) {
             QFile primaryFile(QDir(generation.outputDirectory).filePath(
@@ -616,6 +623,11 @@ int main(int argc, char** argv) {
         if (constraints != generation.artifacts.cend()) {
             defaultConstraints = loadJsonObject(
                 QDir(generation.outputDirectory).filePath(constraints->path));
+        }
+        JsonObjectLoadResult defaultImplementation;
+        if (implementation != generation.artifacts.cend()) {
+            defaultImplementation = loadJsonObject(
+                QDir(generation.outputDirectory).filePath(implementation->path));
         }
         const auto intentMemory = intentDesign.success
             ? std::find_if(
@@ -650,9 +662,16 @@ int main(int argc, char** argv) {
                   && defaultConstraints.object.value(
                          QStringLiteral("instances")).toArray().size() == 2
                   && defaultConstraints.object.value(
-                         QStringLiteral("meshCrossings")).toArray().isEmpty(),
+                         QStringLiteral("meshCrossings")).toArray().isEmpty()
+                  && defaultImplementation.success
+                  && defaultImplementation.object.value(
+                         QStringLiteral("format")).toString()
+                      == QStringLiteral(
+                          "finepaper.noc-domain-implementation-plan")
+                  && defaultImplementation.object.value(
+                         QStringLiteral("domainBindings")).toArray().size() == 2,
               QStringLiteral(
-                  "bundled V3 Generator consumes Router, Endpoint, and default Domain intent"));
+                  "bundled V3 Generator consumes intent and emits a typed Domain implementation plan"));
     }
 
     QTemporaryDir hermeticV3Run(
@@ -697,9 +716,49 @@ int main(int argc, char** argv) {
                   && QFileInfo::exists(
                       QDir(outputPath).filePath(
                           QStringLiteral(
-                              "configurable_mesh_domain_constraints.json"))),
+                              "configurable_mesh_domain_constraints.json")))
+                  && QFileInfo::exists(
+                      QDir(outputPath).filePath(
+                          QStringLiteral(
+                              "configurable_mesh_domain_implementation.json"))),
               QStringLiteral(
                   "bundled V3 Package validates and generates when installed without its V1 sibling"));
+
+        const QString v1DesignPath = QDir(hermeticV3Run.path()).filePath(
+            QStringLiteral("v1-design.json"));
+        const QString v1ResultPath = QDir(hermeticV3Run.path()).filePath(
+            QStringLiteral("v1-result.json"));
+        const bool savedV1 = saveDesign(v1DesignPath, created.design);
+        const ProcessResult v1Process = copied && savedV1
+            ? runProcess(
+                  QDir(isolatedPackage).filePath(
+                      QStringLiteral("runtime/bin/generate")),
+                  QStringList{
+                      QStringLiteral("validate"),
+                      QStringLiteral("--design"),
+                      v1DesignPath,
+                      QStringLiteral("--result"),
+                      v1ResultPath
+                  },
+                  hermeticV3Run.path(),
+                  30'000)
+            : ProcessResult{};
+        const JsonObjectLoadResult v1Result = loadJsonObject(v1ResultPath);
+        const QJsonArray v1Diagnostics = v1Result.object.value(
+            QStringLiteral("diagnostics")).toArray();
+        const QJsonObject v1Diagnostic = v1Diagnostics.isEmpty()
+            ? QJsonObject{}
+            : v1Diagnostics.at(0).toObject();
+        check(savedV1
+                  && v1Process.started
+                  && v1Process.exitCode != 0
+                  && v1Result.success
+                  && v1Diagnostic.value(QStringLiteral("code")).toString()
+                      == QStringLiteral("realization.invalid_design_version")
+                  && v1Diagnostic.value(QStringLiteral("path")).toString()
+                      == QStringLiteral("/design/formatVersion"),
+              QStringLiteral(
+                  "standalone V3 Package rejects a V1 Design before the legacy generator"));
     }
 
     NocDesign crossingDesign;
@@ -759,7 +818,7 @@ int main(int argc, char** argv) {
                 QStringLiteral("power-low"),
                 QJsonObject{
                     {QStringLiteral("isolation"), true},
-                    {QStringLiteral("levelShift"), QStringLiteral("down")}
+                    {QStringLiteral("levelShift"), QStringLiteral("auto")}
                 }
             }
         };
@@ -787,6 +846,8 @@ int main(int argc, char** argv) {
           QStringLiteral("Domain crossing output directory is available"));
     QJsonObject crossingConstraints;
     QString crossingConstraintsText;
+    QJsonObject crossingImplementation;
+    QString crossingImplementationText;
     if (crossingValidation.success && crossingOutput.isValid()) {
         const GenerationResult generation = finepaper.generate(
             crossingDesign, GenerationOptions{crossingOutput.path()});
@@ -797,6 +858,13 @@ int main(int argc, char** argv) {
                     && artifact.path.endsWith(
                         QStringLiteral("_domain_constraints.json"));
             });
+        const auto implementation = std::find_if(
+            generation.artifacts.cbegin(), generation.artifacts.cend(),
+            [](const Artifact& artifact) {
+                return artifact.type == QStringLiteral("implementation-plan")
+                    && artifact.path.endsWith(
+                        QStringLiteral("_domain_implementation.json"));
+            });
         if (constraints != generation.artifacts.cend()) {
             const QString path = QDir(generation.outputDirectory).filePath(
                 constraints->path);
@@ -806,6 +874,17 @@ int main(int argc, char** argv) {
             if (constraintsFile.open(QIODevice::ReadOnly)) {
                 crossingConstraintsText = QString::fromUtf8(
                     constraintsFile.readAll());
+            }
+        }
+        if (implementation != generation.artifacts.cend()) {
+            const QString path = QDir(generation.outputDirectory).filePath(
+                implementation->path);
+            const JsonObjectLoadResult loaded = loadJsonObject(path);
+            crossingImplementation = loaded.object;
+            QFile implementationFile(path);
+            if (implementationFile.open(QIODevice::ReadOnly)) {
+                crossingImplementationText = QString::fromUtf8(
+                    implementationFile.readAll());
             }
         }
         const QJsonObject clockInstance = objectWithStringField(
@@ -828,8 +907,58 @@ int main(int argc, char** argv) {
         }
         const QJsonObject resolution = overriddenCrossing.value(
             QStringLiteral("resolution")).toObject();
+        const auto implementationEdge = [&crossingImplementation](
+                                            const QString& id) {
+            for (const QJsonValue& value : crossingImplementation.value(
+                     QStringLiteral("edgeBindings")).toArray()) {
+                const QJsonObject candidate = value.toObject();
+                if (candidate.value(QStringLiteral("edge")).toObject().value(
+                        QStringLiteral("id")).toString() == id) {
+                    return candidate;
+                }
+            }
+            return QJsonObject{};
+        };
+        const auto stageRoles = [](const QJsonArray& stages) {
+            QStringList roles;
+            for (const QJsonValue& value : stages) {
+                roles.append(value.toObject().value(
+                    QStringLiteral("role")).toString());
+            }
+            return roles;
+        };
+        const auto stageWithRole = [](const QJsonArray& stages,
+                                      const QString& role) {
+            for (const QJsonValue& value : stages) {
+                const QJsonObject stage = value.toObject();
+                if (stage.value(QStringLiteral("role")).toString() == role) {
+                    return stage;
+                }
+            }
+            return QJsonObject{};
+        };
+        const QJsonArray overriddenPlanStages = implementationEdge(
+            overriddenLink).value(QStringLiteral("stages")).toArray();
+        const QJsonArray regularPlanStages = implementationEdge(
+            linkId(QStringLiteral("r-0-1"), QStringLiteral("r-1-1")))
+            .value(QStringLiteral("stages")).toArray();
+        const QJsonObject translationStage = stageWithRole(
+            overriddenPlanStages,
+            QStringLiteral("voltage-translation-boundary"));
+        QStringList translationDirections;
+        for (const QJsonValue& value : translationStage.value(
+                 QStringLiteral("directions")).toArray()) {
+            translationDirections.append(
+                value.toObject().value(QStringLiteral("parameters")).toObject()
+                    .value(QStringLiteral("translation-direction")).toObject()
+                    .value(QStringLiteral("value")).toString());
+        }
         check(generation.success
                   && !crossingConstraints.isEmpty()
+                  && crossingImplementation.value(
+                         QStringLiteral("format")).toString()
+                      == QStringLiteral(
+                          "finepaper.noc-domain-implementation-plan")
                   && clockInstance.value(QStringLiteral("members"))
                          .toArray().size() == 3
                   && crossingConstraints.value(QStringLiteral("relations"))
@@ -854,11 +983,23 @@ int main(int argc, char** argv) {
                           .toObject().value(QStringLiteral("isolation")).toBool()
                   && resolution.value(QStringLiteral("effectiveProperties"))
                          .toObject().value(QStringLiteral("levelShift")).toString()
-                      == QStringLiteral("down")
+                      == QStringLiteral("auto")
                   && !resolution.value(QStringLiteral("effectiveProperties"))
-                          .toObject().value(QStringLiteral("isolation")).toBool(),
+                          .toObject().value(QStringLiteral("isolation")).toBool()
+                  && stageRoles(overriddenPlanStages)
+                      == QStringList{
+                          QStringLiteral("timing-boundary"),
+                          QStringLiteral("voltage-translation-boundary")}
+                  && stageRoles(regularPlanStages)
+                      == QStringList{
+                          QStringLiteral("timing-boundary"),
+                          QStringLiteral("power-isolation-boundary"),
+                          QStringLiteral("voltage-translation-boundary")}
+                  && translationDirections
+                      == QStringList{
+                          QStringLiteral("down"), QStringLiteral("up")},
               QStringLiteral(
-                  "Domain constraints compile instances, members, relations, policies, overrides, and Mesh crossings"));
+                  "Domain lowering resolves typed stages, automatic voltage direction, and edge overrides"));
     }
 
     NocDesign reorderedDomainDesign = crossingDesign;
@@ -885,7 +1026,13 @@ int main(int argc, char** argv) {
             [](const Artifact& artifact) {
                 return artifact.type == QStringLiteral("constraints");
             });
+        const auto implementation = std::find_if(
+            generation.artifacts.cbegin(), generation.artifacts.cend(),
+            [](const Artifact& artifact) {
+                return artifact.type == QStringLiteral("implementation-plan");
+            });
         QString reorderedText;
+        QString reorderedImplementationText;
         if (constraints != generation.artifacts.cend()) {
             QFile constraintsFile(QDir(generation.outputDirectory).filePath(
                 constraints->path));
@@ -893,17 +1040,29 @@ int main(int argc, char** argv) {
                 reorderedText = QString::fromUtf8(constraintsFile.readAll());
             }
         }
+        if (implementation != generation.artifacts.cend()) {
+            QFile implementationFile(QDir(generation.outputDirectory).filePath(
+                implementation->path));
+            if (implementationFile.open(QIODevice::ReadOnly)) {
+                reorderedImplementationText = QString::fromUtf8(
+                    implementationFile.readAll());
+            }
+        }
         check(generation.success
                   && !crossingConstraintsText.isEmpty()
-                  && reorderedText == crossingConstraintsText,
+                  && !crossingImplementationText.isEmpty()
+                  && reorderedText == crossingConstraintsText
+                  && reorderedImplementationText == crossingImplementationText,
               QStringLiteral(
-                  "Domain constraints are deterministic across equivalent input ordering"));
+                  "Domain constraints and implementation plan are deterministic across equivalent input ordering"));
     }
 
     NocDesign changedDomainDesign = crossingDesign;
     for (DomainDefinition& domain : changedDomainDesign.domains) {
         if (domain.id == QStringLiteral("clock-io")) {
             domain.properties.insert(QStringLiteral("frequencyMHz"), 625);
+        } else if (domain.id == QStringLiteral("clock-main")) {
+            domain.properties.insert(QStringLiteral("frequencyMHz"), 1250);
         }
     }
     QTemporaryDir changedDomainOutput(
@@ -919,8 +1078,15 @@ int main(int argc, char** argv) {
             [](const Artifact& artifact) {
                 return artifact.type == QStringLiteral("constraints");
             });
+        const auto implementation = std::find_if(
+            generation.artifacts.cbegin(), generation.artifacts.cend(),
+            [](const Artifact& artifact) {
+                return artifact.type == QStringLiteral("implementation-plan");
+            });
         QString changedText;
+        QString changedImplementationText;
         QJsonObject changedConstraints;
+        QJsonObject changedImplementation;
         if (constraints != generation.artifacts.cend()) {
             const QString path = QDir(generation.outputDirectory).filePath(
                 constraints->path);
@@ -931,18 +1097,36 @@ int main(int argc, char** argv) {
                 changedText = QString::fromUtf8(constraintsFile.readAll());
             }
         }
+        if (implementation != generation.artifacts.cend()) {
+            const QString path = QDir(generation.outputDirectory).filePath(
+                implementation->path);
+            const JsonObjectLoadResult loaded = loadJsonObject(path);
+            changedImplementation = loaded.object;
+            QFile implementationFile(path);
+            if (implementationFile.open(QIODevice::ReadOnly)) {
+                changedImplementationText = QString::fromUtf8(
+                    implementationFile.readAll());
+            }
+        }
         const QJsonObject changedClock = objectWithStringField(
             changedConstraints.value(QStringLiteral("instances")).toArray(),
             QStringLiteral("id"),
             QStringLiteral("clock-io"));
         check(generation.success
                   && !crossingConstraintsText.isEmpty()
+                  && !crossingImplementationText.isEmpty()
                   && crossingConstraintsText != changedText
+                  && crossingImplementationText != changedImplementationText
                   && changedClock.value(QStringLiteral("properties"))
                          .toObject().value(QStringLiteral("frequencyMHz")).toInt()
-                      == 625,
+                      == 625
+                  && changedImplementation.value(
+                         QStringLiteral("relationBindings")).toArray().at(0)
+                         .toObject().value(QStringLiteral("resolved")).toObject()
+                         .value(QStringLiteral("calculatedTarget")).toObject()
+                         .value(QStringLiteral("value")).toDouble() == 625.0,
               QStringLiteral(
-                  "changing a Domain property deterministically changes the compiled constraints artifact"));
+                  "changing related Domain properties deterministically changes constraints and typed lowering"));
     }
 
     NocDesign missingStrategyDesign = crossingDesign;
@@ -958,6 +1142,65 @@ int main(int argc, char** argv) {
                   QStringLiteral("finepaper_noc.adapter_failed")),
           QStringLiteral(
               "bundled V3 runtime rejects a Mesh Domain crossing without a directed strategy"));
+
+    NocDesign unsafeSynchronizerDesign = crossingDesign;
+    for (DomainCrossingPolicy& policy : unsafeSynchronizerDesign.crossingPolicies) {
+        if (policy.domainType == QStringLiteral("clock")) {
+            policy.properties.insert(
+                QStringLiteral("implementation"),
+                QStringLiteral("synchronizer"));
+        }
+    }
+    const ValidationResult unsafeSynchronizerValidation = routerConfigured.success
+        ? finepaper.validate(unsafeSynchronizerDesign, true)
+        : ValidationResult{};
+    check(!unsafeSynchronizerValidation.success
+              && hasDiagnosticCode(
+                  unsafeSynchronizerValidation.diagnostics,
+                  QStringLiteral("domain_property.invalid_enum")),
+          QStringLiteral(
+              "Package schema does not offer an unsafe multi-bit synchronizer strategy"));
+
+    QTemporaryDir unsafeRuntimeRun(
+        QStringLiteral("/tmp/finepaper-domain-unsafe-runtime-XXXXXX"));
+    if (routerConfigured.success && unsafeRuntimeRun.isValid()) {
+        const QString designPath = QDir(unsafeRuntimeRun.path()).filePath(
+            QStringLiteral("design.json"));
+        const QString resultPath = QDir(unsafeRuntimeRun.path()).filePath(
+            QStringLiteral("result.json"));
+        const bool saved = saveDesign(designPath, unsafeSynchronizerDesign);
+        const ProcessResult process = saved
+            ? runProcess(
+                  QDir(projectRoot).filePath(
+                      QStringLiteral(
+                          "packages/finepaper-noc-v3/runtime/bin/generate")),
+                  QStringList{
+                      QStringLiteral("validate"),
+                      QStringLiteral("--design"),
+                      designPath,
+                      QStringLiteral("--result"),
+                      resultPath
+                  },
+                  unsafeRuntimeRun.path(),
+                  30'000)
+            : ProcessResult{};
+        const JsonObjectLoadResult result = loadJsonObject(resultPath);
+        const QJsonArray diagnostics = result.object.value(
+            QStringLiteral("diagnostics")).toArray();
+        const QJsonObject diagnostic = diagnostics.isEmpty()
+            ? QJsonObject{}
+            : diagnostics.at(0).toObject();
+        check(saved
+                  && process.started
+                  && process.exitCode != 0
+                  && result.success
+                  && diagnostic.value(QStringLiteral("code")).toString()
+                      == QStringLiteral("realization.unsupported_recipe")
+                  && diagnostic.value(QStringLiteral("path")).toString()
+                         .startsWith(QStringLiteral("/constraints/meshCrossings/")),
+              QStringLiteral(
+                  "V3 runtime preserves structured Domain realization code and path across its process boundary"));
+    }
 
     QTemporaryDir strictDomainRun(
         QStringLiteral("/tmp/finepaper-domain-strict-fields-XXXXXX"));

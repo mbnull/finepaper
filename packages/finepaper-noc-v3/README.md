@@ -12,6 +12,13 @@ topology fixed to a rectangular Mesh.
   payload is broadcast. This is the hardware foundation for per-edge Domain
   bridges; it is intentionally not presented as a complete routing or
   virtual-channel implementation.
+- Domain configuration remains data-driven: users may create, rename, edit,
+  relate, and assign any instances allowed by this Package's `domainTypes`.
+  `runtime/domain-realization.json` separately declares how every supported
+  type, property, relation, and crossing policy lowers to implementation
+  roles and recipes. Validate and Generate both compile that contract and
+  fail closed on an unmapped value; product ids are not branched on in Core or
+  Application.
 - `clock` and `power` are ordinary Package-declared Domain types. Finepaper
   Core has no special branch for either name.
 - `router.microarchitecture` provides sparse per-Router overrides for routing
@@ -34,10 +41,14 @@ topology fixed to a rectangular Mesh.
   the canonical Mesh/attachment orientation, not a single traffic channel.
   Changing Domain intent therefore changes a runtime-produced constraints
   artifact instead of merely changing the copied Design intent.
+- Validate and Generate additionally compile those constraints through the
+  Package-owned realization mapping. Generation emits the deterministic
+  `<design>_domain_implementation.json` typed plan, including Domain/entity
+  bindings, derived relations, stage ordering, bidirectional CDC/isolation,
+  and resolved per-direction voltage translation.
 - The current legacy RTL backend does not yet instantiate CDC, isolation, or
-  level-shifting cells from this artifact. A downstream IP Engine may consume
-  it; direct RTL realization is the next implementation stage and is not
-  implied by the capability booleans alone.
+  level-shifting cells from the typed plan. Direct RTL realization is the next
+  implementation stage and is not implied by the capability booleans alone.
 - `<design>_design_intent.json` is retained as a compatibility/debug snapshot;
   it is not the Domain implementation contract.
 - `runtimeCapabilities.domainConfiguration` declares complete consumption of

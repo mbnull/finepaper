@@ -36,6 +36,8 @@ xmake build finepaper-gui-smoke
 ./build/linux/x86_64/release/finepaper package list --package-root packages --json
 ./build/linux/x86_64/release/finepaper run examples/mesh-2x2.request.json \
   --package-root packages --output /tmp/finepaper-output --json
+./build/linux/x86_64/release/finepaper run examples/domain-crossing-2x2.request.json \
+  --package-root packages --output /tmp/finepaper-domain-output --json
 ./build/linux/x86_64/release/finepaper-gui --package-root packages
 xmake test
 ```
@@ -49,9 +51,10 @@ Every generation creates a separate `runs/op-*` directory below the chosen
 output root. The input design is copied and normalized there; the generator may
 not modify the original design.
 
-The bundled V3 Package also emits a deterministic
-`*_domain_constraints.json` artifact compiled from Package-defined Domain
-intent and Mesh-derived crossings. It is currently an explicit downstream
-constraint handoff; the legacy RTL backend does not yet instantiate CDC or
-power-crossing cells from it. Router creation, deletion and arbitrary Router
-rewiring remain outside the product boundary.
+The bundled V3 Package emits deterministic `*_domain_constraints.json` and
+`*_domain_implementation.json` artifacts. The first derives physical Mesh
+crossings from Package-defined intent; the second strictly lowers them through
+the Package-owned typed realization mapping. The legacy RTL now has a complete
+payload/valid/ready link contract, while direct CDC and power-crossing
+materialization remains the next stage. Router creation, deletion and arbitrary
+Router rewiring remain outside the product boundary.

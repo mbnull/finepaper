@@ -1,0 +1,116 @@
+{
+  "name": "domain_crossing_mesh",
+  "package": { "id": "finepaper.noc", "version": "3.0.0" },
+  "topology": { "type": "mesh", "rows": 2, "columns": 2 },
+  "endpoints": [
+    { "id": "cpu0", "type": "master", "router": [0, 0] },
+    { "id": "memory", "type": "slave", "router": [1, 1] }
+  ],
+  "domainConfiguration": {
+    "domains": [
+      {
+        "id": "clock-core",
+        "type": "clock",
+        "name": "Core clock",
+        "properties": { "frequencyMHz": 1000 }
+      },
+      {
+        "id": "clock-io",
+        "type": "clock",
+        "name": "I/O clock",
+        "properties": { "frequencyMHz": 500 }
+      },
+      {
+        "id": "power-core",
+        "type": "power",
+        "name": "Core supply",
+        "properties": { "voltageMv": 900, "retention": false }
+      },
+      {
+        "id": "power-io",
+        "type": "power",
+        "name": "I/O supply",
+        "properties": { "voltageMv": 750, "retention": true }
+      }
+    ],
+    "domainMemberships": [
+      {
+        "element": { "kind": "router", "id": "r-0-0" },
+        "assignments": {
+          "clock": ["clock-core"],
+          "power": ["power-core"]
+        }
+      },
+      {
+        "element": { "kind": "router", "id": "r-0-1" },
+        "assignments": {
+          "clock": ["clock-core"],
+          "power": ["power-core"]
+        }
+      },
+      {
+        "element": { "kind": "router", "id": "r-1-0" },
+        "assignments": {
+          "clock": ["clock-io"],
+          "power": ["power-io"]
+        }
+      },
+      {
+        "element": { "kind": "router", "id": "r-1-1" },
+        "assignments": {
+          "clock": ["clock-io"],
+          "power": ["power-io"]
+        }
+      },
+      {
+        "element": { "kind": "endpoint", "id": "cpu0" },
+        "assignments": {
+          "clock": ["clock-core"],
+          "power": ["power-core"]
+        }
+      },
+      {
+        "element": { "kind": "endpoint", "id": "memory" },
+        "assignments": {
+          "clock": ["clock-io"],
+          "power": ["power-io"]
+        }
+      }
+    ],
+    "domainRelations": [
+      {
+        "type": "derived-from",
+        "from": "clock-io",
+        "to": "clock-core",
+        "properties": { "divider": 2 }
+      }
+    ],
+    "crossingPolicies": [
+      {
+        "id": "clock-core-to-io",
+        "domainType": "clock",
+        "from": "clock-core",
+        "to": "clock-io",
+        "properties": {
+          "implementation": "async-fifo",
+          "synchronizerStages": 3
+        }
+      },
+      {
+        "id": "power-core-to-io",
+        "domainType": "power",
+        "from": "power-core",
+        "to": "power-io",
+        "properties": { "isolation": true, "levelShift": "auto" }
+      }
+    ],
+    "edgeOverrides": [
+      {
+        "edge": { "kind": "router-link", "id": "link-r-0-0--r-1-0" },
+        "domainType": "power",
+        "policy": "power-core-to-io",
+        "properties": { "isolation": false }
+      }
+    ]
+  }
+}

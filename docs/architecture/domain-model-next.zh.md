@@ -465,6 +465,8 @@ V2 -> V3 迁移同样是显式操作：保留五组 Domain 数据，加入空 `e
 6. clock/power 示例 Package 的 create -> validate -> generate 纵向闭环；
 7. 再接复杂 Package/IP Engine，验证厂商 Domain DRC 和实现映射。
 
+其中“纵向闭环”分成两个可验证阶段：先把 normalized Design 与派生 Mesh crossing 编译为 Package-owned typed implementation plan，再由 RTL/约束 renderer 逐项物化。前一阶段的输出必须包含 Domain/实体绑定、关系、每条物理边的有序 stage、正反向参数与策略来源；后一阶段必须回报每个 stage 的实际 artifact/hierarchy evidence。仅复制 Design 或只输出 crossing constraints 都不能声称已经实现 CDC/电源意图。
+
 ## 11. 复杂 NoC 参考带来的能力要求
 
 对 `/home/bnl/dev/some_else/ipcore` 的只读检查表明，复杂交付会同时记录 Router 的 clock、DTC、DN 等归属，在跨 clock Domain 的 Link 上配置同步/异步实现，并提供独立图层与分领域 DRC。Finepaper 因此需要通用的多 Domain、分层可视化、结构化诊断和进程外 Engine 边界。
@@ -488,3 +490,5 @@ V2 -> V3 迁移同样是显式操作：保留五组 Domain 数据，加入空 `e
 - 根据特定 Package ID 改变通用编辑行为的例外路径。
 
 这些产品语义只能由 Package schema、Package Validator/Generator 或 IP Engine 拥有。bundled `finepaper-noc` runtime 中的参数映射可以是该 Package 的显式适配代码，因为它已经离开公共 Application 边界；如果多个 Package 反复出现同一映射，再把它提升为有版本的公共 schema，而不是先在 Application 中加临时分支。
+
+bundled V3 Package 使用有版本的 `runtime/domain-realization.json` 声明这种适配。通用 realizer 只理解 role、typed binding、recipe kind、selector、stage order 和来源核对，不包含 `clock`、`power` 或具体属性 ID 分支。Package 新增自定义 Domain Type 时可以任意扩展编辑 schema，但若未同时给出完整 realization mapping，Validate/Generate 必须失败关闭；不能静默忽略为“只影响 UI”。生成的 `*_domain_implementation.json` 是确定性实现计划和后续 renderer 的输入，不等同于已经生成的 CDC、UPF 或 SDC。

@@ -48,6 +48,11 @@ int main(int argc, char** argv) {
         projectRoot,
         QStringLiteral(
             "packages/finepaper-noc-v3/runtime/test/test_link_bundle.rb"));
+    runRubyTest(
+        ruby,
+        projectRoot,
+        QStringLiteral(
+            "packages/finepaper-noc-v3/runtime/test/test_domain_realizer.rb"));
 
     if (failures == 0) {
         QTextStream(stdout) << "finepaper-v3-runtime-tests passed" << Qt::endl;

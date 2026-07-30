@@ -1,0 +1,158 @@
+{
+  "format": "finepaper.noc-domain-realization",
+  "formatVersion": 1,
+  "inputs": {
+    "normalizedDesign": {
+      "format": "finepaper.noc-design",
+      "formatVersions": [3]
+    },
+    "compiledConstraints": {
+      "format": "finepaper.noc-domain-constraints",
+      "formatVersion": 1,
+      "boundarySemantics": {
+        "scope": "bidirectional-physical-edge",
+        "policyOrientation": "canonical-edge-endpoints",
+        "routerLinkOrientation": "west-to-east-or-north-to-south",
+        "endpointAttachmentOrientation": "router-to-endpoint"
+      }
+    }
+  },
+  "plan": {
+    "format": "finepaper.noc-domain-implementation-plan",
+    "formatVersion": 1
+  },
+  "recipes": {
+    "clock-async-fifo": {
+      "kind": "bidirectional-stage"
+    },
+    "clock-multibit-synchronizer": {
+      "kind": "unsupported",
+      "reason": "A plain bit synchronizer cannot safely transfer the multi-bit flit bundle"
+    },
+    "power-isolation": {
+      "kind": "bidirectional-stage"
+    },
+    "power-level-shifter": {
+      "kind": "directional-stage"
+    },
+    "derived-clock-divider": {
+      "kind": "divide-source-binding"
+    }
+  },
+  "domainTypes": [
+    {
+      "type": "clock",
+      "role": "timing-domain",
+      "bindings": [
+        {
+          "name": "nominal-frequency-mhz",
+          "property": "frequencyMHz",
+          "type": "number",
+          "minimum": 1
+        }
+      ],
+      "relations": [
+        {
+          "type": "derived-from",
+          "role": "derived-timing-source",
+          "recipe": "derived-clock-divider",
+          "sourceEndpoint": "to",
+          "targetEndpoint": "from",
+          "sourceBinding": "nominal-frequency-mhz",
+          "targetBinding": "nominal-frequency-mhz",
+          "ratioParameter": "division-ratio",
+          "parameters": [
+            {
+              "name": "division-ratio",
+              "property": "divider",
+              "type": "integer",
+              "minimum": 1
+            }
+          ]
+        }
+      ],
+      "crossingStages": [
+        {
+          "order": 100,
+          "role": "timing-boundary",
+          "selector": {
+            "property": "implementation",
+            "type": "enum",
+            "recipes": {
+              "async-fifo": "clock-async-fifo",
+              "synchronizer": "clock-multibit-synchronizer"
+            }
+          },
+          "parameters": [
+            {
+              "name": "metastability-stages",
+              "property": "synchronizerStages",
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "power",
+      "role": "supply-domain",
+      "bindings": [
+        {
+          "name": "nominal-voltage-mv",
+          "property": "voltageMv",
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "name": "retains-state",
+          "property": "retention",
+          "type": "boolean"
+        }
+      ],
+      "relations": [],
+      "crossingStages": [
+        {
+          "order": 200,
+          "role": "power-isolation-boundary",
+          "recipe": "power-isolation",
+          "when": {
+            "property": "isolation",
+            "type": "boolean",
+            "equals": true
+          },
+          "parameters": []
+        },
+        {
+          "order": 300,
+          "role": "voltage-translation-boundary",
+          "selector": {
+            "property": "levelShift",
+            "type": "enum",
+            "recipes": {
+              "none": null,
+              "up": "power-level-shifter",
+              "down": "power-level-shifter"
+            },
+            "automatic": {
+              "value": "auto",
+              "resolver": "compare-endpoint-binding",
+              "binding": "nominal-voltage-mv",
+              "fromGreater": "down",
+              "fromLess": "up",
+              "equal": "none"
+            },
+            "reverse": {
+              "none": "none",
+              "up": "down",
+              "down": "up"
+            },
+            "directionParameter": "translation-direction"
+          },
+          "parameters": []
+        }
+      ]
+    }
+  ]
+}
