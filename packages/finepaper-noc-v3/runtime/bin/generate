@@ -1,7 +1,701 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Keep the executable inside this Package root while sharing the maintained
-# generator implementation with the compatible V1 Package.
-runtime = File.expand_path('../../../finepaper-noc/runtime/bin/generate', __dir__)
-exec(runtime, *ARGV)
+# The Finepaper Package process contract is intentionally small. This adapter
+# translates the NocDesign passed by Finepaper into the legacy generator input;
+# Core never needs to know about that graph schema or its DRC classes.
+
+require 'fileutils'
+require 'json'
+require 'open3'
+require 'optparse'
+require 'tmpdir'
+
+HDL_IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_]*\z/
+DOMAIN_ELEMENT_KINDS = %w[router endpoint].freeze
+DOMAIN_EDGE_KINDS = %w[router-link endpoint-attachment].freeze
+
+def write_result(path, success:, artifacts: [], diagnostics: [])
+  FileUtils.mkdir_p(File.dirname(path))
+  File.write(path, JSON.pretty_generate(
+                     'success' => success,
+                     'artifacts' => artifacts,
+                     'diagnostics' => diagnostics
+                   ) + "\n")
+end
+
+def fail_operation(message, result_path)
+  warn "error: #{message}"
+  write_result(result_path,
+               success: false,
+               diagnostics: [{
+                 'severity' => 'error',
+                 'code' => 'finepaper_noc.adapter_failed',
+                 'message' => message,
+                 'source' => 'finepaper.noc'
+               }]) if result_path
+  exit 1
+end
+
+# Finepaper validates Package parameters and materializes their defaults before
+# invoking a Package process. Keep this boundary strict so the adapter never
+# carries a second, drifting copy of defaults from package.json.
+def required_parameter(values, id, owner)
+  raise "#{owner} parameters must be an object" unless values.is_a?(Hash)
+  raise "#{owner} parameter #{id} is required" unless values.key?(id)
+
+  values[id]
+end
+
+def required_integer_parameter(values, id, owner)
+  value = required_parameter(values, id, owner)
+  raise "#{owner} parameter #{id} must be an integer" unless value.is_a?(Integer)
+
+  value
+end
+
+def required_string_parameter(values, id, owner)
+  value = required_parameter(values, id, owner)
+  unless value.is_a?(String) && !value.empty?
+    raise "#{owner} parameter #{id} must be a non-empty string"
+  end
+
+  value
+end
+
+def required_boolean_parameter(values, id, owner)
+  value = required_parameter(values, id, owner)
+  unless value == true || value == false
+    raise "#{owner} parameter #{id} must be a boolean"
+  end
+
+  value
+end
+
+def require_hdl_identifier(value, description)
+  unless value.is_a?(String) && value.match?(HDL_IDENTIFIER)
+    raise "#{description} must be a Verilog identifier ([A-Za-z_][A-Za-z0-9_]*)"
+  end
+
+  value
+end
+
+def required_array(object, key, owner)
+  raise "#{owner} must be an object" unless object.is_a?(Hash)
+  raise "#{owner}.#{key} is required" unless object.key?(key)
+
+  value = object[key]
+  raise "#{owner}.#{key} must be an array" unless value.is_a?(Array)
+
+  value
+end
+
+def required_object(object, key, owner)
+  raise "#{owner} must be an object" unless object.is_a?(Hash)
+  raise "#{owner}.#{key} is required" unless object.key?(key)
+
+  value = object[key]
+  raise "#{owner}.#{key} must be an object" unless value.is_a?(Hash)
+
+  value
+end
+
+def required_non_empty_string(object, key, owner)
+  raise "#{owner} must be an object" unless object.is_a?(Hash)
+  raise "#{owner}.#{key} is required" unless object.key?(key)
+
+  value = object[key]
+  unless value.is_a?(String) && !value.strip.empty?
+    raise "#{owner}.#{key} must be a non-empty string"
+  end
+
+  value
+end
+
+def canonical_json(value)
+  case value
+  when Hash
+    value.keys.sort.each_with_object({}) do |key, result|
+      result[key] = canonical_json(value.fetch(key))
+    end
+  when Array
+    value.map { |element| canonical_json(element) }
+  else
+    value
+  end
+end
+
+def element_reference(value, owner, allowed_kinds)
+  raise "#{owner} must be an object" unless value.is_a?(Hash)
+
+  kind = required_non_empty_string(value, 'kind', owner)
+  id = required_non_empty_string(value, 'id', owner)
+  unless allowed_kinds.include?(kind)
+    raise "#{owner}.kind must be one of #{allowed_kinds.join(', ')}"
+  end
+
+  {'kind' => kind, 'id' => id}
+end
+
+def element_reference_key(reference)
+  "#{reference.fetch('kind')}\u001f#{reference.fetch('id')}"
+end
+
+def crossing_policy_pair_key(domain_type, from, to)
+  "#{domain_type}\u001f#{from}\u001f#{to}"
+end
+
+def domain_edge_key(edge, domain_type)
+  "#{element_reference_key(edge)}\u001f#{domain_type}"
+end
+
+def sorted_element_references(references)
+  references.sort_by { |reference| [reference.fetch('kind'), reference.fetch('id')] }
+end
+
+def mesh_domain_graph(design, rows, columns)
+  elements = {}
+  edges = []
+
+  rows.times do |y|
+    columns.times do |x|
+      router = {'kind' => 'router', 'id' => "r-#{x}-#{y}"}
+      elements[element_reference_key(router)] = router
+      if x + 1 < columns
+        east = {'kind' => 'router', 'id' => "r-#{x + 1}-#{y}"}
+        edges << {
+          'edge' => {
+            'kind' => 'router-link',
+            'id' => "link-#{router.fetch('id')}--#{east.fetch('id')}"
+          },
+          'fromElement' => router,
+          'toElement' => east
+        }
+      end
+      if y + 1 < rows
+        south = {'kind' => 'router', 'id' => "r-#{x}-#{y + 1}"}
+        edges << {
+          'edge' => {
+            'kind' => 'router-link',
+            'id' => "link-#{router.fetch('id')}--#{south.fetch('id')}"
+          },
+          'fromElement' => router,
+          'toElement' => south
+        }
+      end
+    end
+  end
+
+  endpoint_ids = {}
+  required_array(design, 'endpoints', 'design').each_with_index do |endpoint, index|
+    owner = "design.endpoints[#{index}]"
+    raise "#{owner} must be an object" unless endpoint.is_a?(Hash)
+
+    id = required_non_empty_string(endpoint, 'id', owner)
+    raise "duplicate endpoint id #{id}" if endpoint_ids.key?(id)
+
+    endpoint_ids[id] = true
+    endpoint_reference = {'kind' => 'endpoint', 'id' => id}
+    elements[element_reference_key(endpoint_reference)] = endpoint_reference
+    attachment = required_object(endpoint, 'attachment', owner)
+    router = required_object(attachment, 'router', "#{owner}.attachment")
+    x = router['x']
+    y = router['y']
+    unless x.is_a?(Integer) && y.is_a?(Integer) &&
+           x.between?(0, columns - 1) && y.between?(0, rows - 1)
+      raise "endpoint #{id} attaches outside the mesh"
+    end
+    router_reference = {'kind' => 'router', 'id' => "r-#{x}-#{y}"}
+    edges << {
+      'edge' => {'kind' => 'endpoint-attachment', 'id' => id},
+      'fromElement' => router_reference,
+      'toElement' => endpoint_reference
+    }
+  end
+
+  edge_map = edges.each_with_object({}) do |edge, result|
+    result[element_reference_key(edge.fetch('edge'))] = edge
+  end
+  [elements, edges, edge_map]
+end
+
+# Compile the editable Domain model into deterministic implementation
+# constraints. This deliberately derives Mesh crossings instead of copying the
+# Design document, so validation and generation share the same executable
+# interpretation of Domain membership, policies, and overrides.
+def domain_constraints(design, rows, columns)
+  format_version = design.fetch('formatVersion')
+  raise 'design formatVersion must be an integer' unless format_version.is_a?(Integer)
+  unless format_version.between?(1, 3)
+    raise 'design formatVersion must be between 1 and 3'
+  end
+  return nil if format_version == 1
+
+  elements, edges, edge_map = mesh_domain_graph(design, rows, columns)
+
+  domains = required_array(design, 'domains', 'design').map.with_index do |domain, index|
+    owner = "design.domains[#{index}]"
+    raise "#{owner} must be an object" unless domain.is_a?(Hash)
+
+    {
+      'id' => required_non_empty_string(domain, 'id', owner),
+      'type' => required_non_empty_string(domain, 'type', owner),
+      'name' => required_non_empty_string(domain, 'name', owner),
+      'properties' => canonical_json(required_object(domain, 'properties', owner))
+    }
+  end
+  domains_by_id = {}
+  domains.each do |domain|
+    id = domain.fetch('id')
+    raise "duplicate Domain id #{id}" if domains_by_id.key?(id)
+
+    domains_by_id[id] = domain
+  end
+
+  assignments_by_element = {}
+  members_by_domain = Hash.new { |map, key| map[key] = [] }
+  members = required_array(design, 'domainMemberships', 'design').map.with_index do |membership, index|
+    owner = "design.domainMemberships[#{index}]"
+    raise "#{owner} must be an object" unless membership.is_a?(Hash)
+
+    element = element_reference(membership['element'], "#{owner}.element", DOMAIN_ELEMENT_KINDS)
+    reference_key = element_reference_key(element)
+    raise "#{owner}.element references an unknown Mesh element" unless elements.key?(reference_key)
+    raise "duplicate Domain membership for #{element.fetch('kind')} #{element.fetch('id')}" if assignments_by_element.key?(reference_key)
+
+    assignments = required_object(membership, 'assignments', owner)
+    raise "#{owner}.assignments must not be empty" if assignments.empty?
+
+    normalized_assignments = assignments.keys.sort.each_with_object({}) do |domain_type, result|
+      unless domain_type.is_a?(String) && !domain_type.strip.empty?
+        raise "#{owner}.assignments keys must be non-empty strings"
+      end
+      domain_ids = assignments.fetch(domain_type)
+      raise "#{owner}.assignments.#{domain_type} must be an array" unless domain_ids.is_a?(Array)
+      raise "#{owner}.assignments.#{domain_type} must not be empty" if domain_ids.empty?
+      valid_domain_ids = domain_ids.all? do |domain_id|
+        domain_id.is_a?(String) && !domain_id.strip.empty?
+      end
+      unless valid_domain_ids
+        raise "#{owner}.assignments.#{domain_type} must contain non-empty Domain ids"
+      end
+
+      normalized_ids = domain_ids.sort
+      if normalized_ids.uniq.size != normalized_ids.size
+        raise "#{owner}.assignments.#{domain_type} contains duplicate Domain ids"
+      end
+      normalized_ids.each do |domain_id|
+        domain = domains_by_id[domain_id]
+        raise "#{owner} references unknown Domain #{domain_id}" unless domain
+        if domain.fetch('type') != domain_type
+          raise "#{owner} assigns Domain #{domain_id} under the wrong type #{domain_type}"
+        end
+        members_by_domain[domain_id] << element
+      end
+      result[domain_type] = normalized_ids
+    end
+    assignments_by_element[reference_key] = normalized_assignments
+    {'element' => element, 'assignments' => normalized_assignments}
+  end
+
+  relations = required_array(design, 'domainRelations', 'design').map.with_index do |relation, index|
+    owner = "design.domainRelations[#{index}]"
+    raise "#{owner} must be an object" unless relation.is_a?(Hash)
+
+    type = required_non_empty_string(relation, 'type', owner)
+    from = required_non_empty_string(relation, 'from', owner)
+    to = required_non_empty_string(relation, 'to', owner)
+    raise "#{owner}.from references unknown Domain #{from}" unless domains_by_id.key?(from)
+    raise "#{owner}.to references unknown Domain #{to}" unless domains_by_id.key?(to)
+    {
+      'type' => type,
+      'from' => from,
+      'to' => to,
+      'properties' => canonical_json(required_object(relation, 'properties', owner))
+    }
+  end
+  relation_keys = {}
+  relations.each do |relation|
+    key = [relation.fetch('type'), relation.fetch('from'), relation.fetch('to')]
+    raise "duplicate Domain relation #{key.join(' ')}" if relation_keys.key?(key)
+
+    relation_keys[key] = true
+  end
+
+  policies_by_id = {}
+  policies_by_pair = {}
+  policies = required_array(design, 'crossingPolicies', 'design').map.with_index do |policy, index|
+    owner = "design.crossingPolicies[#{index}]"
+    raise "#{owner} must be an object" unless policy.is_a?(Hash)
+
+    normalized = {
+      'id' => required_non_empty_string(policy, 'id', owner),
+      'domainType' => required_non_empty_string(policy, 'domainType', owner),
+      'from' => required_non_empty_string(policy, 'from', owner),
+      'to' => required_non_empty_string(policy, 'to', owner),
+      'properties' => canonical_json(required_object(policy, 'properties', owner))
+    }
+    id = normalized.fetch('id')
+    domain_type = normalized.fetch('domainType')
+    from_domain = domains_by_id[normalized.fetch('from')]
+    to_domain = domains_by_id[normalized.fetch('to')]
+    raise "#{owner}.from references an unknown Domain" unless from_domain
+    raise "#{owner}.to references an unknown Domain" unless to_domain
+    unless from_domain.fetch('type') == domain_type && to_domain.fetch('type') == domain_type
+      raise "#{owner} endpoints must both have Domain type #{domain_type}"
+    end
+    raise "duplicate Domain crossing policy id #{id}" if policies_by_id.key?(id)
+
+    pair_key = crossing_policy_pair_key(
+      domain_type, normalized.fetch('from'), normalized.fetch('to')
+    )
+    raise "duplicate Domain crossing policy for #{domain_type} #{normalized.fetch('from')} -> #{normalized.fetch('to')}" if policies_by_pair.key?(pair_key)
+
+    policies_by_id[id] = normalized
+    policies_by_pair[pair_key] = normalized
+    normalized
+  end
+
+  overrides_by_edge = {}
+  overrides = required_array(design, 'edgeOverrides', 'design').map.with_index do |override, index|
+    owner = "design.edgeOverrides[#{index}]"
+    raise "#{owner} must be an object" unless override.is_a?(Hash)
+
+    edge = element_reference(override['edge'], "#{owner}.edge", DOMAIN_EDGE_KINDS)
+    raise "#{owner}.edge references an unknown Mesh edge" unless edge_map.key?(element_reference_key(edge))
+    normalized = {
+      'edge' => edge,
+      'domainType' => required_non_empty_string(override, 'domainType', owner),
+      'policy' => required_non_empty_string(override, 'policy', owner),
+      'properties' => canonical_json(required_object(override, 'properties', owner))
+    }
+    policy = policies_by_id[normalized.fetch('policy')]
+    raise "#{owner}.policy references an unknown crossing policy" unless policy
+    if policy.fetch('domainType') != normalized.fetch('domainType')
+      raise "#{owner}.policy has the wrong Domain type"
+    end
+    key = domain_edge_key(edge, normalized.fetch('domainType'))
+    raise "duplicate Domain edge override for #{edge.fetch('id')} #{normalized.fetch('domainType')}" if overrides_by_edge.key?(key)
+
+    overrides_by_edge[key] = normalized
+    normalized
+  end
+
+  used_overrides = {}
+  crossings = []
+  edges.each do |mesh_edge|
+    from_assignments = assignments_by_element.fetch(
+      element_reference_key(mesh_edge.fetch('fromElement')), {}
+    )
+    to_assignments = assignments_by_element.fetch(
+      element_reference_key(mesh_edge.fetch('toElement')), {}
+    )
+    (from_assignments.keys | to_assignments.keys).sort.each do |domain_type|
+      from_domains = from_assignments.fetch(domain_type, [])
+      to_domains = to_assignments.fetch(domain_type, [])
+      next if from_domains == to_domains
+
+      unless from_domains.size == 1 && to_domains.size == 1
+        raise "Mesh crossing #{mesh_edge.dig('edge', 'id')} for #{domain_type} must have exactly one Domain on each side"
+      end
+      from_domain = from_domains.first
+      to_domain = to_domains.first
+      override_key = domain_edge_key(mesh_edge.fetch('edge'), domain_type)
+      override = overrides_by_edge[override_key]
+      policy = if override
+                 used_overrides[override_key] = true
+                 policies_by_id.fetch(override.fetch('policy'))
+               else
+                 policies_by_pair[crossing_policy_pair_key(domain_type, from_domain, to_domain)]
+               end
+      unless policy
+        raise "Mesh crossing #{mesh_edge.dig('edge', 'id')} for #{domain_type} has no policy for #{from_domain} -> #{to_domain}"
+      end
+      unless policy.fetch('from') == from_domain && policy.fetch('to') == to_domain
+        raise "Mesh crossing #{mesh_edge.dig('edge', 'id')} override policy #{policy.fetch('id')} does not match #{from_domain} -> #{to_domain}"
+      end
+
+      override_properties = override ? override.fetch('properties') : {}
+      crossings << {
+        'edge' => mesh_edge.fetch('edge'),
+        'fromElement' => mesh_edge.fetch('fromElement'),
+        'toElement' => mesh_edge.fetch('toElement'),
+        'domainType' => domain_type,
+        'fromDomains' => from_domains,
+        'toDomains' => to_domains,
+        'resolution' => {
+          'source' => override ? 'override' : 'policy',
+          'policy' => policy.fetch('id'),
+          'policyProperties' => policy.fetch('properties'),
+          'overrideProperties' => override_properties,
+          'effectiveProperties' => canonical_json(
+            policy.fetch('properties').merge(override_properties)
+          )
+        }
+      }
+    end
+  end
+  unused_override = overrides_by_edge.keys.find { |key| !used_overrides.key?(key) }
+  if unused_override
+    override = overrides_by_edge.fetch(unused_override)
+    raise "Domain edge override for #{override.dig('edge', 'id')} #{override.fetch('domainType')} does not target a Mesh crossing"
+  end
+
+  instances = domains.sort_by { |domain| [domain.fetch('type'), domain.fetch('id')] }.map do |domain|
+    domain.merge('members' => sorted_element_references(members_by_domain[domain.fetch('id')]))
+  end
+
+  canonical_json({
+    'format' => 'finepaper.noc-domain-constraints',
+    'formatVersion' => 1,
+    'design' => required_non_empty_string(design, 'id', 'design'),
+    'boundarySemantics' => {
+      'scope' => 'bidirectional-physical-edge',
+      'policyOrientation' => 'canonical-edge-endpoints',
+      'routerLinkOrientation' => 'west-to-east-or-north-to-south',
+      'endpointAttachmentOrientation' => 'router-to-endpoint'
+    },
+    'topology' => {
+      'type' => 'mesh',
+      'rows' => rows,
+      'columns' => columns
+    },
+    'instances' => instances,
+    'members' => members.sort_by do |membership|
+      element = membership.fetch('element')
+      [element.fetch('kind'), element.fetch('id')]
+    end,
+    'relations' => relations.sort_by do |relation|
+      [relation.fetch('type'), relation.fetch('from'), relation.fetch('to')]
+    end,
+    'policies' => policies.sort_by do |policy|
+      [policy.fetch('domainType'), policy.fetch('from'), policy.fetch('to'), policy.fetch('id')]
+    end,
+    'overrides' => overrides.sort_by do |override|
+      edge = override.fetch('edge')
+      [edge.fetch('kind'), edge.fetch('id'), override.fetch('domainType')]
+    end,
+    'meshCrossings' => crossings.sort_by do |crossing|
+      edge = crossing.fetch('edge')
+      [edge.fetch('kind'), edge.fetch('id'), crossing.fetch('domainType')]
+    end
+  })
+end
+
+def endpoint_slot_key(endpoint)
+  slot = endpoint.dig('attachment', 'slot').to_s
+  return [0, slot.to_i, endpoint.fetch('id')] if slot.match?(/\A\d+\z/)
+
+  [1, slot, endpoint.fetch('id')]
+end
+
+def router_configuration_map(design)
+  configurations = design.fetch('elementConfigurations', [])
+  raise 'elementConfigurations must be an array' unless configurations.is_a?(Array)
+
+  configurations.each_with_object({}) do |configuration, result|
+    next unless configuration.is_a?(Hash)
+    next unless configuration['propertySet'] == 'router.microarchitecture'
+
+    element = configuration['element']
+    next unless element.is_a?(Hash) && element['kind'] == 'router'
+
+    match = /\Ar-(\d+)-(\d+)\z/.match(element['id'].to_s)
+    raise "invalid Router id #{element['id']}" unless match
+
+    properties = configuration.fetch('properties', {})
+    raise 'Router element configuration properties must be an object' unless properties.is_a?(Hash)
+
+    mapped = {}
+    mapped['routing_algorithm'] = properties['routingAlgorithm'] if properties.key?('routingAlgorithm')
+    mapped['vc_count'] = properties['virtualChannels'] if properties.key?('virtualChannels')
+    mapped['buffer_depth'] = properties['bufferDepth'] if properties.key?('bufferDepth')
+    result["xp_#{match[1]}_#{match[2]}"] = mapped unless mapped.empty?
+  end
+end
+
+def legacy_input(design)
+  raise 'design format must be finepaper.noc-design' unless design['format'] == 'finepaper.noc-design'
+  raise 'only mesh topology is supported' unless design.dig('topology', 'type') == 'mesh'
+
+  rows = design.dig('topology', 'rows')
+  columns = design.dig('topology', 'columns')
+  unless rows.is_a?(Integer) && columns.is_a?(Integer) && rows.positive? && columns.positive?
+    raise 'mesh rows and columns must be positive integers'
+  end
+
+  parameters = design.fetch('parameters')
+  raise 'design parameters must be an object' unless parameters.is_a?(Hash)
+  endpoints = design.fetch('endpoints', [])
+  raise 'endpoints must be an array' unless endpoints.is_a?(Array)
+  design_id = require_hdl_identifier(design.fetch('id'), 'design id')
+
+  endpoint_map = Hash.new { |map, key| map[key] = [] }
+  endpoint_modules = endpoints.sort_by { |endpoint| endpoint.fetch('id') }.map do |endpoint|
+    id = require_hdl_identifier(endpoint.fetch('id'), 'endpoint id')
+    type = endpoint.fetch('type')
+    unless type.is_a?(String) && !type.empty?
+      raise "endpoint #{id} type must be a non-empty string"
+    end
+    endpoint_parameters = endpoint.fetch('parameters')
+    raise "endpoint #{id} parameters must be an object" unless endpoint_parameters.is_a?(Hash)
+    router = endpoint.dig('attachment', 'router')
+    raise "endpoint #{id} has no router attachment" unless router.is_a?(Hash)
+
+    x = router['x']
+    y = router['y']
+    unless x.is_a?(Integer) && y.is_a?(Integer) && x.between?(0, columns - 1) && y.between?(0, rows - 1)
+      raise "endpoint #{id} attaches outside the mesh"
+    end
+
+    endpoint_map["xp_#{x}_#{y}"] << endpoint
+    {
+      'id' => id,
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
+      'type' => 'Endpoint',
+      'parameters' => {
+        'type' => type,
+        'protocol' => required_string_parameter(
+          endpoint_parameters, 'protocol', "endpoint #{id}"
+        ),
+        'data_width' => required_integer_parameter(
+          endpoint_parameters, 'dataWidth', "endpoint #{id}"
+        ),
+        'buffer_depth' => required_integer_parameter(
+          endpoint_parameters, 'bufferDepth', "endpoint #{id}"
+        ),
+        'qos_enabled' => required_boolean_parameter(
+          endpoint_parameters, 'qosEnabled', "endpoint #{id}"
+        )
+      }
+    }
+  end
+
+  endpoint_map.transform_values! do |router_endpoints|
+    router_endpoints.sort_by { |endpoint| endpoint_slot_key(endpoint) }.map { |endpoint| endpoint.fetch('id') }
+  end
+  router_configs = router_configuration_map(design)
+
+  {
+    'schema' => 'finepaper-ipcore-graph-v1',
+    # The display name is intentionally not used as a file or HDL token.
+    'name' => design_id,
+    'ipcore' => 'finepaper.noc',
+    'instance' => 'noc_0',
+    'version' => design.dig('package', 'version') || '1.0.0',
+    'ipcore_state' => [{
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
+      'state' => {
+        'global_parameters' => {
+          'data_width' => required_integer_parameter(
+            parameters, 'dataWidth', 'design'
+          ),
+          'flit_width' => required_integer_parameter(
+            parameters, 'flitWidth', 'design'
+          ),
+          'addr_width' => required_integer_parameter(
+            parameters, 'addrWidth', 'design'
+          ),
+          'mesh' => {
+            'width' => columns,
+            'height' => rows,
+            'endpoint_map' => endpoint_map,
+            'router_configs' => router_configs
+          }
+        }
+      }
+    }],
+    'modules' => endpoint_modules,
+    'connections' => []
+  }
+end
+
+def artifact_list(output_dir, design_name)
+  files = Dir.glob(File.join(output_dir, '**', '*')).select { |path| File.file?(path) }.sort
+  files.map.with_index do |path, index|
+    relative = path.delete_prefix(output_dir + File::SEPARATOR)
+    type = if File.basename(path) == 'filelist.f'
+             'filelist'
+           elsif File.basename(path) == "#{design_name}_domain_constraints.json"
+             'constraints'
+           elsif %w[.v .sv].include?(File.extname(path).downcase)
+             'rtl'
+           else
+             'generated'
+           end
+    {
+      'id' => format('artifact-%03d', index + 1),
+      'type' => type,
+      'path' => relative,
+      'primary' => File.basename(path) == "#{design_name}_top.v"
+    }
+  end
+end
+
+options = {}
+parser = OptionParser.new do |opts|
+  opts.banner = 'Usage: generate (validate|generate) --design DESIGN --result RESULT [--output OUTPUT]'
+  opts.on('--design PATH') { |value| options[:design] = value }
+  opts.on('--output PATH') { |value| options[:output] = value }
+  opts.on('--result PATH') { |value| options[:result] = value }
+end
+
+command = ARGV.shift
+parser.parse!
+unless %w[validate generate].include?(command)
+  fail_operation('first argument must be validate or generate', options[:result])
+end
+fail_operation('--design is required', options[:result]) unless options[:design]
+fail_operation('--result is required', options[:result]) unless options[:result]
+fail_operation('--output is required for generate', options[:result]) if command == 'generate' && !options[:output]
+
+begin
+  design = JSON.parse(File.read(options[:design]))
+  translated_input = legacy_input(design)
+  compiled_domains = domain_constraints(
+    design,
+    design.dig('topology', 'rows'),
+    design.dig('topology', 'columns')
+  )
+  legacy_root = File.expand_path('../legacy-generator', __dir__)
+  legacy_program = File.join(legacy_root, 'bin', command == 'validate' ? 'drc' : 'generate')
+  raise 'legacy generator is missing from this Package' unless File.file?(legacy_program)
+
+  Dir.mktmpdir('finepaper-noc-adapter-') do |temporary_directory|
+    input_path = File.join(temporary_directory, 'legacy-input.json')
+    File.write(input_path, JSON.generate(translated_input))
+    arguments = ['ruby', legacy_program, '-i', input_path]
+    if command == 'generate'
+      FileUtils.mkdir_p(options[:output])
+      arguments.concat(['-o', File.expand_path(options[:output]), '-t', File.join(legacy_root, 'template')])
+    end
+    stdout, stderr, status = Open3.capture3(*arguments, chdir: legacy_root)
+    $stdout.write(stdout)
+    $stderr.write(stderr)
+    raise(stderr.strip.empty? ? "legacy #{command} failed" : stderr.strip) unless status.success?
+  end
+
+  design_id = require_hdl_identifier(design.fetch('id'), 'design id')
+  if command == 'generate'
+    intent_path = File.join(
+      File.expand_path(options[:output]),
+      "#{design_id}_design_intent.json"
+    )
+    File.write(intent_path, JSON.pretty_generate(design) + "\n")
+    if compiled_domains
+      constraints_path = File.join(
+        File.expand_path(options[:output]),
+        "#{design_id}_domain_constraints.json"
+      )
+      File.write(constraints_path, JSON.pretty_generate(compiled_domains) + "\n")
+    end
+  end
+  artifacts = command == 'generate' ? artifact_list(File.expand_path(options[:output]), design_id) : []
+  raise 'legacy generator did not produce any artifacts' if command == 'generate' && artifacts.empty?
+
+  write_result(options[:result], success: true, artifacts: artifacts)
+rescue StandardError => error
+  fail_operation(error.message, options[:result])
+end

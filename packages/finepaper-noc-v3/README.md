@@ -3,6 +3,9 @@
 This Package exposes the cumulative V3 editing model while keeping Router
 topology fixed to a rectangular Mesh.
 
+- The runtime is self-contained inside this Package root. Installing only
+  `finepaper.noc@3.0.0` is sufficient for validation and generation; it does
+  not locate or execute the V1 Package as a hidden sibling dependency.
 - `clock` and `power` are ordinary Package-declared Domain types. Finepaper
   Core has no special branch for either name.
 - `router.microarchitecture` provides sparse per-Router overrides for routing

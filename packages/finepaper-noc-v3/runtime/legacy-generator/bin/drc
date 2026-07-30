@@ -1,0 +1,26 @@
+#!/usr/bin/env ruby
+$LOAD_PATH.unshift File.join(__dir__, '..', 'src', 'ruby')
+
+require 'optparse'
+require 'parser/json_parser'
+require 'topology/topology_expander'
+require 'drc/drc_runner'
+
+options = {}
+OptionParser.new do |opts|
+  opts.on('-i INPUT') { |value| options[:input] = value }
+  opts.on('-o OUTPUT') { |value| options[:output] = value }
+end.parse!
+
+begin
+  noc = JsonParser.parse(options.fetch(:input))
+  noc = TopologyExpander.expand(noc)
+  DrcRunner.new.run(noc)
+  puts "DRC passed for #{noc.name}"
+rescue KeyError => error
+  warn "error: missing required option #{error.key}"
+  exit 1
+rescue StandardError => error
+  warn "error: #{error.message}"
+  exit 1
+end

@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -32,6 +33,36 @@ bool hasDiagnosticCode(const QVector<Diagnostic>& diagnostics, const QString& co
     return std::any_of(diagnostics.cbegin(), diagnostics.cend(), [&](const Diagnostic& diagnostic) {
         return diagnostic.code == code;
     });
+}
+
+bool copyDirectoryTree(const QString& sourcePath, const QString& destinationPath) {
+    const QDir source(sourcePath);
+    if (!source.exists() || !QDir().mkpath(destinationPath)) {
+        return false;
+    }
+
+    QDirIterator iterator(
+        sourcePath,
+        QDir::AllEntries | QDir::NoDotAndDotDot,
+        QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        const QString sourceEntry = iterator.next();
+        const QFileInfo sourceInfo(sourceEntry);
+        const QString relative = source.relativeFilePath(sourceEntry);
+        const QString destinationEntry = QDir(destinationPath).filePath(relative);
+        if (sourceInfo.isDir()) {
+            if (!QDir().mkpath(destinationEntry)) {
+                return false;
+            }
+            continue;
+        }
+        if (!QDir().mkpath(QFileInfo(destinationEntry).absolutePath())
+            || !QFile::copy(sourceEntry, destinationEntry)
+            || !QFile::setPermissions(destinationEntry, sourceInfo.permissions())) {
+            return false;
+        }
+    }
+    return true;
 }
 
 QJsonObject objectWithStringField(const QJsonArray& values,
@@ -622,6 +653,53 @@ int main(int argc, char** argv) {
                          QStringLiteral("meshCrossings")).toArray().isEmpty(),
               QStringLiteral(
                   "bundled V3 Generator consumes Router, Endpoint, and default Domain intent"));
+    }
+
+    QTemporaryDir hermeticV3Run(
+        QStringLiteral("/tmp/finepaper-hermetic-v3-test-XXXXXX"));
+    if (configurableCreated.success && hermeticV3Run.isValid()) {
+        const QString isolatedPackage = QDir(hermeticV3Run.path()).filePath(
+            QStringLiteral("finepaper-noc-v3"));
+        const QString designPath = QDir(hermeticV3Run.path()).filePath(
+            QStringLiteral("design.json"));
+        const QString resultPath = QDir(hermeticV3Run.path()).filePath(
+            QStringLiteral("result.json"));
+        const QString outputPath = QDir(hermeticV3Run.path()).filePath(
+            QStringLiteral("output"));
+        const bool copied = copyDirectoryTree(
+            QDir(projectRoot).filePath(
+                QStringLiteral("packages/finepaper-noc-v3")),
+            isolatedPackage);
+        const bool saved = saveDesign(designPath, configurableCreated.design);
+        const ProcessResult process = copied && saved
+            ? runProcess(
+                  QDir(isolatedPackage).filePath(
+                      QStringLiteral("runtime/bin/generate")),
+                  QStringList{
+                      QStringLiteral("generate"),
+                      QStringLiteral("--design"),
+                      designPath,
+                      QStringLiteral("--output"),
+                      outputPath,
+                      QStringLiteral("--result"),
+                      resultPath
+                  },
+                  hermeticV3Run.path(),
+                  30'000)
+            : ProcessResult{};
+        const JsonObjectLoadResult result = loadJsonObject(resultPath);
+        check(copied
+                  && saved
+                  && process.started
+                  && process.exitCode == 0
+                  && result.success
+                  && result.object.value(QStringLiteral("success")).toBool()
+                  && QFileInfo::exists(
+                      QDir(outputPath).filePath(
+                          QStringLiteral(
+                              "configurable_mesh_domain_constraints.json"))),
+              QStringLiteral(
+                  "bundled V3 Package validates and generates when installed without its V1 sibling"));
     }
 
     NocDesign crossingDesign;
