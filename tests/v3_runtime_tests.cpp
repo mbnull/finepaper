@@ -53,6 +53,21 @@ int main(int argc, char** argv) {
         projectRoot,
         QStringLiteral(
             "packages/finepaper-noc-v3/runtime/test/test_domain_realizer.rb"));
+    runRubyTest(
+        ruby,
+        projectRoot,
+        QStringLiteral(
+            "packages/finepaper-noc-v3/runtime/test/test_domain_rtl_context.rb"));
+    runRubyTest(
+        ruby,
+        projectRoot,
+        QStringLiteral(
+            "packages/finepaper-noc-v3/runtime/test/test_async_fifo.rb"));
+    runRubyTest(
+        ruby,
+        projectRoot,
+        QStringLiteral(
+            "packages/finepaper-noc-v3/runtime/test/test_reset_synchronizer.rb"));
 
     if (failures == 0) {
         QTextStream(stdout) << "finepaper-v3-runtime-tests passed" << Qt::endl;

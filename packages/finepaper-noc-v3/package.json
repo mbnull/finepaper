@@ -64,7 +64,8 @@
       ],
       "crossingProperties": [
         { "id": "implementation", "label": "CDC implementation", "description": "Circuit strategy for both traffic directions across this clock boundary", "category": "CDC", "type": "enum", "required": true, "default": "async-fifo", "values": ["async-fifo"] },
-        { "id": "synchronizerStages", "label": "Pointer synchronizer stages", "description": "Metastability filtering stages used to synchronize async FIFO pointers", "category": "CDC", "advanced": true, "type": "integer", "required": true, "default": 2, "minimum": 2, "maximum": 8 }
+        { "id": "synchronizerStages", "label": "Pointer synchronizer stages", "description": "Metastability filtering stages used to synchronize async FIFO pointers", "category": "CDC", "advanced": true, "type": "integer", "required": true, "default": 2, "minimum": 2, "maximum": 8 },
+        { "id": "fifoDepth", "label": "Async FIFO depth", "description": "Number of flit entries in each traffic direction; runtime realization requires a power of two", "category": "CDC", "advanced": true, "type": "integer", "required": false, "default": 4, "minimum": 2, "maximum": 1024 }
       ]
     },
     {

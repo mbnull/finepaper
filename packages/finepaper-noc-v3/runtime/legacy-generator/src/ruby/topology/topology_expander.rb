@@ -20,6 +20,7 @@ class TopologyExpander
         Connection.new(xp.id, nb.id, dir) if nb
       end
     end
-    NocConfig.new(noc.name, noc.version, noc.parameters, xps, conns, noc.endpoints)
+    NocConfig.new(noc.name, noc.version, noc.parameters, xps, conns,
+                  noc.endpoints, noc.domain_implementation)
   end
 end

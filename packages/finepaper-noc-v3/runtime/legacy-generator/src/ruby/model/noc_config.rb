@@ -1,13 +1,16 @@
 class NocConfig
-  attr_reader :name, :version, :parameters, :xps, :connections, :endpoints
+  attr_reader :name, :version, :parameters, :xps, :connections, :endpoints,
+              :domain_implementation
 
-  def initialize(name, version, parameters, xps, connections, endpoints)
+  def initialize(name, version, parameters, xps, connections, endpoints,
+                 domain_implementation = nil)
     @name = name
     @version = version
     @parameters = parameters
     @xps = xps
     @connections = connections
     @endpoints = endpoints
+    @domain_implementation = domain_implementation
   end
 
   def expose

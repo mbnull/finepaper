@@ -397,7 +397,7 @@ module FinepaperNoc
         entry_path = "#{path}/#{index}"
         entry = object!(value, entry_path)
         required = %w[name property type]
-        optional = %w[minimum maximum]
+        optional = %w[default minimum maximum powerOfTwo]
         exact_keys!(entry, required + optional.select { |key| entry.key?(key) }, entry_path)
         name = string!(entry['name'], "#{entry_path}/name")
         property = string!(entry['property'], "#{entry_path}/property")
@@ -420,6 +420,13 @@ module FinepaperNoc
                   'realization.invalid_value_bounds', entry_path,
                   'minimum must not exceed maximum')
         end
+        if entry.key?('powerOfTwo')
+          expect!(entry['powerOfTwo'] == true && type == 'integer',
+                  'realization.invalid_power_of_two_constraint', entry_path,
+                  'powerOfTwo is valid only as true on an integer mapping')
+        end
+        validate_value!(entry['default'], type, entry,
+                        "#{entry_path}/default") if entry.key?('default')
       end
     end
 
@@ -934,11 +941,10 @@ module FinepaperNoc
                 'crossing resolution differs from its policy and edge override')
         properties = object!(resolution['effectiveProperties'],
                              "#{path}/resolution/effectiveProperties")
-        consumed = crossing_property_ids(mapping)
-        expect!(properties.keys.sort == consumed.sort,
-                'realization.unconsumed_crossing_property',
-                "#{path}/resolution/effectiveProperties",
-                'crossing has missing or unmapped effective properties')
+        validate_crossing_property_bag!(
+          properties, mapping,
+          "#{path}/resolution/effectiveProperties", complete: true
+        )
         stages = mapping.fetch('crossingStages').filter_map do |stage|
           compile_stage(stage, properties, type, from_domain_id, to_domain_id,
                         from_domain, to_domain, resolution, path)
@@ -1077,10 +1083,6 @@ module FinepaperNoc
       automatic.fetch('equal')
     end
 
-    def crossing_property_ids(mapping)
-      crossing_property_declarations(mapping).keys
-    end
-
     def crossing_property_declarations(mapping)
       mapping.fetch('crossingStages').each_with_object({}) do |stage, result|
         declarations = stage.fetch('parameters').dup
@@ -1095,7 +1097,9 @@ module FinepaperNoc
     def validate_crossing_property_bag!(properties, mapping, path, complete:)
       declarations = crossing_property_declarations(mapping)
       unknown = properties.keys - declarations.keys
-      missing = declarations.keys - properties.keys
+      missing = declarations.reject do |property, declaration|
+        properties.key?(property) || declaration.key?('default')
+      end.keys
       expect!(unknown.empty?, 'realization.unmapped_crossing_property', path,
               "crossing property #{unknown.first} has no realization mapping")
       expect!(!complete || missing.empty?, 'realization.missing_crossing_property', path,
@@ -1116,24 +1120,29 @@ module FinepaperNoc
 
     def crossing_property!(properties, declaration, path)
       property = declaration.fetch('property')
-      expect!(properties.key?(property), 'realization.missing_crossing_property', path,
+      value = properties.key?(property) ? properties[property] : declaration['default']
+      expect!(!value.nil?, 'realization.missing_crossing_property', path,
               "crossing property #{property} is missing")
-      validate_value!(properties[property], declaration.fetch('type'), declaration,
+      validate_value!(value, declaration.fetch('type'), declaration,
                       "#{path}/#{property}")
-      properties[property]
+      value
     end
 
     def typed_values(properties, declarations, path, source_kind)
       declarations.each_with_object({}) do |declaration, result|
         property = declaration.fetch('property')
-        expect!(properties.key?(property), 'realization.missing_property', path,
+        has_property = properties.key?(property)
+        value = has_property ? properties[property] : declaration['default']
+        expect!(!value.nil?, 'realization.missing_property', path,
                 "property #{property} is missing")
-        value = properties[property]
         validate_value!(value, declaration.fetch('type'), declaration, "#{path}/#{property}")
         result[declaration.fetch('name')] = {
           'type' => declaration.fetch('type'),
           'value' => canonical_json(value),
-          'source' => {'kind' => source_kind, 'id' => property}
+          'source' => {
+            'kind' => has_property ? source_kind : 'realization-default',
+            'id' => property
+          }
         }
       end
     end
@@ -1155,6 +1164,11 @@ module FinepaperNoc
       if declaration.key?('maximum')
         expect!(value <= declaration['maximum'], 'realization.value_above_maximum', path,
                 "value is above #{declaration['maximum']}")
+      end
+      if declaration['powerOfTwo']
+        expect!(value.positive? && (value & (value - 1)).zero?,
+                'realization.value_not_power_of_two', path,
+                'value must be a positive power of two')
       end
       value
     end
@@ -1207,15 +1221,15 @@ module FinepaperNoc
     end
 
     def reference_key(reference)
-      "#{reference.fetch('kind')}\u001f#{reference.fetch('id')}"
+      [reference.fetch('kind'), reference.fetch('id')]
     end
 
     def edge_domain_key(edge, type)
-      "#{reference_key(edge)}\u001f#{type}"
+      [edge.fetch('kind'), edge.fetch('id'), type]
     end
 
     def policy_pair_key(type, from, to)
-      "#{type}\u001f#{from}\u001f#{to}"
+      [type, from, to]
     end
 
     def reference_sort_key(reference)

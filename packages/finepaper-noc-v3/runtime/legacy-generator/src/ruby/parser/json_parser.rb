@@ -502,11 +502,12 @@ class JsonParser
                   DEFAULTS.merge(ipcore_parameters(data)),
                   xps,
                   connections,
-                  endpoints)
+                  endpoints,
+                  ipcore_domain_implementation(data))
   end
 
   def self.noc_module_type?(mod, type)
-    mod.is_a?(Hash) && mod['ipcore'] == 'finepaper.noc' && mod['type'] == type
+    mod.is_a?(Hash) && mod['ipcore'] == FINEPAPER_NOC_PACKAGE && mod['type'] == type
   end
 
   def self.ipcore_parameters(data)
@@ -514,11 +515,22 @@ class JsonParser
     return data['parameters'] || {} unless ipcore_state.is_a?(Array)
 
     state_record = ipcore_state.find do |record|
-      record.is_a?(Hash) && record['ipcore'] == 'finepaper.noc'
+      record.is_a?(Hash) && record['ipcore'] == FINEPAPER_NOC_PACKAGE
     end
     state = state_record && state_record['state']
     parameters = state.is_a?(Hash) ? state['global_parameters'] : nil
     parameters.is_a?(Hash) ? parameters : (data['parameters'] || {})
+  end
+
+  def self.ipcore_domain_implementation(data)
+    ipcore_state = data['ipcore_state']
+    return nil unless ipcore_state.is_a?(Array)
+
+    state_record = ipcore_state.find do |record|
+      record.is_a?(Hash) && record['ipcore'] == FINEPAPER_NOC_PACKAGE
+    end
+    state = state_record && state_record['state']
+    state.is_a?(Hash) ? state['domain_implementation'] : nil
   end
 
   def self.parse_ipcore_xp(mod, endpoints)

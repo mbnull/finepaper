@@ -93,7 +93,8 @@
         "to": "clock-io",
         "properties": {
           "implementation": "async-fifo",
-          "synchronizerStages": 3
+          "synchronizerStages": 3,
+          "fifoDepth": 4
         }
       },
       {

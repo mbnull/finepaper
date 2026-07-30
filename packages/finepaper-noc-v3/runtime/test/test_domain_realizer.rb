@@ -49,6 +49,9 @@ class DomainRealizerTest < Minitest::Test
     assert_equal 3,
                  router_link.fetch('stages').fetch(0)
                             .dig('parameters', 'metastability-stages', 'value')
+    assert_equal 4,
+                 router_link.fetch('stages').fetch(0)
+                            .dig('parameters', 'fifo-depth', 'value')
 
     translation = router_link.fetch('stages').fetch(2)
     assert_equal %w[from-to to-from],
@@ -85,6 +88,34 @@ class DomainRealizerTest < Minitest::Test
       design: reordered_design
     )
     assert_equal JSON.generate(expected), JSON.generate(actual)
+  end
+
+  def test_optional_fifo_depth_uses_manifest_default_and_rejects_non_power_of_two
+    constraints = deep_copy(@constraints)
+    design = deep_copy(@design)
+    clock_policy(constraints.fetch('policies')).fetch('properties').delete('fifoDepth')
+    clock_policy(design.fetch('crossingPolicies')).fetch('properties').delete('fifoDepth')
+    resolution = clock_crossing(constraints).fetch('resolution')
+    resolution.fetch('policyProperties').delete('fifoDepth')
+    resolution.fetch('effectiveProperties').delete('fifoDepth')
+
+    plan = @realizer.realize(constraints: constraints, design: design)
+    fifo_depth = edge(plan, 'router-link', 'link-r-0-0--r-1-0')
+                 .fetch('stages').fetch(0)
+                 .fetch('parameters').fetch('fifo-depth')
+    assert_equal 4, fifo_depth.fetch('value')
+    assert_equal 'realization-default', fifo_depth.dig('source', 'kind')
+    assert_equal 'fifoDepth', fifo_depth.dig('source', 'id')
+
+    clock_policy(constraints.fetch('policies')).fetch('properties')['fifoDepth'] = 3
+    clock_policy(design.fetch('crossingPolicies')).fetch('properties')['fifoDepth'] = 3
+    resolution.fetch('policyProperties')['fifoDepth'] = 3
+    resolution.fetch('effectiveProperties')['fifoDepth'] = 3
+    error = assert_raises(FinepaperNoc::DomainRealizationError) do
+      @realizer.realize(constraints: constraints, design: design)
+    end
+    assert_equal 'realization.value_not_power_of_two', error.code
+    assert_match(%r{/fifoDepth\z}, error.path)
   end
 
   def test_equal_voltage_auto_resolution_elides_level_translation
@@ -133,7 +164,8 @@ class DomainRealizerTest < Minitest::Test
     constraints = deep_copy(@constraints)
     extra = crossing(
       'clock', 'clock-io', 'clock-io', 'clock-main-to-io',
-      {'implementation' => 'async-fifo', 'synchronizerStages' => 3}
+      {'implementation' => 'async-fifo', 'synchronizerStages' => 3,
+       'fifoDepth' => 4}
     )
     extra['edge'] = element('endpoint-attachment', 'ep0')
     extra['fromElement'] = element('router', 'r-1-0')
@@ -436,10 +468,11 @@ class DomainRealizerTest < Minitest::Test
     source = File.read(File.join(RUNTIME_ROOT, 'lib', 'domain_realizer.rb'))
     %w[
       clock power frequencyMHz voltageMv levelShift derived-from
-      synchronizerStages divider
+      synchronizerStages fifoDepth divider
     ].each do |product_id|
-      refute_includes source, product_id
+      refute_match(/['"]#{Regexp.escape(product_id)}['"]/, source)
     end
+    refute_includes source, '\\u001f'
   end
 
   private
@@ -549,7 +582,10 @@ class DomainRealizerTest < Minitest::Test
       {
         'id' => 'clock-main-to-io', 'domainType' => 'clock',
         'from' => 'clock-main', 'to' => 'clock-io',
-        'properties' => {'implementation' => 'async-fifo', 'synchronizerStages' => 3}
+        'properties' => {
+          'implementation' => 'async-fifo', 'synchronizerStages' => 3,
+          'fifoDepth' => 4
+        }
       },
       {
         'id' => 'power-main-to-low', 'domainType' => 'power',
@@ -562,7 +598,8 @@ class DomainRealizerTest < Minitest::Test
   def clock_crossing_fixture
     crossing(
       'clock', 'clock-main', 'clock-io', 'clock-main-to-io',
-      {'implementation' => 'async-fifo', 'synchronizerStages' => 3}
+      {'implementation' => 'async-fifo', 'synchronizerStages' => 3,
+       'fifoDepth' => 4}
     )
   end
 
@@ -648,6 +685,10 @@ class DomainRealizerTest < Minitest::Test
         assert_equal package_property.fetch(bound), declaration.fetch(bound),
                      "#{owner}/#{property_id} #{bound} drift"
       end
+      next if package_property.fetch('required', true)
+
+      assert_equal package_property.fetch('default'), declaration.fetch('default'),
+                   "#{owner}/#{property_id} optional default drift"
     end
   end
 end

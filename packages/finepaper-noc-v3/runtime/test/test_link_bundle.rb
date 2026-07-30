@@ -35,7 +35,8 @@ class TestV3LinkBundle < Minitest::Test
       parameters,
       xps,
       [Connection.new('xp_left', 'xp_right', 'east')],
-      endpoints
+      endpoints,
+      single_domain_plan
     )
 
     @output_dir = Dir.mktmpdir('finepaper-v3-link-bundle-')
@@ -50,6 +51,7 @@ class TestV3LinkBundle < Minitest::Test
   end
 
   def test_router_links_have_two_complete_ready_valid_directions
+    refute_includes @top, 'DOMAIN_IMPLEMENTATION'
     %w[xp_left_to_xp_right xp_right_to_xp_left].each do |direction|
       assert_match(/logic \[FLIT_WIDTH-1:0\] link_#{direction}_flit;/, @top)
       assert_match(/logic\s+link_#{direction}_valid;/, @top)
@@ -123,5 +125,81 @@ class TestV3LinkBundle < Minitest::Test
       'verilator', '--lint-only', '--sv', '-f', File.join(@output_dir, 'filelist.f')
     )
     assert status.success?, "Verilator lint failed:\n#{stdout}#{stderr}"
+  end
+
+  private
+
+  def single_domain_plan
+    routers = %w[r-0-0 r-1-0].map { |id| reference('router', id) }
+    endpoints = %w[ep_left ep_right].map { |id| reference('endpoint', id) }
+    members = routers + endpoints
+    timing = binding('timing-domain', 'clock', 'clock-test')
+    supply = binding('supply-domain', 'power', 'power-test')
+    bindings = [supply, timing]
+    entity_bindings = members.map do |element|
+      {'element' => element, 'bindings' => deep_copy(bindings)}
+    end
+    edge_bindings = [
+      edge(
+        reference('router-link', 'link-r-0-0--r-1-0'),
+        routers.fetch(0), routers.fetch(1), bindings
+      ),
+      edge(
+        reference('endpoint-attachment', 'ep_left'),
+        routers.fetch(0), endpoints.fetch(0), bindings
+      ),
+      edge(
+        reference('endpoint-attachment', 'ep_right'),
+        routers.fetch(1), endpoints.fetch(1), bindings
+      )
+    ]
+    {
+      'format' => 'finepaper.noc-domain-implementation-plan',
+      'formatVersion' => 1,
+      'design' => 'link_bundle',
+      'source' => {
+        'format' => 'finepaper.noc-domain-constraints', 'formatVersion' => 1
+      },
+      'realization' => {
+        'format' => 'finepaper.noc-domain-realization', 'formatVersion' => 1
+      },
+      'domainBindings' => [
+        domain('clock-test', 'clock', 'timing-domain', members),
+        domain('power-test', 'power', 'supply-domain', members)
+      ],
+      'relationBindings' => [],
+      'entityBindings' => entity_bindings,
+      'edgeBindings' => edge_bindings
+    }
+  end
+
+  def domain(id, type, role, members)
+    {
+      'domain' => id, 'domainType' => type, 'role' => role, 'name' => id,
+      'parameters' => {}, 'members' => deep_copy(members)
+    }
+  end
+
+  def binding(role, type, id)
+    {'role' => role, 'domainType' => type, 'domain' => id}
+  end
+
+  def reference(kind, id)
+    {'kind' => kind, 'id' => id}
+  end
+
+  def edge(edge_reference, from, to, bindings)
+    {
+      'edge' => edge_reference,
+      'fromElement' => from,
+      'toElement' => to,
+      'fromBindings' => deep_copy(bindings),
+      'toBindings' => deep_copy(bindings),
+      'stages' => []
+    }
+  end
+
+  def deep_copy(value)
+    Marshal.load(Marshal.dump(value))
   end
 end

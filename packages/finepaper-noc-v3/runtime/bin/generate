@@ -11,6 +11,7 @@ require 'open3'
 require 'optparse'
 require 'tmpdir'
 require_relative '../lib/domain_realizer'
+require_relative '../lib/domain_rtl_context'
 
 HDL_IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_]*\z/
 DOMAIN_ELEMENT_KINDS = %w[router endpoint].freeze
@@ -141,15 +142,15 @@ def element_reference(value, owner, allowed_kinds)
 end
 
 def element_reference_key(reference)
-  "#{reference.fetch('kind')}\u001f#{reference.fetch('id')}"
+  [reference.fetch('kind'), reference.fetch('id')]
 end
 
 def crossing_policy_pair_key(domain_type, from, to)
-  "#{domain_type}\u001f#{from}\u001f#{to}"
+  [domain_type, from, to]
 end
 
 def domain_edge_key(edge, domain_type)
-  "#{element_reference_key(edge)}\u001f#{domain_type}"
+  [edge.fetch('kind'), edge.fetch('id'), domain_type]
 end
 
 def sorted_element_references(references)
@@ -517,7 +518,7 @@ def router_configuration_map(design)
   end
 end
 
-def legacy_input(design)
+def legacy_input(design, domain_implementation)
   raise 'design format must be finepaper.noc-design' unless design['format'] == 'finepaper.noc-design'
   raise 'only mesh topology is supported' unless design.dig('topology', 'type') == 'mesh'
 
@@ -607,7 +608,8 @@ def legacy_input(design)
             'endpoint_map' => endpoint_map,
             'router_configs' => router_configs
           }
-        }
+        },
+        'domain_implementation' => domain_implementation
       }
     }],
     'modules' => endpoint_modules,
@@ -662,7 +664,6 @@ begin
     File.expand_path('../domain-realization.json', __dir__)
   )
   realizer.validate_design!(design)
-  translated_input = legacy_input(design)
   compiled_domains = domain_constraints(
     design,
     design.dig('topology', 'rows'),
@@ -672,6 +673,11 @@ begin
     constraints: compiled_domains,
     design: design
   )
+  # Validate the renderer-facing contract in this process so its stable code
+  # and JSON path survive the Package boundary instead of being flattened into
+  # an opaque legacy-generator subprocess error.
+  FinepaperNoc::DomainRtlContext.new(implementation_plan)
+  translated_input = legacy_input(design, implementation_plan)
   legacy_root = File.expand_path('../legacy-generator', __dir__)
   legacy_program = File.join(legacy_root, 'bin', command == 'validate' ? 'drc' : 'generate')
   raise 'legacy generator is missing from this Package' unless File.file?(legacy_program)
@@ -715,6 +721,8 @@ begin
 
   write_result(options[:result], success: true, artifacts: artifacts)
 rescue FinepaperNoc::DomainRealizationError => error
+  fail_operation(error.message, options[:result], code: error.code, path: error.path)
+rescue FinepaperNoc::DomainRtlContextError => error
   fail_operation(error.message, options[:result], code: error.code, path: error.path)
 rescue StandardError => error
   fail_operation(error.message, options[:result])

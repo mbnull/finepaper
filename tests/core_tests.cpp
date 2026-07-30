@@ -808,7 +808,8 @@ int main(int argc, char** argv) {
                 QStringLiteral("clock-io"),
                 QJsonObject{
                     {QStringLiteral("implementation"), QStringLiteral("async-fifo")},
-                    {QStringLiteral("synchronizerStages"), 3}
+                    {QStringLiteral("synchronizerStages"), 3},
+                    {QStringLiteral("fifoDepth"), 4}
                 }
             },
             DomainCrossingPolicy{
@@ -839,6 +840,44 @@ int main(int argc, char** argv) {
     check(crossingValidation.success,
           QStringLiteral(
               "bundled V3 runtime validates Domain relations and resolvable Mesh crossings"));
+
+    NocDesign defaultedFifoDepthDesign = crossingDesign;
+    for (DomainCrossingPolicy& policy :
+         defaultedFifoDepthDesign.crossingPolicies) {
+        if (policy.domainType == QStringLiteral("clock")) {
+            policy.properties.remove(QStringLiteral("fifoDepth"));
+        }
+    }
+    const ValidationResult defaultedFifoDepthValidation =
+        routerConfigured.success
+        ? finepaper.validate(defaultedFifoDepthDesign, true)
+        : ValidationResult{};
+    check(defaultedFifoDepthValidation.success,
+          QStringLiteral(
+              "V3 runtime preserves designs that predate the optional FIFO depth property"));
+
+    NocDesign invalidFifoDepthDesign = crossingDesign;
+    for (DomainCrossingPolicy& policy : invalidFifoDepthDesign.crossingPolicies) {
+        if (policy.domainType == QStringLiteral("clock")) {
+            policy.properties.insert(QStringLiteral("fifoDepth"), 3);
+        }
+    }
+    const ValidationResult invalidFifoDepthValidation = routerConfigured.success
+        ? finepaper.validate(invalidFifoDepthDesign, true)
+        : ValidationResult{};
+    const auto invalidFifoDepthDiagnostic = std::find_if(
+        invalidFifoDepthValidation.diagnostics.cbegin(),
+        invalidFifoDepthValidation.diagnostics.cend(),
+        [](const Diagnostic& diagnostic) {
+            return diagnostic.code
+                    == QStringLiteral("realization.value_not_power_of_two")
+                && diagnostic.path.endsWith(QStringLiteral("/fifoDepth"));
+        });
+    check(!invalidFifoDepthValidation.success
+              && invalidFifoDepthDiagnostic
+                  != invalidFifoDepthValidation.diagnostics.cend(),
+          QStringLiteral(
+              "V3 runtime reports a structured path when FIFO depth is not a power of two"));
 
     QTemporaryDir crossingOutput(
         QStringLiteral("/tmp/finepaper-domain-crossing-test-XXXXXX"));

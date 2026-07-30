@@ -1,5 +1,6 @@
 require 'erb'
 require 'fileutils'
+require_relative '../../../../lib/domain_rtl_context'
 
 class RtlGenerator
   DIRECTION_ORDER = [
@@ -48,9 +49,12 @@ class RtlGenerator
   end
 
   def generate_partitioned(output_dir, ipcore_dir: nil)
+    domain_context = build_domain_rtl_context
+    validate_domain_rtl_context!(domain_context)
     FileUtils.mkdir_p(output_dir)
 
     lookup = xp_module_lookup
+    set_context(:@domain_rtl_context, domain_context)
     set_context(:@xp_module_lookup, lookup)
     set_context(:@xp_link_directions_by_id, xp_link_directions_by_id)
     set_context(:@ni_module_lookup, ni_module_lookup)
@@ -93,7 +97,119 @@ class RtlGenerator
                   :@xp_module_lookup, :@xp_link_directions_by_id,
                   :@ni_module_lookup, :@ni_module_name,
                   :@ni_variant_signature, :@ni_endpoint_slots,
-                  :@ni_features)
+                  :@ni_features, :@domain_rtl_context)
+  end
+
+  def build_domain_rtl_context
+    plan = @noc.domain_implementation
+    raise 'domain_implementation is required by the V3 RTL renderer' unless plan.is_a?(Hash)
+
+    FinepaperNoc::DomainRtlContext.new(plan)
+  end
+
+  def validate_domain_rtl_context!(context)
+    expected_entity_count = @noc.xps.size + @noc.endpoints.size
+    expected_edge_count = @noc.connections.size + @noc.endpoints.size
+    raise 'Domain RTL entity graph differs from the legacy Mesh graph' unless context.entities.size == expected_entity_count
+    raise 'Domain RTL edge graph differs from the legacy Mesh graph' unless context.edges.size == expected_edge_count
+
+    @noc.xps.each do |xp|
+      validate_domain_entity!(context, 'router', domain_router_id(xp))
+    end
+    @noc.endpoints.each do |endpoint|
+      validate_domain_entity!(context, 'endpoint', endpoint.id)
+      raise "Domain RTL context is missing Endpoint attachment #{endpoint.id}" unless context.edge('endpoint-attachment', endpoint.id)
+    end
+    @noc.connections.each do |connection|
+      id = domain_link_id(connection)
+      raise "Domain RTL context is missing Router Link #{id}" unless context.edge('router-link', id)
+    end
+
+    context.edges.each_value do |edge|
+      validate_domain_edge!(context, edge)
+    end
+  end
+
+  def validate_domain_entity!(context, kind, id)
+    context.entity_domain(kind, id, 'timing-domain')
+    context.entity_domain(kind, id, 'supply-domain')
+  end
+
+  def validate_domain_edge!(context, edge)
+    edge_kind = edge.dig('edge', 'kind')
+    edge_id = edge.dig('edge', 'id')
+    from = edge.fetch('fromElement')
+    to = edge.fetch('toElement')
+    from_timing = context.entity_domain(from.fetch('kind'), from.fetch('id'),
+                                        'timing-domain')
+    to_timing = context.entity_domain(to.fetch('kind'), to.fetch('id'),
+                                      'timing-domain')
+    fifo_stage = context.edge_stage(edge_kind, edge_id, 'clock-async-fifo')
+    timing_differs = from_timing.fetch('domain') != to_timing.fetch('domain')
+    if timing_differs != !fifo_stage.nil?
+      raise FinepaperNoc::DomainRtlContextError.new(
+        'rtl_context.timing_stage_mismatch', '/edgeBindings',
+        "edge #{edge_id} must contain exactly one async FIFO iff its timing Domains differ"
+      )
+    end
+
+    edge.fetch('stages').each do |stage|
+      if stage.key?('directions')
+        stage.fetch('directions').each do |direction|
+          validate_renderer_recipe!(direction.fetch('recipe'),
+                                    direction.fetch('recipeKind'),
+                                    direction.fetch('parameters'), edge_id)
+        end
+      else
+        validate_renderer_recipe!(stage.fetch('recipe'),
+                                  stage.fetch('recipeKind'),
+                                  stage.fetch('parameters'), edge_id)
+      end
+    end
+  end
+
+  def validate_renderer_recipe!(recipe, kind, parameters, edge_id)
+    case recipe
+    when 'clock-async-fifo'
+      raise "#{recipe} on #{edge_id} must be bidirectional" unless kind == 'bidirectional-stage'
+      raise "#{recipe} on #{edge_id} has unexpected parameters" unless parameters.keys.sort == %w[fifo-depth metastability-stages]
+      depth = parameters.dig('fifo-depth', 'value')
+      stages = parameters.dig('metastability-stages', 'value')
+      unless depth.is_a?(Integer) && depth.between?(2, 1024) && (depth & (depth - 1)).zero?
+        raise FinepaperNoc::DomainRtlContextError.new(
+          'rtl_context.invalid_fifo_depth', '/edgeBindings',
+          "async FIFO depth on #{edge_id} must be a power of two in 2..1024"
+        )
+      end
+      unless stages.is_a?(Integer) && stages.between?(2, 8)
+        raise FinepaperNoc::DomainRtlContextError.new(
+          'rtl_context.invalid_synchronizer_stages', '/edgeBindings',
+          "async FIFO synchronizer stages on #{edge_id} must be in 2..8"
+        )
+      end
+    when 'power-isolation'
+      raise "#{recipe} on #{edge_id} must be bidirectional" unless kind == 'bidirectional-stage'
+      raise "#{recipe} on #{edge_id} has unexpected parameters" unless parameters.empty?
+    when 'power-level-shifter'
+      raise "#{recipe} on #{edge_id} must be directional" unless kind == 'directional-stage'
+      raise "#{recipe} on #{edge_id} has unexpected parameters" unless parameters.keys == ['translation-direction']
+    else
+      raise FinepaperNoc::DomainRtlContextError.new(
+        'rtl_context.unknown_recipe', '/edgeBindings',
+        "V3 RTL renderer does not implement recipe #{recipe} on #{edge_id}"
+      )
+    end
+  end
+
+  def domain_router_id(xp)
+    "r-#{xp.x}-#{xp.y}"
+  end
+
+  def domain_link_id(connection)
+    by_id = @noc.xps.to_h { |xp| [xp.id, xp] }
+    endpoints = [by_id.fetch(connection.from), by_id.fetch(connection.to)]
+                .sort_by { |xp| [xp.y, xp.x] }
+    "link-#{domain_router_id(endpoints.fetch(0))}--#{domain_router_id(endpoints.fetch(1))}"
   end
 
   def xp_variants

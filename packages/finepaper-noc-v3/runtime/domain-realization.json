@@ -90,6 +90,15 @@
               "type": "integer",
               "minimum": 2,
               "maximum": 8
+            },
+            {
+              "name": "fifo-depth",
+              "property": "fifoDepth",
+              "type": "integer",
+              "default": 4,
+              "powerOfTwo": true,
+              "minimum": 2,
+              "maximum": 1024
             }
           ]
         }

@@ -46,6 +46,14 @@ topology fixed to a rectangular Mesh.
   `<design>_domain_implementation.json` typed plan, including Domain/entity
   bindings, derived relations, stage ordering, bidirectional CDC/isolation,
   and resolved per-direction voltage translation.
+- The legacy renderer receives that plan as explicit typed metadata rather
+  than hiding it in global parameters. Before writing RTL it verifies plan
+  headers, entity/edge membership, role cardinality, traffic orientation, and
+  recipe parameters against the concrete Mesh graph.
+- The Package carries linted asynchronous ready/valid FIFO and local reset
+  synchronizer primitives as the implementation vocabulary for the next
+  renderer stage. They are regression-tested independently, including unsafe
+  parameter rejection and asynchronous-assert/synchronous-release reset.
 - The current legacy RTL backend does not yet instantiate CDC, isolation, or
   level-shifting cells from the typed plan. Direct RTL realization is the next
   implementation stage and is not implied by the capability booleans alone.
