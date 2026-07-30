@@ -35,6 +35,12 @@ void appendDiagnostic(QVector<Diagnostic>& diagnostics,
     diagnostics.append(Diagnostic{severity, code, message, path, source});
 }
 
+QString jsonPointerToken(QString value) {
+    value.replace(QLatin1Char('~'), QStringLiteral("~0"));
+    value.replace(QLatin1Char('/'), QStringLiteral("~1"));
+    return value;
+}
+
 QString designIdFromName(const QString& name) {
     QString id = name.trimmed().toLower();
     id.replace(QRegularExpression(QStringLiteral("[^a-z0-9_]+")), QStringLiteral("_"));
@@ -1132,13 +1138,32 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
 
     diagnostics += domain_service::validateAgainstPackage(design, package);
 
-    if (!package.engine && !design.packageData.isEmpty()) {
-        appendDiagnostic(diagnostics,
-                         QStringLiteral("error"),
-                         QStringLiteral("design.unexpected_package_data"),
-                         QStringLiteral("simple Packages cannot use packageData"),
-                         QStringLiteral("/packageData"),
-                         QStringLiteral("package"));
+    const bool strictDesignExtensions = package.formatVersion >= 3
+        || package.designExtensionsDeclared;
+    if (strictDesignExtensions) {
+        for (auto it = design.packageData.constBegin();
+             it != design.packageData.constEnd(); ++it) {
+            if (package.designExtension(it.key())) {
+                continue;
+            }
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("design.undeclared_package_data_extension"),
+                QStringLiteral("packageData namespace %1 is not declared by the Package")
+                    .arg(it.key()),
+                QStringLiteral("/packageData/") + jsonPointerToken(it.key()),
+                QStringLiteral("package"));
+        }
+    } else if (!package.engine && !design.packageData.isEmpty()) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("design.unexpected_package_data"),
+            QStringLiteral(
+                "generator-only Packages must declare packageData namespaces"),
+            QStringLiteral("/packageData"),
+            QStringLiteral("package"));
     }
     return diagnostics;
 }

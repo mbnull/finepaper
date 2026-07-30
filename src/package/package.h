@@ -179,6 +179,15 @@ struct RuntimeCapabilitiesDefinition {
     std::optional<DomainConfigurationRuntimeCapabilities> domainConfiguration;
 };
 
+// A Package-owned namespace in NocDesign::packageData. Finepaper validates the
+// namespace declaration and preserves its JSON value, but never interprets the
+// schema itself.
+struct DesignExtensionDefinition {
+    QString id;
+    QString schema;
+    int version = 0;
+};
+
 struct PackageDefinition {
     QString format;
     int formatVersion = 0;
@@ -195,12 +204,17 @@ struct PackageDefinition {
     GeneratorDefinition generator;
     std::optional<EngineDefinition> engine;
     RuntimeCapabilitiesDefinition runtimeCapabilities;
+    QVector<DesignExtensionDefinition> designExtensions;
+    // Presence is semantically relevant for V1/V2 Engine compatibility: an
+    // explicit empty declaration opts into strict namespace validation.
+    bool designExtensionsDeclared = false;
 
     QString key() const;
     const ParameterDefinition* parameter(const QString& id) const;
     const EndpointTypeDefinition* endpointType(const QString& id) const;
     const DomainTypeDefinition* domainType(const QString& id) const;
     const ElementPropertySetDefinition* elementPropertySet(const QString& id) const;
+    const DesignExtensionDefinition* designExtension(const QString& id) const;
 };
 
 struct PackageLoadResult {

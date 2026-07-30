@@ -225,6 +225,15 @@ QJsonObject packageManifest() {
                 {QStringLiteral("edgeOverrides"), true}
             }}
         }},
+        {QStringLiteral("designExtensions"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"),
+                 QStringLiteral("test.endpoint.settings")},
+                {QStringLiteral("schema"),
+                 QStringLiteral("schemas/endpoint-settings.schema.json")},
+                {QStringLiteral("version"), 1}
+            }
+        }},
         {QStringLiteral("elementPropertySets"), QJsonArray{
             propertySet(QStringLiteral("generic-attachment"),
                         {},
@@ -269,6 +278,17 @@ bool prepareFixture(
                 | QFileDevice::ExeOwner | QFileDevice::ReadGroup
                 | QFileDevice::ExeGroup | QFileDevice::ReadOther
                 | QFileDevice::ExeOther)) {
+        return false;
+    }
+
+    const QString schemaPath = QDir(packageRoot).filePath(
+        QStringLiteral("schemas/endpoint-settings.schema.json"));
+    if (!QDir().mkpath(QFileInfo(schemaPath).absolutePath())) {
+        return false;
+    }
+    QFile schemaFile(schemaPath);
+    if (!schemaFile.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        || schemaFile.write("{}\n") < 0) {
         return false;
     }
     return saveJsonObject(
@@ -405,6 +425,49 @@ int main(int argc, char** argv) {
                       {QStringLiteral("clientOnly"), false}},
           QStringLiteral(
               "creation merges Package defaults with explicitly provided Endpoint values"));
+
+    QJsonObject declaredExtensionRequest = createRequest();
+    declaredExtensionRequest.insert(
+        QStringLiteral("packageData"),
+        QJsonObject{
+            {QStringLiteral("test.endpoint.settings"),
+             QJsonObject{{QStringLiteral("mode"), QStringLiteral("fast")}}}
+        });
+    const DesignResult declaredExtensionDesign = application.createDesign(
+        declaredExtensionRequest);
+    check(declaredExtensionDesign.success
+              && declaredExtensionDesign.design.packageData
+                  == declaredExtensionRequest.value(
+                      QStringLiteral("packageData")).toObject(),
+          QStringLiteral(
+              "a generator-only Package can retain a declared packageData namespace"));
+
+    QJsonObject undeclaredExtensionRequest = createRequest();
+    undeclaredExtensionRequest.insert(
+        QStringLiteral("packageData"),
+        QJsonObject{{QStringLiteral("test.endpoint/hardcoded~trick"), true}});
+    const DesignResult undeclaredExtensionDesign = application.createDesign(
+        undeclaredExtensionRequest);
+    check(!undeclaredExtensionDesign.success
+              && hasDiagnosticCode(
+                  undeclaredExtensionDesign.diagnostics,
+                  QStringLiteral(
+                      "design.undeclared_package_data_extension")),
+          QStringLiteral(
+              "Application rejects packageData namespaces absent from the Package declaration"));
+    const auto undeclaredDiagnostic = std::find_if(
+        undeclaredExtensionDesign.diagnostics.cbegin(),
+        undeclaredExtensionDesign.diagnostics.cend(),
+        [](const Diagnostic& diagnostic) {
+            return diagnostic.code
+                == QStringLiteral("design.undeclared_package_data_extension");
+        });
+    check(undeclaredDiagnostic != undeclaredExtensionDesign.diagnostics.cend()
+              && undeclaredDiagnostic->path
+                  == QStringLiteral(
+                      "/packageData/test.endpoint~1hardcoded~0trick"),
+          QStringLiteral(
+              "packageData diagnostics escape user-controlled JSON Pointer tokens"));
 
     QJsonObject unknownCreateRequest = createRequest();
     QJsonArray unknownCreateEndpoints =

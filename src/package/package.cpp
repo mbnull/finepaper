@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 
 namespace finepaper {
@@ -23,6 +24,12 @@ void appendDiagnostic(QVector<Diagnostic>& diagnostics,
                       const QString& path,
                       const QString& source = QStringLiteral("package")) {
     diagnostics.append(Diagnostic{severity, code, message, path, source});
+}
+
+QString jsonPointerToken(QString value) {
+    value.replace(QLatin1Char('~'), QStringLiteral("~0"));
+    value.replace(QLatin1Char('/'), QStringLiteral("~1"));
+    return value;
 }
 
 std::optional<QJsonObject> readObject(const QString& path, QVector<Diagnostic>& diagnostics) {
@@ -1710,6 +1717,150 @@ void validateExecutablePath(const QString& packageRoot,
     }
 }
 
+QVector<DesignExtensionDefinition> parseDesignExtensions(
+    const QJsonValue& value,
+    const QString& packageRoot,
+    QVector<Diagnostic>& diagnostics) {
+    QVector<DesignExtensionDefinition> definitions;
+    const QString path = QStringLiteral("/designExtensions");
+    if (value.isUndefined()) {
+        return definitions;
+    }
+    if (!value.isArray()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_design_extensions"),
+                         QStringLiteral("designExtensions must be an array"),
+                         path);
+        return definitions;
+    }
+
+    const QJsonArray values = value.toArray();
+    QSet<QString> ids;
+    definitions.reserve(values.size());
+    for (qsizetype index = 0; index < values.size(); ++index) {
+        const QString itemPath = QStringLiteral("%1/%2").arg(path).arg(index);
+        if (!values.at(index).isObject()) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_design_extension"),
+                             QStringLiteral("design extension must be an object"),
+                             itemPath);
+            continue;
+        }
+
+        const QJsonObject object = values.at(index).toObject();
+        const QSet<QString> allowed{
+            QStringLiteral("id"),
+            QStringLiteral("schema"),
+            QStringLiteral("version")
+        };
+        for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+            if (!allowed.contains(it.key())) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral("package.unknown_design_extension_field"),
+                    QStringLiteral("design extension field %1 is not supported")
+                        .arg(it.key()),
+                    itemPath + QLatin1Char('/') + jsonPointerToken(it.key()));
+            }
+        }
+
+        DesignExtensionDefinition definition;
+        definition.id = requiredString(
+            object, QStringLiteral("id"), itemPath, diagnostics);
+        definition.schema = requiredString(
+            object, QStringLiteral("schema"), itemPath, diagnostics);
+        definition.version = requiredInteger(
+            object, QStringLiteral("version"), 0, itemPath, diagnostics);
+
+        const auto isAsciiLetterOrDigit = [](const auto character) {
+            const ushort value = character.unicode();
+            return (value >= 'A' && value <= 'Z')
+                || (value >= 'a' && value <= 'z')
+                || (value >= '0' && value <= '9');
+        };
+        const bool validId = !definition.id.isEmpty()
+            && isAsciiLetterOrDigit(definition.id.front())
+            && std::all_of(
+                std::next(definition.id.cbegin()),
+                definition.id.cend(),
+                [&](const auto character) {
+                    return isAsciiLetterOrDigit(character)
+                        || character == QLatin1Char('.')
+                        || character == QLatin1Char('_')
+                        || character == QLatin1Char('-');
+                });
+        if (!definition.id.isEmpty() && !validId) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.invalid_design_extension_id"),
+                QStringLiteral(
+                    "design extension id must match [A-Za-z0-9][A-Za-z0-9._-]*"),
+                itemPath + QStringLiteral("/id"));
+        }
+
+        if (!definition.id.isEmpty() && ids.contains(definition.id)) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.duplicate_design_extension"),
+                             QStringLiteral("design extension id is duplicated"),
+                             itemPath + QStringLiteral("/id"));
+        }
+        ids.insert(definition.id);
+
+        if (definition.version <= 0) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_design_extension_version"),
+                             QStringLiteral("design extension version must be a positive integer"),
+                             itemPath + QStringLiteral("/version"));
+        }
+
+        if (!definition.schema.isEmpty()) {
+            const QStringList components = definition.schema.split(
+                QLatin1Char('/'), Qt::KeepEmptyParts);
+            const bool invalidRelativePath = QFileInfo(definition.schema).isAbsolute()
+                || definition.schema.contains(QLatin1Char('\\'))
+                || std::any_of(
+                    components.cbegin(), components.cend(), [](const QString& component) {
+                        return component.isEmpty()
+                            || component == QStringLiteral(".")
+                            || component == QStringLiteral("..");
+                    });
+            const QString schemaPath = QDir(packageRoot).filePath(definition.schema);
+            const QFileInfo schemaInfo(schemaPath);
+            if (invalidRelativePath) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral("package.design_extension_schema_escape"),
+                    QStringLiteral(
+                        "design extension schema must be a contained relative POSIX path"),
+                    itemPath + QStringLiteral("/schema"));
+            } else if (!schemaInfo.isFile()) {
+                appendDiagnostic(diagnostics,
+                                 QStringLiteral("error"),
+                                 QStringLiteral("package.design_extension_schema_missing"),
+                                 QStringLiteral("design extension schema does not exist or is not a file"),
+                                 itemPath + QStringLiteral("/schema"));
+            } else if (!pathIsInside(packageRoot, schemaPath)) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral("package.design_extension_schema_escape"),
+                    QStringLiteral("design extension schema escapes the Package root"),
+                    itemPath + QStringLiteral("/schema"));
+            }
+        }
+
+        definitions.append(std::move(definition));
+    }
+    return definitions;
+}
+
 bool valueMatchesType(const QJsonValue& value, const ParameterDefinition& definition) {
     return valueMatchesParameterType(value, definition.type);
 }
@@ -1781,6 +1932,14 @@ const ElementPropertySetDefinition* PackageDefinition::elementPropertySet(
         elementPropertySets.cbegin(), elementPropertySets.cend(),
         [&](const auto& value) { return value.id == id; });
     return it == elementPropertySets.cend() ? nullptr : &(*it);
+}
+
+const DesignExtensionDefinition* PackageDefinition::designExtension(
+    const QString& id) const {
+    const auto it = std::find_if(
+        designExtensions.cbegin(), designExtensions.cend(),
+        [&](const DesignExtensionDefinition& value) { return value.id == id; });
+    return it == designExtensions.cend() ? nullptr : &(*it);
 }
 
 PackageLoadResult loadPackage(const QString& packageRoot) {
@@ -1973,6 +2132,12 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
         rootObject->value(QStringLiteral("elementPropertySets")),
         package.formatVersion,
         endpointIds,
+        result.diagnostics);
+    package.designExtensionsDeclared = rootObject->contains(
+        QStringLiteral("designExtensions"));
+    package.designExtensions = parseDesignExtensions(
+        rootObject->value(QStringLiteral("designExtensions")),
+        package.rootPath,
         result.diagnostics);
 
     const QJsonObject attachment = requiredObject(*rootObject,

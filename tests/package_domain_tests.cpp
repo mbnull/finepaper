@@ -44,11 +44,33 @@ bool prepareFixture(const QString& packageRoot) {
         return false;
     }
     file.close();
-    return QFile::setPermissions(
+    if (!QFile::setPermissions(
         executable,
         QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
             QFileDevice::ReadGroup | QFileDevice::ExeGroup |
-            QFileDevice::ReadOther | QFileDevice::ExeOther);
+            QFileDevice::ReadOther | QFileDevice::ExeOther)) {
+        return false;
+    }
+
+    const QString schemaPath = QDir(packageRoot).filePath(
+        QStringLiteral("schemas/test-extension.schema.json"));
+    if (!QDir().mkpath(QFileInfo(schemaPath).absolutePath())) {
+        return false;
+    }
+    QFile schemaFile(schemaPath);
+    return schemaFile.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        && schemaFile.write("{}\n") >= 0;
+}
+
+QJsonObject designExtension(const QString& id,
+                            const QString& schema = QStringLiteral(
+                                "schemas/test-extension.schema.json"),
+                            int version = 1) {
+    return QJsonObject{
+        {QStringLiteral("id"), id},
+        {QStringLiteral("schema"), schema},
+        {QStringLiteral("version"), version}
+    };
 }
 
 QJsonObject completeRuntimeCapabilities() {
@@ -366,6 +388,185 @@ int main(int argc, char** argv) {
     check(v1Result.package
               && !v1Result.package->runtimeCapabilities.domainConfiguration,
           QStringLiteral("Package V1 does not require a Domain runtime contract"));
+
+    QJsonObject v1WithDesignExtension = v1Manifest;
+    v1WithDesignExtension.insert(
+        QStringLiteral("designExtensions"),
+        QJsonArray{designExtension(QStringLiteral("test.package.settings"))});
+    const PackageLoadResult designExtensionResult = loadManifest(
+        fixture.path(), v1WithDesignExtension);
+    const DesignExtensionDefinition* loadedExtension =
+        designExtensionResult.package
+        ? designExtensionResult.package->designExtension(
+              QStringLiteral("test.package.settings"))
+        : nullptr;
+    check(designExtensionResult.success && designExtensionResult.package
+              && designExtensionResult.package->designExtensionsDeclared
+              && loadedExtension
+              && loadedExtension->schema
+                  == QStringLiteral("schemas/test-extension.schema.json")
+              && loadedExtension->version == 1,
+          QStringLiteral(
+              "Package design extension namespaces retain their contained schema and version"));
+
+    QJsonObject invalidDesignExtensions = v1Manifest;
+    invalidDesignExtensions.insert(
+        QStringLiteral("designExtensions"), QJsonObject{});
+    expectFailure(
+        fixture.path(),
+        invalidDesignExtensions,
+        QStringLiteral("package.invalid_design_extensions"),
+        QStringLiteral("a non-array design extension declaration"));
+
+    QJsonObject extensionWithUnknownField = designExtension(
+        QStringLiteral("test.package.settings"));
+    extensionWithUnknownField.insert(
+        QStringLiteral("bad/~field"), true);
+    QJsonObject unknownDesignExtensionField = v1Manifest;
+    unknownDesignExtensionField.insert(
+        QStringLiteral("designExtensions"),
+        QJsonArray{extensionWithUnknownField});
+    const PackageLoadResult unknownFieldResult = loadManifest(
+        fixture.path(), unknownDesignExtensionField);
+    const auto unknownFieldDiagnostic = std::find_if(
+        unknownFieldResult.diagnostics.cbegin(),
+        unknownFieldResult.diagnostics.cend(),
+        [](const Diagnostic& diagnostic) {
+            return diagnostic.code
+                == QStringLiteral("package.unknown_design_extension_field");
+        });
+    check(!unknownFieldResult.success
+              && unknownFieldDiagnostic != unknownFieldResult.diagnostics.cend()
+              && unknownFieldDiagnostic->path
+                  == QStringLiteral("/designExtensions/0/bad~1~0field"),
+          QStringLiteral(
+              "unknown extension field diagnostics escape JSON Pointer tokens"));
+
+    QJsonObject duplicateDesignExtensions = v1Manifest;
+    duplicateDesignExtensions.insert(
+        QStringLiteral("designExtensions"),
+        QJsonArray{
+            designExtension(QStringLiteral("test.package.settings")),
+            designExtension(QStringLiteral("test.package.settings"),
+                            QStringLiteral("schemas/test-extension.schema.json"),
+                            2)});
+    expectFailure(
+        fixture.path(),
+        duplicateDesignExtensions,
+        QStringLiteral("package.duplicate_design_extension"),
+        QStringLiteral("duplicate design extension namespaces"));
+
+    QJsonObject emptyDesignExtensionId = v1Manifest;
+    emptyDesignExtensionId.insert(
+        QStringLiteral("designExtensions"),
+        QJsonArray{designExtension(QStringLiteral("  "))});
+    expectFailure(
+        fixture.path(),
+        emptyDesignExtensionId,
+        QStringLiteral("package.missing_field"),
+        QStringLiteral("an empty design extension namespace"));
+
+    QJsonObject slashDesignExtensionId = v1Manifest;
+    slashDesignExtensionId.insert(
+        QStringLiteral("designExtensions"),
+        QJsonArray{designExtension(QStringLiteral("test.package/settings"))});
+    expectFailure(
+        fixture.path(),
+        slashDesignExtensionId,
+        QStringLiteral("package.invalid_design_extension_id"),
+        QStringLiteral("a design extension namespace containing a slash"));
+
+    QJsonObject whitespaceDesignExtensionId = v1Manifest;
+    whitespaceDesignExtensionId.insert(
+        QStringLiteral("designExtensions"),
+        QJsonArray{designExtension(QStringLiteral("test.package settings"))});
+    expectFailure(
+        fixture.path(),
+        whitespaceDesignExtensionId,
+        QStringLiteral("package.invalid_design_extension_id"),
+        QStringLiteral("a design extension namespace containing whitespace"));
+
+    QJsonObject emptyDesignExtensionSchema = v1Manifest;
+    emptyDesignExtensionSchema.insert(
+        QStringLiteral("designExtensions"),
+        QJsonArray{designExtension(QStringLiteral("test.package.settings"),
+                                   QStringLiteral("  "))});
+    expectFailure(
+        fixture.path(),
+        emptyDesignExtensionSchema,
+        QStringLiteral("package.missing_field"),
+        QStringLiteral("an empty design extension schema path"));
+
+    QJsonObject invalidDesignExtensionVersion = v1Manifest;
+    invalidDesignExtensionVersion.insert(
+        QStringLiteral("designExtensions"),
+        QJsonArray{designExtension(QStringLiteral("test.package.settings"),
+                                   QStringLiteral(
+                                       "schemas/test-extension.schema.json"),
+                                   0)});
+    expectFailure(
+        fixture.path(),
+        invalidDesignExtensionVersion,
+        QStringLiteral("package.invalid_design_extension_version"),
+        QStringLiteral("a non-positive design extension version"));
+
+    QJsonObject traversingDesignExtension = v1Manifest;
+    traversingDesignExtension.insert(
+        QStringLiteral("designExtensions"),
+        QJsonArray{designExtension(QStringLiteral("test.package.settings"),
+                                   QStringLiteral("../outside.schema.json"))});
+    expectFailure(
+        fixture.path(),
+        traversingDesignExtension,
+        QStringLiteral("package.design_extension_schema_escape"),
+        QStringLiteral("a traversing design extension schema path"));
+
+    QJsonObject missingDesignExtensionSchema = v1Manifest;
+    missingDesignExtensionSchema.insert(
+        QStringLiteral("designExtensions"),
+        QJsonArray{designExtension(QStringLiteral("test.package.settings"),
+                                   QStringLiteral("schemas/missing.schema.json"))});
+    expectFailure(
+        fixture.path(),
+        missingDesignExtensionSchema,
+        QStringLiteral("package.design_extension_schema_missing"),
+        QStringLiteral("a missing design extension schema file"));
+
+    QTemporaryDir externalSchemaFixture(QStringLiteral(
+        "/tmp/finepaper-external-schema-test-XXXXXX"));
+    const QString externalSchemaPath = QDir(externalSchemaFixture.path()).filePath(
+        QStringLiteral("external.schema.json"));
+    QFile externalSchemaFile(externalSchemaPath);
+    bool externalSchemaSaved = false;
+    if (externalSchemaFixture.isValid()
+        && externalSchemaFile.open(
+            QIODevice::WriteOnly | QIODevice::Truncate)) {
+        externalSchemaSaved = externalSchemaFile.write("{}\n") >= 0;
+    }
+    externalSchemaFile.close();
+    const QString linkedSchemaPath = QDir(fixture.path()).filePath(
+        QStringLiteral("schemas/external.schema.json"));
+    const bool symlinkCreated = externalSchemaSaved
+        && QFile::link(externalSchemaPath, linkedSchemaPath)
+        && QFileInfo(linkedSchemaPath).isSymLink();
+#ifdef Q_OS_UNIX
+    check(symlinkCreated,
+          QStringLiteral(
+              "the Unix security fixture creates an escaping schema symlink"));
+#endif
+    if (symlinkCreated) {
+        QJsonObject escapingSymlinkExtension = v1Manifest;
+        escapingSymlinkExtension.insert(
+            QStringLiteral("designExtensions"),
+            QJsonArray{designExtension(
+                QStringLiteral("test.package.settings"),
+                QStringLiteral("schemas/external.schema.json"))});
+        expectFailure(
+            fixture.path(),
+            escapingSymlinkExtension,
+            QStringLiteral("package.design_extension_schema_escape"),
+            QStringLiteral("a design extension schema symlink escaping the Package root"));
+    }
 
     QJsonObject v1WithPresentationMetadata = v1Manifest;
     v1WithPresentationMetadata.insert(
