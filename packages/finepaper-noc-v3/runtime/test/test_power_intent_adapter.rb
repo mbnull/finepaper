@@ -83,6 +83,45 @@ class PowerIntentAdapterTest < Minitest::Test
     assert_equal ['power-main'], plan.fetch('domains').map { |entry| entry.fetch('domain') }
   end
 
+  def test_generate_materializes_only_declared_top_port_controls_in_rtl
+    design = design_with_power_intent
+    design.dig('packageData', EXTENSION_ID, 'controls').concat([
+      {
+        'id' => 'isolation-request',
+        'signal' => 'isolation_request',
+        'source' => 'top-port',
+        'activeSense' => 'high'
+      },
+      {
+        'id' => 'tool-only-request',
+        'signal' => 'tool_only_request',
+        'source' => 'upf-port',
+        'activeSense' => 'low'
+      }
+    ])
+
+    result = run_adapter('generate', design)
+
+    assert result.fetch(:status).success?, result.fetch(:log)
+    top = File.read(File.join(result.fetch(:output), 'power_adapter_top.v'))
+    assert_match(/input\s+logic\s+isolation_request\b/, top)
+    refute_match(/input\s+logic\s+tool_only_request\b/, top)
+
+    hierarchy_artifact = artifact(result, 'rtl-hierarchy')
+    refute_nil hierarchy_artifact
+    hierarchy = JSON.parse(File.read(File.join(
+      result.fetch(:output), hierarchy_artifact.fetch('path')
+    )))
+    assert_equal [
+      {
+        'direction' => 'input',
+        'id' => 'isolation-request',
+        'signal' => 'isolation_request',
+        'source' => 'top-port'
+      }
+    ], hierarchy.fetch('logicControlPorts')
+  end
+
   def test_generate_fails_before_artifacts_when_the_declared_extension_is_null
     design = minimal_design
     design['packageData'] = {EXTENSION_ID => nil}

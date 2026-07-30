@@ -11,6 +11,8 @@ require 'model/connection'
 require 'model/endpoint'
 require 'model/noc_config'
 require 'model/xp'
+require 'parser/json_parser'
+require 'topology/topology_expander'
 require_relative 'domain_rtl_fixture'
 require_relative '../lib/domain_rtl_context'
 require_relative '../lib/rtl_hierarchy_manifest'
@@ -150,6 +152,48 @@ class TestV3RtlHierarchyManifest < Minitest::Test
     assert_equal 'rtl_hierarchy.duplicate_signal_path', error.code
   end
 
+  def test_builder_requires_an_exact_control_port_bijection_without_aliasing
+    context = split_power_context
+    expected = JSON.parse(JSON.generate([{
+      'id' => 'isolate',
+      'signal' => 'isolate_req',
+      'source' => 'top-port',
+      'direction' => 'input'
+    }]))
+    builder = populated_builder(
+      context,
+      expected_logic_control_ports: expected,
+      register_logic_control_ports: false
+    )
+    expected.fetch(0).fetch('signal') << '_caller_mutation'
+    refute expected.frozen?
+    refute expected.fetch(0).fetch('signal').frozen?
+
+    error = assert_raises(FinepaperNoc::RtlHierarchyManifestError) do
+      builder.build
+    end
+    assert_equal 'rtl_hierarchy.incomplete_logic_control_ports', error.code
+
+    builder.register_logic_control_port(
+      control_id: 'isolate', signal: 'isolate_req',
+      source: 'top-port', direction: 'input'
+    )
+    assert_equal [{
+      'direction' => 'input',
+      'id' => 'isolate',
+      'signal' => 'isolate_req',
+      'source' => 'top-port'
+    }], builder.build.fetch('logicControlPorts')
+
+    error = assert_raises(FinepaperNoc::RtlHierarchyManifestError) do
+      populated_builder(context).register_logic_control_port(
+        control_id: 'unexpected', signal: 'unexpected_req',
+        source: 'top-port', direction: 'input'
+      )
+    end
+    assert_equal 'rtl_hierarchy.unknown_logic_control_port', error.code
+  end
+
   def test_generator_manifest_names_are_present_in_the_emitted_top
     plan = split_power_plan
     xps = [
@@ -271,6 +315,152 @@ class TestV3RtlHierarchyManifest < Minitest::Test
       assert_equal manifest_text, File.read(File.join(
         second_directory, 'hierarchy_fixture_rtl_hierarchy.json'
       ))
+    end
+  end
+
+  def test_generator_materializes_only_top_port_power_controls_deterministically
+    controls = [
+      power_control('save', 'save_req', 'upf-port'),
+      power_control('switch', 'power_enable', 'top-port'),
+      power_control('isolate', 'isolate_req', 'top-port')
+    ]
+    first_noc = hierarchy_noc(power_intent_plan(controls))
+    second_noc = hierarchy_noc(power_intent_plan(controls.reverse))
+
+    Dir.mktmpdir('finepaper-v3-power-controls-') do |directory|
+      first_dir = File.join(directory, 'first')
+      second_dir = File.join(directory, 'second')
+      RtlGenerator.new(first_noc, TEMPLATE_DIR).generate_partitioned(first_dir)
+      RtlGenerator.new(second_noc, TEMPLATE_DIR).generate_partitioned(second_dir)
+
+      first_top = File.read(File.join(first_dir, 'hierarchy_fixture_top.v'))
+      second_top = File.read(File.join(second_dir, 'hierarchy_fixture_top.v'))
+      first_manifest_text = File.read(File.join(
+        first_dir, 'hierarchy_fixture_rtl_hierarchy.json'
+      ))
+      second_manifest_text = File.read(File.join(
+        second_dir, 'hierarchy_fixture_rtl_hierarchy.json'
+      ))
+      assert_equal first_top, second_top
+      assert_equal first_manifest_text, second_manifest_text
+      assert_equal 1, first_top.scan(/input\s+logic\s+isolate_req\b/).size
+      assert_equal 1, first_top.scan(/input\s+logic\s+power_enable\b/).size
+      refute_match(/input\s+logic\s+save_req\b/, first_top)
+
+      manifest = JSON.parse(first_manifest_text)
+      assert_equal [
+        {
+          'direction' => 'input', 'id' => 'isolate',
+          'signal' => 'isolate_req', 'source' => 'top-port'
+        },
+        {
+          'direction' => 'input', 'id' => 'switch',
+          'signal' => 'power_enable', 'source' => 'top-port'
+        }
+      ], manifest.fetch('logicControlPorts')
+    end
+  end
+
+  def test_generator_rejects_control_collisions_before_writing_rtl
+    baseline = RtlGenerator.new(hierarchy_noc, TEMPLATE_DIR)
+    context = baseline.build_domain_rtl_context
+    baseline.validate_domain_rtl_context!(context)
+    rendering = baseline.build_domain_rtl_rendering(context)
+    clock_signals = rendering.fetch('clockDomains').map do |domain|
+      domain.fetch('clockSignal')
+    end
+    assert_equal 2, clock_signals.size
+    collisions = ['rst_n', *clock_signals, 'ep_left_flit_in']
+
+    Dir.mktmpdir('finepaper-v3-power-control-collision-') do |directory|
+      collisions.each_with_index do |signal, index|
+        noc = hierarchy_noc(power_intent_plan([
+          power_control('conflict', signal, 'top-port')
+        ]))
+        output = File.join(directory, index.to_s)
+        error = assert_raises(FinepaperNoc::RtlHierarchyManifestError) do
+          RtlGenerator.new(noc, TEMPLATE_DIR).generate_partitioned(output)
+        end
+        assert_equal 'rtl_hierarchy.logic_control_port_collision', error.code
+        refute Dir.exist?(output)
+      end
+    end
+  end
+
+  def test_generator_validates_power_plan_identity_and_control_shape
+    valid_plan = power_intent_plan([
+      power_control('isolate', 'isolate_req', 'top-port')
+    ])
+    cases = [
+      ['format', 'unexpected', 'rtl_hierarchy.invalid_power_intent_plan_format'],
+      ['formatVersion', 2, 'rtl_hierarchy.invalid_power_intent_plan_version'],
+      ['design', 'another_design', 'rtl_hierarchy.power_intent_design_mismatch']
+    ]
+    cases.each do |key, value, code|
+      plan = JSON.parse(JSON.generate(valid_plan))
+      plan[key] = value
+      generator = RtlGenerator.new(hierarchy_noc(plan), TEMPLATE_DIR)
+      context = generator.build_domain_rtl_context
+      rendering = generator.build_domain_rtl_rendering(context)
+      error = assert_raises(FinepaperNoc::RtlHierarchyManifestError) do
+        generator.send(:build_logic_control_ports, rendering)
+      end
+      assert_equal code, error.code
+    end
+
+    invalid_signal = JSON.parse(JSON.generate(valid_plan))
+    invalid_signal.dig('controls', 0)['signal'] = 'bad.signal'
+    generator = RtlGenerator.new(hierarchy_noc(invalid_signal), TEMPLATE_DIR)
+    context = generator.build_domain_rtl_context
+    rendering = generator.build_domain_rtl_rendering(context)
+    error = assert_raises(FinepaperNoc::RtlHierarchyManifestError) do
+      generator.send(:build_logic_control_ports, rendering)
+    end
+    assert_equal 'rtl_hierarchy.invalid_logic_control_identifier', error.code
+  end
+
+  def test_parser_and_topology_expander_copy_the_optional_power_plan
+    plan = JSON.parse(JSON.generate(power_intent_plan([
+      power_control('isolate', 'isolate_req', 'top-port')
+    ])))
+    graph = {
+      'schema' => 'finepaper-ipcore-graph-v1',
+      'name' => 'hierarchy_fixture',
+      'version' => '3.0',
+      'ipcore_state' => [{
+        'ipcore' => 'finepaper.noc',
+        'state' => {
+          'global_parameters' => PARAMETERS.merge(
+            'mesh' => {'width' => 1, 'height' => 1}
+          ),
+          'power_intent_plan' => plan
+        }
+      }],
+      'modules' => [],
+      'connections' => []
+    }
+
+    Dir.mktmpdir('finepaper-v3-power-plan-parser-') do |directory|
+      path = File.join(directory, 'graph.json')
+      File.write(path, JSON.pretty_generate(graph))
+      parsed = JsonParser.parse(path)
+      assert_equal plan, parsed.power_intent_plan
+      refute_same plan, parsed.power_intent_plan
+      refute_same plan.dig('controls', 0, 'signal'),
+                  parsed.power_intent_plan.dig('controls', 0, 'signal')
+      plan.dig('controls', 0, 'signal').replace('caller_mutation')
+      assert_equal 'isolate_req',
+                   parsed.power_intent_plan.dig('controls', 0, 'signal')
+
+      expanded = TopologyExpander.expand(parsed)
+      assert_equal 1, expanded.xps.size
+      refute_same parsed.power_intent_plan, expanded.power_intent_plan
+      parsed.power_intent_plan.dig('controls', 0, 'signal')
+            .replace('parsed_mutation')
+      assert_equal 'isolate_req',
+                   expanded.power_intent_plan.dig('controls', 0, 'signal')
+      refute expanded.power_intent_plan.frozen?
+      refute expanded.power_intent_plan.dig('controls', 0, 'signal').frozen?
     end
   end
 
@@ -415,15 +605,66 @@ class TestV3RtlHierarchyManifest < Minitest::Test
     plan
   end
 
+  def hierarchy_noc(power_plan = nil)
+    xps = [
+      Xp.new('xp_left', 0, 0, ['ep_left']),
+      Xp.new('xp_right', 1, 0, ['ep_right'])
+    ]
+    NocConfig.new(
+      'hierarchy_fixture', '3.0', PARAMETERS, xps,
+      [Connection.new('xp_left', 'xp_right', 'east')],
+      [
+        Endpoint.new('ep_left', 'master', 'axi4', 64),
+        Endpoint.new('ep_right', 'slave', 'axi4', 64)
+      ],
+      split_power_plan,
+      power_plan
+    )
+  end
+
+  def power_intent_plan(controls)
+    {
+      'format' => 'finepaper.noc-power-intent-plan',
+      'formatVersion' => 1,
+      'design' => 'hierarchy_fixture',
+      'controls' => controls
+    }
+  end
+
+  def power_control(id, signal, source)
+    {
+      'id' => id,
+      'signal' => signal,
+      'source' => source,
+      'activeSense' => 'high',
+      'ownerDomain' => 'power-left'
+    }
+  end
+
   def populated_builder(context, reverse: false, omit_last_direction: false,
                         bridge_placement: 'infrastructure',
-                        duplicate_signals: false)
+                        duplicate_signals: false,
+                        expected_logic_control_ports: [],
+                        register_logic_control_ports: true)
     builder = FinepaperNoc::RtlHierarchyManifestBuilder.new(
       context: context,
       design: 'hierarchy_fixture',
       top_module: 'hierarchy_fixture_top',
-      top_artifact: 'hierarchy_fixture_top.v'
+      top_artifact: 'hierarchy_fixture_top.v',
+      expected_logic_control_ports: expected_logic_control_ports
     )
+    if register_logic_control_ports
+      controls = expected_logic_control_ports.dup
+      controls.reverse! if reverse
+      controls.each do |control|
+        builder.register_logic_control_port(
+          control_id: control.fetch('id'),
+          signal: control.fetch('signal'),
+          source: control.fetch('source'),
+          direction: control.fetch('direction')
+        )
+      end
+    end
     instances = {
       %w[router r-0-0] => ['xp_router_e', 'u_router_left'],
       %w[router r-1-0] => ['xp_router_w', 'u_router_right'],

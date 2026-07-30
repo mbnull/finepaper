@@ -27,7 +27,8 @@ module FinepaperNoc
     EDGE_ORDER = {'router-link' => 0, 'endpoint-attachment' => 1}.freeze
     HDL_IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_$]*\z/
 
-    def initialize(context:, design:, top_module:, top_artifact:)
+    def initialize(context:, design:, top_module:, top_artifact:,
+                   expected_logic_control_ports: [])
       @context = context
       @design = design
       @top_module = top_module
@@ -38,6 +39,34 @@ module FinepaperNoc
       @reset_synchronizers = {}
       @edge_directions = {}
       validate_header!
+      @expected_logic_control_ports = index_expected_logic_control_ports!(
+        expected_logic_control_ports
+      )
+      @logic_control_ports = {}
+    end
+
+    def register_logic_control_port(control_id:, signal:, source:, direction:)
+      record = canonicalize(logic_control_port!({
+        'id' => control_id,
+        'signal' => signal,
+        'source' => source,
+        'direction' => direction
+      }, '/logicControlPorts/new'))
+      id = record.fetch('id')
+      expected = @expected_logic_control_ports[id]
+      expect!(expected, 'rtl_hierarchy.unknown_logic_control_port',
+              '/logicControlPorts/new/id',
+              "logic control #{id} is absent from the expected top ports")
+      expect!(!@logic_control_ports.key?(id),
+              'rtl_hierarchy.duplicate_logic_control_port',
+              '/logicControlPorts/new/id',
+              "logic control #{id} is already registered")
+      expect!(record == expected,
+              'rtl_hierarchy.logic_control_port_mismatch',
+              '/logicControlPorts/new',
+              "logic control #{id} differs from the expected top port")
+      @logic_control_ports[id] = record
+      self
     end
 
     def register_element(element:, module_name:, instance:)
@@ -219,6 +248,9 @@ module FinepaperNoc
         'design' => @design,
         'topModule' => @top_module,
         'topArtifact' => @top_artifact,
+        'logicControlPorts' => @logic_control_ports.values.sort_by do |record|
+          [record.fetch('id'), record.fetch('signal')]
+        end,
         'elements' => @elements.values.sort_by do |record|
           reference_sort_key(record.fetch('element'))
         end,
@@ -261,6 +293,59 @@ module FinepaperNoc
       expect!(@edge_directions.keys.sort == expected_directions,
               'rtl_hierarchy.incomplete_edge_directions', '/edgeDirections',
               'emitted edge directions are not a bijection with physical edge orientations')
+      expect!(@logic_control_ports == @expected_logic_control_ports,
+              'rtl_hierarchy.incomplete_logic_control_ports',
+              '/logicControlPorts',
+              'emitted logic controls are not a bijection with expected top ports')
+    end
+
+    def index_expected_logic_control_ports!(value)
+      expect!(value.is_a?(Array),
+              'rtl_hierarchy.expected_logic_control_ports',
+              '/expectedLogicControlPorts',
+              'expected logic control ports must be an array')
+      indexed = {}
+      signals = {}
+      value.each_with_index do |entry, index|
+        path = "/expectedLogicControlPorts/#{index}"
+        record = canonicalize(logic_control_port!(entry, path))
+        id = record.fetch('id')
+        signal = record.fetch('signal')
+        expect!(!indexed.key?(id),
+                'rtl_hierarchy.duplicate_expected_logic_control_port',
+                "#{path}/id", "duplicate expected logic control #{id}")
+        expect!(!signals.key?(signal),
+                'rtl_hierarchy.duplicate_expected_logic_control_signal',
+                "#{path}/signal",
+                "duplicate expected logic control signal #{signal}")
+        indexed[id] = record
+        signals[signal] = id
+      end
+      indexed
+    end
+
+    def logic_control_port!(value, path)
+      expect!(value.is_a?(Hash), 'rtl_hierarchy.expected_logic_control_port',
+              path, 'logic control port must be an object')
+      exact_keys!(value, %w[id signal source direction], path)
+      id = non_empty_string!(value.fetch('id'), "#{path}/id")
+      signal = identifier!(value.fetch('signal'), "#{path}/signal")
+      source = non_empty_string!(value.fetch('source'), "#{path}/source")
+      direction = non_empty_string!(value.fetch('direction'),
+                                    "#{path}/direction")
+      expect!(source == 'top-port', 'rtl_hierarchy.invalid_logic_control_source',
+              "#{path}/source",
+              'an RTL logic control port must have source top-port')
+      expect!(direction == 'input',
+              'rtl_hierarchy.invalid_logic_control_direction',
+              "#{path}/direction",
+              'a power-intent logic control port must be an input')
+      {
+        'id' => id,
+        'signal' => signal,
+        'source' => source,
+        'direction' => direction
+      }
     end
 
     def active_timing_domains
@@ -534,9 +619,10 @@ module FinepaperNoc
       case value
       when Hash
         value.keys.sort.to_h do |key|
-          [key, canonicalize(value.fetch(key))]
+          [canonicalize(key), canonicalize(value.fetch(key))]
         end
       when Array then value.map { |child| canonicalize(child) }
+      when String then value.dup
       else value
       end
     end

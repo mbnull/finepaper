@@ -503,7 +503,8 @@ class JsonParser
                   xps,
                   connections,
                   endpoints,
-                  ipcore_domain_implementation(data))
+                  ipcore_domain_implementation(data),
+                  ipcore_power_intent_plan(data))
   end
 
   def self.noc_module_type?(mod, type)
@@ -511,26 +512,29 @@ class JsonParser
   end
 
   def self.ipcore_parameters(data)
-    ipcore_state = data['ipcore_state']
-    return data['parameters'] || {} unless ipcore_state.is_a?(Array)
-
-    state_record = ipcore_state.find do |record|
-      record.is_a?(Hash) && record['ipcore'] == FINEPAPER_NOC_PACKAGE
-    end
-    state = state_record && state_record['state']
+    state = ipcore_package_state(data)
     parameters = state.is_a?(Hash) ? state['global_parameters'] : nil
     parameters.is_a?(Hash) ? parameters : (data['parameters'] || {})
   end
 
   def self.ipcore_domain_implementation(data)
+    state = ipcore_package_state(data)
+    state.is_a?(Hash) ? state['domain_implementation'] : nil
+  end
+
+  def self.ipcore_power_intent_plan(data)
+    state = ipcore_package_state(data)
+    state.is_a?(Hash) ? state['power_intent_plan'] : nil
+  end
+
+  def self.ipcore_package_state(data)
     ipcore_state = data['ipcore_state']
     return nil unless ipcore_state.is_a?(Array)
 
     state_record = ipcore_state.find do |record|
       record.is_a?(Hash) && record['ipcore'] == FINEPAPER_NOC_PACKAGE
     end
-    state = state_record && state_record['state']
-    state.is_a?(Hash) ? state['domain_implementation'] : nil
+    state_record && state_record['state']
   end
 
   def self.parse_ipcore_xp(mod, endpoints)

@@ -543,7 +543,7 @@ def router_configuration_map(design)
   end
 end
 
-def legacy_input(design, domain_implementation)
+def legacy_input(design, domain_implementation, power_intent_plan = nil)
   raise 'design format must be finepaper.noc-design' unless design['format'] == 'finepaper.noc-design'
   raise 'only mesh topology is supported' unless design.dig('topology', 'type') == 'mesh'
 
@@ -606,6 +606,28 @@ def legacy_input(design, domain_implementation)
   end
   router_configs = router_configuration_map(design)
 
+  package_state = {
+    'global_parameters' => {
+      'data_width' => required_integer_parameter(
+        parameters, 'dataWidth', 'design'
+      ),
+      'flit_width' => required_integer_parameter(
+        parameters, 'flitWidth', 'design'
+      ),
+      'addr_width' => required_integer_parameter(
+        parameters, 'addrWidth', 'design'
+      ),
+      'mesh' => {
+        'width' => columns,
+        'height' => rows,
+        'endpoint_map' => endpoint_map,
+        'router_configs' => router_configs
+      }
+    },
+    'domain_implementation' => domain_implementation
+  }
+  package_state['power_intent_plan'] = power_intent_plan if power_intent_plan
+
   {
     'schema' => 'finepaper-ipcore-graph-v1',
     # The display name is intentionally not used as a file or HDL token.
@@ -616,26 +638,7 @@ def legacy_input(design, domain_implementation)
     'ipcore_state' => [{
       'ipcore' => 'finepaper.noc',
       'instance' => 'noc_0',
-      'state' => {
-        'global_parameters' => {
-          'data_width' => required_integer_parameter(
-            parameters, 'dataWidth', 'design'
-          ),
-          'flit_width' => required_integer_parameter(
-            parameters, 'flitWidth', 'design'
-          ),
-          'addr_width' => required_integer_parameter(
-            parameters, 'addrWidth', 'design'
-          ),
-          'mesh' => {
-            'width' => columns,
-            'height' => rows,
-            'endpoint_map' => endpoint_map,
-            'router_configs' => router_configs
-          }
-        },
-        'domain_implementation' => domain_implementation
-      }
+      'state' => package_state
     }],
     'modules' => endpoint_modules,
     'connections' => []
@@ -717,7 +720,9 @@ begin
                           document: power_intent_document
                         )
                       end
-  translated_input = legacy_input(design, implementation_plan)
+  translated_input = legacy_input(
+    design, implementation_plan, power_intent_plan
+  )
   legacy_root = File.expand_path('../legacy-generator', __dir__)
   legacy_program = File.join(legacy_root, 'bin', command == 'validate' ? 'drc' : 'generate')
   raise 'legacy generator is missing from this Package' unless File.file?(legacy_program)

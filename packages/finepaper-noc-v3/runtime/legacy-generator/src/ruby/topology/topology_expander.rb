@@ -21,6 +21,7 @@ class TopologyExpander
       end
     end
     NocConfig.new(noc.name, noc.version, noc.parameters, xps, conns,
-                  noc.endpoints, noc.domain_implementation)
+                  noc.endpoints, noc.domain_implementation,
+                  noc.power_intent_plan)
   end
 end
