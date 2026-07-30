@@ -114,6 +114,7 @@ Package Manifest V2 必须显式提供 `domainTypes` 数组，空数组表示该
 - `appliesTo`：`router`、`endpoint` 或两者；
 - `cardinality`：`single` 或 `multiple`；
 - `required`：适用元素是否必须归属；
+- `defaultInstance`：可选的 required Domain 自动创建脚手架；
 - `properties`：Domain 实例属性 schema；
 - `relations`：允许从该 Type 发出的关系 schema；
 - `crossingProperties`：crossing policy 与 edge override 的属性 schema。
@@ -129,6 +130,13 @@ Package Manifest V2 必须显式提供 `domainTypes` 数组，空数组表示该
       "appliesTo": ["router", "endpoint"],
       "cardinality": "single",
       "required": true,
+      "defaultInstance": {
+        "id": "clock-main",
+        "name": "Primary fabric clock",
+        "properties": {
+          "frequencyMHz": 1000
+        }
+      },
       "properties": [
         {
           "id": "frequencyMHz",
@@ -189,6 +197,23 @@ Domain property 沿用基础 scalar 类型、枚举和数值范围，同时增�
 
 普通 Package 参数仍要求 default。Domain property 则允许没有 default，因为很多属性只能由用户或外部 Engine 决定。
 `referenceDomainType` 属性不能把设计内实例 ID 写成 Manifest default；Package 尚未声明实例，创建流程也不能用魔法字符串猜测引用目标。
+
+`defaultInstance` 只允许出现在 `required: true` 的 Domain Type 上，并且只在创建
+请求没有显式 `domainConfiguration` 时使用。它是一个严格对象，只允许 `id`、
+`name` 和 `properties`：
+
+- `properties` 先合并属性 schema 的 `default`，再由 `defaultInstance.properties`
+  覆盖；显式声明后的结果必须满足完整 Domain property schema；
+- reference property 可以在这里引用另一个 required Type 的 resolved
+  `defaultInstance.id`，因为这些实例由同一次原子创建共同物化；
+- 未声明属性、错误类型/范围/枚举、未知或类型不匹配的引用、重复 scaffold ID
+  都会让 Package 加载失败；
+- optional Domain Type 声明 `defaultInstance` 会被拒绝，避免存在永远不执行的配置。
+
+为兼容现有 Package，required Type 省略 `defaultInstance` 时，Package parser 会把
+旧约定解析成 canonical scaffold：ID 为 `<type>-default`，名称来自 Type label，
+属性来自 schema defaults。该兼容规则只存在于 Package 解析层；Application 只消费
+resolved scaffold，不再拼接 ID、猜测名称或自行收集默认属性。
 
 ## 4. Core 与 Package Validation 的职责
 
@@ -278,11 +303,11 @@ Package V2 的 `createDesign` 请求可以显式携带完整配置。`domainConf
 
 简单 required Type 可以继续使用默认物化作为脚手架；若 required reference/relation 令脚手架无法独立成立，GUI 应把尚未成功创建的候选 Design 交给同一个完整编辑器，并把最终五数组作为显式 `domainConfiguration` 重新提交。Application 不应为某个 clock/power 关系编造隐式对象或顺序规则。
 
-当前简单脚手架仍以通用 `<type>-default` 约定生成临时实例 ID。它不是 clock/power 特例，但仍属于下一阶段要移出 Application 的策略：应改为 Package 显式声明 scaffold/default-instance policy，或直接要求创建请求提供完整配置，避免 Core/Application 长期拥有命名规则。
+required Type 可以在 Package V2 中用 `defaultInstance` 显式声明脚手架的 ID、名称和属性。Application 只消费 Package parser 解析后的 canonical scaffold，不再拼接 ID、猜名称或收集默认属性。为兼容旧 Package，省略该字段时仍由 Package parser（而不是 Application）解析为 `<type>-default`、Type label 和属性 schema defaults；这是受控的 manifest 兼容规则，不是 clock/power 特例。
 
 批量 assignment 必须原子执行：任一元素或 Domain 不合法时，整次操作不修改设计。修改 Domain 的稳定 `id/type` 不应通过普通 update 偷偷重写引用；需要独立 rename/migrate 操作时再增加显式 API。
 
-创建 Package V2 设计时，Application 可以按 Package schema 物化 required Type 的默认实例与归属，但不能按 `clock`、`power` 名称分支。Endpoint 删除应清理其 membership 和 attachment override；Mesh 缩小若会删除有 Domain 意图的 Router/Link，应明确拒绝并定位冲突，不能静默丢数据。
+创建 Package V2 设计时，Application 可以按 Package schema 物化 required Type 的默认实例与归属，但不能按 `clock`、`power` 名称分支。Endpoint 删除应清理其 membership 和 attachment override。Mesh 缩小若会令 Endpoint 悬空必须作为硬阻塞；若只会删除被裁剪 Router 的 membership 或被裁剪 RouterLink 的 override，则预览必须完整列出原记录，并要求调用方原样回传精确确认。缺失、额外或已陈旧的确认都应原子失败，不能使用宽泛的 `allowDataLoss` 开关，也不能静默丢数据。
 
 ## 7. GUI 交互目标
 
@@ -295,6 +320,8 @@ Package V2 的 `createDesign` 请求可以显式携带完整配置。`domainConf
 - `Color by: None / <Domain Type>` 切换画布图层；
 - Legend 显示颜色、名称、缩写和成员数，不能只靠颜色；
 - Router/Endpoint 多选后可以批量赋值，混合值显示 `Mixed`；
+- 新建或断开后重连 Endpoint 时，先按 Package 中所有 `appliesTo: endpoint` 的 Type 收集 membership；required 多实例必须显式选择，optional/multiple 原值必须在重连时保留；
+- Mesh resize 只改变 topology spec，Router/RouterLink 始终由 Mesh 投影；新增 Router 逐个收集 Package-driven assignment，缩容则展示并精确确认会删除的 Router membership 与 RouterLink override；
 - crossing 使用独立线型或 badge，Inspector 显示两端集合、默认 policy 和 edge override；
 - Domain 颜色、当前图层和面板状态属于 Workspace presentation；
 - Domain 实例、归属、关系、policy 和 override 属于 `NocDesign`。

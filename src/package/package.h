@@ -67,12 +67,23 @@ struct DomainRelationDefinition {
     QVector<DomainPropertyDefinition> properties;
 };
 
+// Canonical Package V2 scaffold used only when createDesign receives no explicit
+// Domain configuration. The parser resolves the legacy convention into this
+// structure for every required Domain Type, so Application code never derives
+// instance identity or values itself. Optional Domain Types have no scaffold.
+struct DomainDefaultInstanceDefinition {
+    QString id;
+    QString name;
+    QJsonObject properties;
+};
+
 struct DomainTypeDefinition {
     QString id;
     QString label;
     QVector<ElementKind> appliesTo;
     DomainCardinality cardinality = DomainCardinality::Single;
     bool required = false;
+    std::optional<DomainDefaultInstanceDefinition> defaultInstance;
     QVector<DomainPropertyDefinition> properties;
     QVector<DomainRelationDefinition> relations;
     QVector<DomainPropertyDefinition> crossingProperties;

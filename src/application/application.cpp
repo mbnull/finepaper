@@ -528,50 +528,23 @@ DesignResult FinepaperApplication::resizeMesh(
     const NocDesign& design,
     int rows,
     int columns,
-    const QVector<DomainMembership>& newRouterMemberships) const {
-    DesignResult result;
-    result.design = design;
-    if (rows < 1 || columns < 1) {
-        appendDiagnostic(result.diagnostics,
-                         QStringLiteral("error"),
-                         QStringLiteral("mesh.invalid_size"),
-                         QStringLiteral("rows and columns must be positive"),
-                         QStringLiteral("/topology"));
-        return result;
-    }
-    const TopologySpec resizedTopology{design.topology.type, rows, columns};
-    if (!domain_service::canProjectTopology(resizedTopology)) {
-        appendDiagnostic(result.diagnostics,
-                         QStringLiteral("error"),
-                         QStringLiteral("topology.projection_too_large"),
-                         QStringLiteral("topology exceeds Finepaper's safe projection limit"),
-                         QStringLiteral("/topology"));
-        return result;
-    }
-    for (qsizetype index = 0; index < design.endpoints.size(); ++index) {
-        const RouterPosition router = design.endpoints.at(index).attachment.router;
-        if (router.x >= columns || router.y >= rows) {
-            appendDiagnostic(result.diagnostics,
-                             QStringLiteral("error"),
-                             QStringLiteral("mesh.resize_would_detach_endpoint"),
-                             QStringLiteral("resize would detach an existing Endpoint"),
-                             QStringLiteral("/endpoints/%1/attachment/router").arg(index));
-        }
-    }
-    if (hasErrors(result.diagnostics)) {
-        return result;
-    }
+    const QVector<DomainMembership>& newRouterMemberships,
+    const MeshResizeImpactConfirmation& confirmation) const {
     const auto package = m_catalog.resolve(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
     domain_service::MutationResult domainResult = domain_service::resizeMesh(
-        design, *package, rows, columns, newRouterMemberships);
+        design, *package, rows, columns, newRouterMemberships, confirmation);
     if (hasErrors(domainResult.diagnostics)) {
-        result.diagnostics = std::move(domainResult.diagnostics);
-        return result;
+        return DesignResult{false, design, std::move(domainResult.diagnostics)};
     }
     DesignResult validated = validateEditedDesign(domainResult.design);
+    QVector<Diagnostic> combinedDiagnostics =
+        std::move(domainResult.diagnostics);
+    combinedDiagnostics += validated.diagnostics;
+    validated.diagnostics = std::move(combinedDiagnostics);
+    validated.success = !hasErrors(validated.diagnostics);
     if (!validated.success) {
         validated.design = design;
     }

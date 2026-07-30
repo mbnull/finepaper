@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/domain_assignment.h"
+#include "application/mesh_resize_plan.h"
 #include "noc/model.h"
 #include "package/package.h"
 
@@ -25,7 +26,8 @@ MutationResult resizeMesh(
     const PackageDefinition& package,
     int rows,
     int columns,
-    const QVector<DomainMembership>& newRouterMemberships);
+    const QVector<DomainMembership>& newRouterMemberships,
+    const MeshResizeImpactConfirmation& confirmation = {});
 MutationResult addEndpoint(
     const NocDesign& design,
     const PackageDefinition& package,

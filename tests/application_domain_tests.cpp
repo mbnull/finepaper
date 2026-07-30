@@ -346,6 +346,58 @@ QJsonObject explicitConfigurationPackageManifest() {
     return manifest;
 }
 
+QJsonObject configuredScaffoldPackageManifest() {
+    QJsonObject manifest = packageManifest();
+    manifest.insert(
+        QStringLiteral("id"), QStringLiteral("test.configured-domain-scaffold"));
+    manifest.insert(
+        QStringLiteral("name"), QStringLiteral("Configured Domain Scaffold test"));
+
+    QJsonArray domainTypes = manifest.value(QStringLiteral("domainTypes")).toArray();
+    QJsonObject power = domainTypes[0].toObject();
+    power.insert(QStringLiteral("defaultInstance"), QJsonObject{
+        {QStringLiteral("id"), QStringLiteral("vdd-main")},
+        {QStringLiteral("name"), QStringLiteral("Main VDD rail")},
+        {QStringLiteral("properties"), QJsonObject{
+            {QStringLiteral("voltageMv"), 975}
+        }}
+    });
+    domainTypes[0] = power;
+
+    QJsonObject clock = domainTypes[1].toObject();
+    clock.insert(QStringLiteral("defaultInstance"), QJsonObject{
+        {QStringLiteral("id"), QStringLiteral("fabric-clock")},
+        {QStringLiteral("name"), QStringLiteral("Fabric PLL")},
+        {QStringLiteral("properties"), QJsonObject{
+            {QStringLiteral("frequencyMHz"), 1200},
+            {QStringLiteral("powerDomain"), QStringLiteral("vdd-main")}
+        }}
+    });
+    domainTypes[1] = clock;
+    manifest.insert(QStringLiteral("domainTypes"), domainTypes);
+    return manifest;
+}
+
+QJsonObject legacyMissingDefaultPackageManifest() {
+    QJsonObject manifest = packageManifest();
+    manifest.insert(
+        QStringLiteral("id"), QStringLiteral("test.legacy-missing-domain-default"));
+    manifest.insert(
+        QStringLiteral("name"), QStringLiteral("Legacy Missing Domain Default test"));
+
+    QJsonArray domainTypes = manifest.value(QStringLiteral("domainTypes")).toArray();
+    QJsonObject clock = domainTypes[1].toObject();
+    QJsonArray properties = clock.value(QStringLiteral("properties")).toArray();
+    QJsonObject powerReference = properties[1].toObject();
+    powerReference.insert(QStringLiteral("required"), true);
+    powerReference.remove(QStringLiteral("default"));
+    properties[1] = powerReference;
+    clock.insert(QStringLiteral("properties"), properties);
+    domainTypes[1] = clock;
+    manifest.insert(QStringLiteral("domainTypes"), domainTypes);
+    return manifest;
+}
+
 QJsonObject versionOnePackageManifest() {
     QJsonObject manifest = packageManifest();
     manifest.insert(QStringLiteral("formatVersion"), 1);
@@ -689,6 +741,106 @@ int main(int argc, char** argv) {
                                QStringList{QStringLiteral("clock-default")})
               && !findDomain(base, QStringLiteral("tag-default")),
           QStringLiteral("createDesign assigns every Router and Endpoint to applicable required Domains"));
+
+    QTemporaryDir scaffoldFixture(
+        QStringLiteral("/tmp/finepaper-domain-scaffold-test-XXXXXX"));
+    const bool scaffoldFixtureReady = scaffoldFixture.isValid()
+        && prepareFixture(scaffoldFixture.path())
+        && saveJsonObject(
+            QDir(scaffoldFixture.path()).filePath(QStringLiteral("package.json")),
+            configuredScaffoldPackageManifest());
+    check(scaffoldFixtureReady,
+          QStringLiteral("the configured Domain scaffold Package fixture is prepared"));
+    if (scaffoldFixtureReady) {
+        FinepaperApplication scaffoldApplication;
+        const QVector<Diagnostic> scaffoldPackageDiagnostics =
+            scaffoldApplication.reloadPackages(
+                QStringList{scaffoldFixture.path()});
+        const DesignResult scaffoldCreated = scaffoldApplication.createDesign(
+            requestForPackage(QStringLiteral("test.configured-domain-scaffold")));
+        const DomainDefinition* configuredPower = findDomain(
+            scaffoldCreated.design, QStringLiteral("vdd-main"));
+        const DomainDefinition* configuredClock = findDomain(
+            scaffoldCreated.design, QStringLiteral("fabric-clock"));
+        check(!hasErrors(scaffoldPackageDiagnostics)
+                  && scaffoldCreated.success
+                  && configuredPower
+                  && configuredPower->name == QStringLiteral("Main VDD rail")
+                  && configuredPower->properties.value(
+                         QStringLiteral("voltageMv")).toInt() == 975
+                  && configuredClock
+                  && configuredClock->name == QStringLiteral("Fabric PLL")
+                  && configuredClock->properties.value(
+                         QStringLiteral("frequencyMHz")).toInt() == 1200
+                  && configuredClock->properties.value(
+                         QStringLiteral("powerDomain")).toString()
+                      == QStringLiteral("vdd-main")
+                  && !findDomain(scaffoldCreated.design,
+                                 QStringLiteral("power-default"))
+                  && !findDomain(scaffoldCreated.design,
+                                 QStringLiteral("clock-default")),
+              QStringLiteral("createDesign consumes only the Package-resolved Domain scaffold"));
+        check(scaffoldCreated.success
+                  && hasAssignment(scaffoldCreated.design,
+                                   ElementKind::Router,
+                                   QStringLiteral("r-0-0"),
+                                   QStringLiteral("power"),
+                                   QStringList{QStringLiteral("vdd-main")})
+                  && hasAssignment(scaffoldCreated.design,
+                                   ElementKind::Router,
+                                   QStringLiteral("r-1-0"),
+                                   QStringLiteral("clock"),
+                                   QStringList{QStringLiteral("fabric-clock")})
+                  && hasAssignment(scaffoldCreated.design,
+                                   ElementKind::Endpoint,
+                                   QStringLiteral("ep0"),
+                                   QStringLiteral("clock"),
+                                   QStringList{QStringLiteral("fabric-clock")}),
+              QStringLiteral("resolved scaffold ids drive required Router and Endpoint memberships"));
+    }
+
+    QTemporaryDir legacyMissingDefaultFixture(
+        QStringLiteral("/tmp/finepaper-legacy-domain-default-test-XXXXXX"));
+    const bool legacyMissingDefaultFixtureReady =
+        legacyMissingDefaultFixture.isValid()
+        && prepareFixture(legacyMissingDefaultFixture.path())
+        && saveJsonObject(
+            QDir(legacyMissingDefaultFixture.path()).filePath(
+                QStringLiteral("package.json")),
+            legacyMissingDefaultPackageManifest());
+    check(legacyMissingDefaultFixtureReady,
+          QStringLiteral("the legacy missing Domain default Package fixture is prepared"));
+    if (legacyMissingDefaultFixtureReady) {
+        FinepaperApplication legacyApplication;
+        const QVector<Diagnostic> legacyPackageDiagnostics =
+            legacyApplication.reloadPackages(
+                QStringList{legacyMissingDefaultFixture.path()});
+        const DomainTypeDefinition* loadedClock =
+            legacyApplication.packages().isEmpty()
+            ? nullptr
+            : legacyApplication.packages().constFirst().domainType(
+                  QStringLiteral("clock"));
+        check(!hasErrors(legacyPackageDiagnostics)
+                  && loadedClock
+                  && loadedClock->defaultInstance
+                  && !loadedClock->defaultInstance->properties.contains(
+                      QStringLiteral("powerDomain")),
+              QStringLiteral("a legacy required property without a default remains loadable without a guessed value"));
+
+        const DesignResult legacyCreated = legacyApplication.createDesign(
+            requestForPackage(
+                QStringLiteral("test.legacy-missing-domain-default")));
+        const DomainDefinition* legacyClock = findDomain(
+            legacyCreated.design, QStringLiteral("clock-default"));
+        check(!legacyCreated.success
+                  && hasDiagnosticCode(
+                      legacyCreated.diagnostics,
+                      QStringLiteral("domain_property.missing"))
+                  && legacyClock
+                  && !legacyClock->properties.contains(
+                      QStringLiteral("powerDomain")),
+              QStringLiteral("implicit creation reports a missing required Domain property instead of guessing a reference"));
+    }
 
     checkAtomicFailure(
         application.addDomain(
@@ -1237,16 +1389,104 @@ int main(int argc, char** argv) {
                                    QStringLiteral("domain_edge_override.policy_pair_mismatch")),
           QStringLiteral("edge overrides must select a policy matching the directed crossing"));
 
-    const DesignResult rejectedShrink = application.resizeMesh(linkCrossing, 1, 1);
-    check(!rejectedShrink.success
+    const DesignResult unconfirmedShrink = application.resizeMesh(
+        linkCrossing, 1, 1);
+    check(!unconfirmedShrink.success
               && hasDiagnosticCode(
-                  rejectedShrink.diagnostics,
+                  unconfirmedShrink.diagnostics,
                   QStringLiteral("mesh.resize_would_remove_domain_membership"))
               && hasDiagnosticCode(
-                  rejectedShrink.diagnostics,
+                  unconfirmedShrink.diagnostics,
                   QStringLiteral("mesh.resize_would_remove_edge_override"))
-              && sameDesign(rejectedShrink.design, linkCrossing),
-          QStringLiteral("resizeMesh rejects shrinking away Router memberships and Link overrides"));
+              && hasDiagnosticCode(
+                  unconfirmedShrink.diagnostics,
+                  QStringLiteral("mesh.resize_missing_membership_confirmation"))
+              && hasDiagnosticCode(
+                  unconfirmedShrink.diagnostics,
+                  QStringLiteral("mesh.resize_missing_override_confirmation"))
+              && sameDesign(unconfirmedShrink.design, linkCrossing),
+          QStringLiteral("resizeMesh reports impacts but atomically rejects an unconfirmed shrink"));
+
+    MeshResizeImpactConfirmation shrinkConfirmation;
+    for (const DomainMembership& membership : linkCrossing.domainMemberships) {
+        if (membership.element
+            == ElementRef{ElementKind::Router, QStringLiteral("r-1-0")}) {
+            shrinkConfirmation.removedMemberships.append(membership);
+        }
+    }
+    for (const DomainEdgeOverride& edgeOverride : linkCrossing.edgeOverrides) {
+        if (edgeOverride.edge
+            == ElementRef{ElementKind::RouterLink, routerLinkId}) {
+            shrinkConfirmation.removedEdgeOverrides.append(edgeOverride);
+        }
+    }
+    check(shrinkConfirmation.removedMemberships.size() == 1
+              && shrinkConfirmation.removedEdgeOverrides.size() == 1,
+          QStringLiteral("shrink confirmation fixture captures exact preview records"));
+
+    const DesignResult confirmedShrink = application.resizeMesh(
+        linkCrossing, 1, 1, {}, shrinkConfirmation);
+    check(confirmedShrink.success
+              && confirmedShrink.design.topology.rows == 1
+              && confirmedShrink.design.topology.columns == 1
+              && !findMembership(confirmedShrink.design,
+                                 ElementKind::Router,
+                                 QStringLiteral("r-1-0"))
+              && confirmedShrink.design.edgeOverrides.isEmpty()
+              && hasAssignment(confirmedShrink.design,
+                               ElementKind::Router,
+                               QStringLiteral("r-0-0"),
+                               QStringLiteral("clock"),
+                               QStringList{QStringLiteral("clock-default")})
+              && hasDiagnosticCode(
+                  confirmedShrink.diagnostics,
+                  QStringLiteral("mesh.resize_would_remove_domain_membership"))
+              && hasDiagnosticCode(
+                  confirmedShrink.diagnostics,
+                  QStringLiteral("mesh.resize_would_remove_edge_override")),
+          QStringLiteral("exact confirmation atomically shrinks required Router Domains and removes only tied state"));
+
+    MeshResizeImpactConfirmation staleShrinkConfirmation = shrinkConfirmation;
+    staleShrinkConfirmation.removedMemberships[0].assignments.insert(
+        QStringLiteral("clock"),
+        QStringList{QStringLiteral("clock-default")});
+    checkAtomicFailure(
+        application.resizeMesh(
+            linkCrossing, 1, 1, {}, staleShrinkConfirmation),
+        linkCrossing,
+        QStringLiteral("mesh.resize_stale_membership_confirmation"),
+        QStringLiteral("stale shrink confirmation cannot remove changed Router intent"));
+
+    MeshResizeImpactConfirmation extraShrinkConfirmation = shrinkConfirmation;
+    if (const DomainMembership* retainedMembership = findMembership(
+            linkCrossing,
+            ElementKind::Router,
+            QStringLiteral("r-0-0"))) {
+        extraShrinkConfirmation.removedMemberships.append(*retainedMembership);
+    }
+    checkAtomicFailure(
+        application.resizeMesh(
+            linkCrossing, 1, 1, {}, extraShrinkConfirmation),
+        linkCrossing,
+        QStringLiteral("mesh.resize_extra_membership_confirmation"),
+        QStringLiteral("shrink confirmation cannot authorize unrelated extra removal"));
+
+    NocDesign invalidConfirmedSource = linkCrossing;
+    const auto invalidPower = std::find_if(
+        invalidConfirmedSource.domains.begin(),
+        invalidConfirmedSource.domains.end(),
+        [](const DomainDefinition& domain) {
+            return domain.id == QStringLiteral("power-default");
+        });
+    if (invalidPower != invalidConfirmedSource.domains.end()) {
+        invalidPower->properties.insert(QStringLiteral("voltageMv"), 2000);
+    }
+    checkAtomicFailure(
+        application.resizeMesh(
+            invalidConfirmedSource, 1, 1, {}, shrinkConfirmation),
+        invalidConfirmedSource,
+        QStringLiteral("domain_property.above_maximum"),
+        QStringLiteral("final full validation still rolls an otherwise confirmed resize back"));
 
     QTemporaryDir configurationFixture(
         QStringLiteral("/tmp/finepaper-domain-configuration-test-XXXXXX"));

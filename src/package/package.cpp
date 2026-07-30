@@ -747,6 +747,285 @@ QVector<DomainRelationDefinition> parseDomainRelations(
     return definitions;
 }
 
+std::optional<DomainDefaultInstanceDefinition> parseDomainDefaultInstance(
+    const QJsonObject& domainType,
+    bool required,
+    const QString& path,
+    QVector<Diagnostic>& diagnostics) {
+    const QString key = QStringLiteral("defaultInstance");
+    if (!domainType.contains(key)) {
+        return std::nullopt;
+    }
+    const QString instancePath = path + QLatin1Char('/') + key;
+    const QJsonValue value = domainType.value(key);
+    if (!value.isObject()) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("package.invalid_default_domain_instance"),
+            QStringLiteral("defaultInstance must be an object"),
+            instancePath);
+        return DomainDefaultInstanceDefinition{};
+    }
+    if (!required) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("package.default_domain_instance_requires_required_type"),
+            QStringLiteral("defaultInstance is only meaningful for a required Domain type"),
+            instancePath);
+    }
+
+    const QJsonObject object = value.toObject();
+    const QSet<QString> allowed{
+        QStringLiteral("id"),
+        QStringLiteral("name"),
+        QStringLiteral("properties")
+    };
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        if (!allowed.contains(it.key())) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.unknown_default_domain_instance_field"),
+                QStringLiteral("defaultInstance field %1 is not supported")
+                    .arg(it.key()),
+                instancePath + QLatin1Char('/') + it.key());
+        }
+    }
+
+    DomainDefaultInstanceDefinition definition;
+    if (object.contains(QStringLiteral("id"))) {
+        definition.id = requiredString(
+            object, QStringLiteral("id"), instancePath, diagnostics);
+    }
+    if (object.contains(QStringLiteral("name"))) {
+        definition.name = requiredString(
+            object, QStringLiteral("name"), instancePath, diagnostics);
+    }
+    if (object.contains(QStringLiteral("properties"))) {
+        if (!object.value(QStringLiteral("properties")).isObject()) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.invalid_default_domain_instance_properties"),
+                QStringLiteral("defaultInstance properties must be an object"),
+                instancePath + QStringLiteral("/properties"));
+        } else {
+            definition.properties =
+                object.value(QStringLiteral("properties")).toObject();
+        }
+    }
+    return definition;
+}
+
+QJsonObject defaultDomainProperties(const DomainTypeDefinition& type) {
+    QJsonObject result;
+    for (const DomainPropertyDefinition& property : type.properties) {
+        if (property.hasDefault) {
+            result.insert(property.id, property.defaultValue);
+        }
+    }
+    if (type.defaultInstance) {
+        for (auto it = type.defaultInstance->properties.constBegin();
+             it != type.defaultInstance->properties.constEnd(); ++it) {
+            result.insert(it.key(), it.value());
+        }
+    }
+    return result;
+}
+
+void validateDefaultDomainPropertyValue(
+    const QJsonValue& value,
+    const DomainPropertyDefinition& property,
+    const QHash<QString, QString>& defaultDomainTypesById,
+    const QString& path,
+    QVector<Diagnostic>& diagnostics) {
+    if (!valueMatchesParameterShape(value, property.type, property.multiple)) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("package.invalid_default_domain_property"),
+            QStringLiteral("default Domain property %1 has the wrong type or shape")
+                .arg(property.id),
+            path);
+        return;
+    }
+
+    const QJsonArray items = property.multiple
+        ? value.toArray() : QJsonArray{value};
+    if (property.required && property.multiple && items.isEmpty()) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("package.empty_required_default_domain_property"),
+            QStringLiteral("required default Domain property %1 must not be empty")
+                .arg(property.id),
+            path);
+    }
+    for (qsizetype index = 0; index < items.size(); ++index) {
+        const QJsonValue item = items.at(index);
+        const QString itemPath = property.multiple
+            ? QStringLiteral("%1/%2").arg(path).arg(index) : path;
+        if (item.isDouble()) {
+            const double number = item.toDouble();
+            if (property.minimum && number < *property.minimum) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral("package.default_domain_property_below_minimum"),
+                    QStringLiteral("default Domain property %1 is below its minimum")
+                        .arg(property.id),
+                    itemPath);
+            }
+            if (property.maximum && number > *property.maximum) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral("package.default_domain_property_above_maximum"),
+                    QStringLiteral("default Domain property %1 is above its maximum")
+                        .arg(property.id),
+                    itemPath);
+            }
+        }
+        if (property.type == ParameterType::Enumeration
+            && !property.values.contains(item.toString())) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.invalid_default_domain_property_enum"),
+                QStringLiteral("default Domain property %1 has an unsupported value")
+                    .arg(property.id),
+                itemPath);
+        }
+        if (property.referenceDomainType) {
+            const auto target = defaultDomainTypesById.constFind(item.toString());
+            if (target == defaultDomainTypesById.cend()) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral("package.unknown_default_domain_reference"),
+                    QStringLiteral("default Domain property %1 references an instance that is not materialized")
+                        .arg(property.id),
+                    itemPath);
+            } else if (target.value() != *property.referenceDomainType) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral("package.default_domain_reference_type_mismatch"),
+                    QStringLiteral("default Domain property %1 references the wrong Domain type")
+                        .arg(property.id),
+                    itemPath);
+            }
+        }
+    }
+}
+
+void resolveAndValidateDomainDefaultInstances(
+    QVector<DomainTypeDefinition>& definitions,
+    QVector<Diagnostic>& diagnostics) {
+    QSet<qsizetype> explicitlyDeclared;
+    for (qsizetype index = 0; index < definitions.size(); ++index) {
+        DomainTypeDefinition& type = definitions[index];
+        const bool declared = type.defaultInstance.has_value();
+        if (declared) {
+            explicitlyDeclared.insert(index);
+        }
+        if (!type.required) {
+            continue;
+        }
+
+        DomainDefaultInstanceDefinition resolved =
+            type.defaultInstance.value_or(DomainDefaultInstanceDefinition{});
+        if (resolved.id.isEmpty()) {
+            resolved.id = type.id + QStringLiteral("-default");
+        }
+        if (resolved.name.isEmpty()) {
+            resolved.name = type.label.trimmed().isEmpty()
+                ? type.id : type.label.trimmed();
+        }
+        QJsonObject properties;
+        for (const DomainPropertyDefinition& property : type.properties) {
+            if (property.hasDefault) {
+                properties.insert(property.id, property.defaultValue);
+            }
+        }
+        for (auto it = resolved.properties.constBegin();
+             it != resolved.properties.constEnd(); ++it) {
+            properties.insert(it.key(), it.value());
+        }
+        resolved.properties = std::move(properties);
+        type.defaultInstance = std::move(resolved);
+    }
+
+    QHash<QString, QString> defaultDomainTypesById;
+    for (qsizetype index = 0; index < definitions.size(); ++index) {
+        const DomainTypeDefinition& type = definitions.at(index);
+        if (!type.required) {
+            continue;
+        }
+        const QString id = type.defaultInstance->id;
+        const QString path = QStringLiteral("/domainTypes/%1/defaultInstance/id")
+                                 .arg(index);
+        if (defaultDomainTypesById.contains(id)) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.duplicate_default_domain_instance_id"),
+                QStringLiteral("materialized default Domain id %1 is duplicated")
+                    .arg(id),
+                path);
+        } else {
+            defaultDomainTypesById.insert(id, type.id);
+        }
+    }
+
+    for (qsizetype typeIndex = 0; typeIndex < definitions.size(); ++typeIndex) {
+        const DomainTypeDefinition& type = definitions.at(typeIndex);
+        if (!type.required || !explicitlyDeclared.contains(typeIndex)) {
+            continue;
+        }
+        const QString base = QStringLiteral("/domainTypes/%1/defaultInstance/properties")
+                                 .arg(typeIndex);
+        QHash<QString, const DomainPropertyDefinition*> propertiesById;
+        for (const DomainPropertyDefinition& property : type.properties) {
+            propertiesById.insert(property.id, &property);
+        }
+        for (auto it = type.defaultInstance->properties.constBegin();
+             it != type.defaultInstance->properties.constEnd(); ++it) {
+            if (!propertiesById.contains(it.key())) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral("package.unknown_default_domain_property"),
+                    QStringLiteral("default Domain property %1 is not declared by the Domain Type")
+                        .arg(it.key()),
+                    base + QLatin1Char('/') + it.key());
+            }
+        }
+
+        const QJsonObject values = defaultDomainProperties(type);
+        for (const DomainPropertyDefinition& property : type.properties) {
+            const QString path = base + QLatin1Char('/') + property.id;
+            if (!values.contains(property.id)) {
+                if (property.required) {
+                    appendDiagnostic(
+                        diagnostics,
+                        QStringLiteral("error"),
+                        QStringLiteral("package.missing_required_default_domain_property"),
+                        QStringLiteral("defaultInstance must provide required Domain property %1")
+                            .arg(property.id),
+                        path);
+                }
+                continue;
+            }
+            validateDefaultDomainPropertyValue(
+                values.value(property.id), property,
+                defaultDomainTypesById, path, diagnostics);
+        }
+    }
+}
+
 void validateDomainPropertyReferences(
     const QVector<DomainPropertyDefinition>& properties,
     const QSet<QString>& domainTypeIds,
@@ -832,6 +1111,8 @@ QVector<DomainTypeDefinition> parseDomainTypes(
                                               false,
                                               path,
                                               diagnostics);
+        definition.defaultInstance = parseDomainDefaultInstance(
+            object, definition.required, path, diagnostics);
         definition.properties = parseDomainProperties(
             object.value(QStringLiteral("properties")),
             path + QStringLiteral("/properties"),
@@ -893,6 +1174,7 @@ QVector<DomainTypeDefinition> parseDomainTypes(
                 diagnostics);
         }
     }
+    resolveAndValidateDomainDefaultInstances(definitions, diagnostics);
     return definitions;
 }
 

@@ -2,6 +2,7 @@
 
 #include "application/domain_assignment.h"
 #include "application/domain_configuration.h"
+#include "application/mesh_resize_plan.h"
 #include "execution/package_protocol.h"
 #include "noc/model.h"
 #include "package/package.h"
@@ -66,7 +67,8 @@ public:
         const NocDesign& design,
         int rows,
         int columns,
-        const QVector<DomainMembership>& newRouterMemberships = {}) const;
+        const QVector<DomainMembership>& newRouterMemberships = {},
+        const MeshResizeImpactConfirmation& confirmation = {}) const;
     DesignResult addEndpoint(
         const NocDesign& design,
         EndpointInstance endpoint,

@@ -96,6 +96,16 @@ QJsonArray completeDomainTypes() {
             }},
             {QStringLiteral("cardinality"), QStringLiteral("multiple")},
             {QStringLiteral("required"), true},
+            {QStringLiteral("defaultInstance"), QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("clk-main")},
+                {QStringLiteral("name"), QStringLiteral("Primary fabric clock")},
+                {QStringLiteral("properties"), QJsonObject{
+                    {QStringLiteral("frequencyMHz"), 1000},
+                    {QStringLiteral("backupPowers"), QJsonArray{
+                        QStringLiteral("pd-main")
+                    }}
+                }}
+            }},
             {QStringLiteral("properties"), QJsonArray{
                 QJsonObject{
                     {QStringLiteral("id"), QStringLiteral("frequencyMHz")},
@@ -153,6 +163,13 @@ QJsonArray completeDomainTypes() {
             }},
             {QStringLiteral("cardinality"), QStringLiteral("single")},
             {QStringLiteral("required"), true},
+            {QStringLiteral("defaultInstance"), QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("pd-main")},
+                {QStringLiteral("name"), QStringLiteral("Main power rail")},
+                {QStringLiteral("properties"), QJsonObject{
+                    {QStringLiteral("voltageMv"), 850}
+                }}
+            }},
             {QStringLiteral("properties"), QJsonArray{
                 QJsonObject{
                     {QStringLiteral("id"), QStringLiteral("voltageMv")},
@@ -274,8 +291,76 @@ int main(int argc, char** argv) {
                       && clock->crossingProperties[1].referenceDomainType
                           == QStringLiteral("power"),
                   QStringLiteral("Domain crossing properties are parsed"));
+            check(clock->defaultInstance
+                      && clock->defaultInstance->id == QStringLiteral("clk-main")
+                      && clock->defaultInstance->name
+                          == QStringLiteral("Primary fabric clock")
+                      && clock->defaultInstance->properties.value(
+                             QStringLiteral("frequencyMHz")).toInt() == 1000
+                      && clock->defaultInstance->properties.value(
+                             QStringLiteral("backupPowers")).toArray()
+                          == QJsonArray{QStringLiteral("pd-main")},
+                  QStringLiteral("explicit required-Domain scaffolds are parsed and resolved"));
         }
     }
+
+    QJsonObject partialScaffoldManifest = completeManifest;
+    QJsonArray partialScaffoldTypes = partialScaffoldManifest.value(
+        QStringLiteral("domainTypes")).toArray();
+    QJsonObject partialClock = partialScaffoldTypes[0].toObject();
+    QJsonObject partialClockScaffold = partialClock.value(
+        QStringLiteral("defaultInstance")).toObject();
+    partialClockScaffold.remove(QStringLiteral("id"));
+    partialClockScaffold.remove(QStringLiteral("name"));
+    partialClock.insert(
+        QStringLiteral("defaultInstance"), partialClockScaffold);
+    partialScaffoldTypes[0] = partialClock;
+    partialScaffoldManifest.insert(
+        QStringLiteral("domainTypes"), partialScaffoldTypes);
+    const PackageLoadResult partialScaffoldResult = loadManifest(
+        fixture.path(), partialScaffoldManifest);
+    const DomainTypeDefinition* partialClockType = partialScaffoldResult.package
+        ? partialScaffoldResult.package->domainType(QStringLiteral("clock"))
+        : nullptr;
+    check(partialScaffoldResult.success && partialClockType
+              && partialClockType->defaultInstance
+              && partialClockType->defaultInstance->id
+                  == QStringLiteral("clock-default")
+              && partialClockType->defaultInstance->name
+                  == QStringLiteral("Clock Domain")
+              && partialClockType->defaultInstance->properties.value(
+                     QStringLiteral("frequencyMHz")).toInt() == 1000
+              && partialClockType->defaultInstance->properties.value(
+                     QStringLiteral("backupPowers")).toArray()
+                  == QJsonArray{QStringLiteral("pd-main")},
+          QStringLiteral("an explicit scaffold may inherit its canonical id and name"));
+
+    QJsonObject legacyScaffoldManifest = completeManifest;
+    QJsonArray legacyScaffoldTypes = legacyScaffoldManifest.value(
+        QStringLiteral("domainTypes")).toArray();
+    for (qsizetype index = 0; index < legacyScaffoldTypes.size(); ++index) {
+        QJsonObject type = legacyScaffoldTypes.at(index).toObject();
+        type.remove(QStringLiteral("defaultInstance"));
+        legacyScaffoldTypes[index] = type;
+    }
+    legacyScaffoldManifest.insert(
+        QStringLiteral("domainTypes"), legacyScaffoldTypes);
+    const PackageLoadResult legacyScaffoldResult = loadManifest(
+        fixture.path(), legacyScaffoldManifest);
+    const DomainTypeDefinition* legacyClock = legacyScaffoldResult.package
+        ? legacyScaffoldResult.package->domainType(QStringLiteral("clock"))
+        : nullptr;
+    check(legacyScaffoldResult.success && legacyClock
+              && legacyClock->defaultInstance
+              && legacyClock->defaultInstance->id
+                  == QStringLiteral("clock-default")
+              && legacyClock->defaultInstance->name
+                  == QStringLiteral("Clock Domain")
+              && legacyClock->defaultInstance->properties.value(
+                     QStringLiteral("frequencyMHz")).toInt() == 800
+              && !legacyClock->defaultInstance->properties.contains(
+                  QStringLiteral("backupPowers")),
+          QStringLiteral("legacy required Domain conventions resolve in the Package layer"));
 
     QJsonObject duplicateTypeManifest = completeManifest;
     QJsonArray duplicateTypes = duplicateTypeManifest.value(
@@ -383,6 +468,165 @@ int main(int argc, char** argv) {
                   invalidMultipleDefaultManifest,
                   QStringLiteral("package.invalid_parameter_default"),
                   QStringLiteral("a multiple Domain property with a scalar default"));
+
+    QJsonObject nonObjectScaffoldManifest = completeManifest;
+    QJsonArray nonObjectScaffoldTypes = nonObjectScaffoldManifest.value(
+        QStringLiteral("domainTypes")).toArray();
+    QJsonObject nonObjectClock = nonObjectScaffoldTypes[0].toObject();
+    nonObjectClock.insert(QStringLiteral("defaultInstance"), QStringLiteral("implicit"));
+    nonObjectScaffoldTypes[0] = nonObjectClock;
+    nonObjectScaffoldManifest.insert(
+        QStringLiteral("domainTypes"), nonObjectScaffoldTypes);
+    expectFailure(
+        fixture.path(), nonObjectScaffoldManifest,
+        QStringLiteral("package.invalid_default_domain_instance"),
+        QStringLiteral("a non-object default Domain scaffold"));
+
+    QJsonObject unknownScaffoldFieldManifest = completeManifest;
+    QJsonArray unknownScaffoldFieldTypes = unknownScaffoldFieldManifest.value(
+        QStringLiteral("domainTypes")).toArray();
+    QJsonObject unknownFieldClock = unknownScaffoldFieldTypes[0].toObject();
+    QJsonObject unknownFieldScaffold = unknownFieldClock.value(
+        QStringLiteral("defaultInstance")).toObject();
+    unknownFieldScaffold.insert(QStringLiteral("magicClock"), true);
+    unknownFieldClock.insert(QStringLiteral("defaultInstance"), unknownFieldScaffold);
+    unknownScaffoldFieldTypes[0] = unknownFieldClock;
+    unknownScaffoldFieldManifest.insert(
+        QStringLiteral("domainTypes"), unknownScaffoldFieldTypes);
+    expectFailure(
+        fixture.path(), unknownScaffoldFieldManifest,
+        QStringLiteral("package.unknown_default_domain_instance_field"),
+        QStringLiteral("an unknown default Domain scaffold field"));
+
+    QJsonObject invalidScaffoldPropertiesManifest = completeManifest;
+    QJsonArray invalidScaffoldPropertiesTypes =
+        invalidScaffoldPropertiesManifest.value(
+            QStringLiteral("domainTypes")).toArray();
+    QJsonObject invalidPropertiesClock =
+        invalidScaffoldPropertiesTypes[0].toObject();
+    QJsonObject invalidPropertiesScaffold = invalidPropertiesClock.value(
+        QStringLiteral("defaultInstance")).toObject();
+    invalidPropertiesScaffold.insert(
+        QStringLiteral("properties"), QJsonArray{});
+    invalidPropertiesClock.insert(
+        QStringLiteral("defaultInstance"), invalidPropertiesScaffold);
+    invalidScaffoldPropertiesTypes[0] = invalidPropertiesClock;
+    invalidScaffoldPropertiesManifest.insert(
+        QStringLiteral("domainTypes"), invalidScaffoldPropertiesTypes);
+    expectFailure(
+        fixture.path(), invalidScaffoldPropertiesManifest,
+        QStringLiteral("package.invalid_default_domain_instance_properties"),
+        QStringLiteral("non-object default Domain properties"));
+
+    QJsonObject optionalScaffoldManifest = completeManifest;
+    QJsonArray optionalScaffoldTypes = optionalScaffoldManifest.value(
+        QStringLiteral("domainTypes")).toArray();
+    QJsonObject optionalType = optionalScaffoldTypes[1].toObject();
+    optionalType.insert(QStringLiteral("id"), QStringLiteral("optional-power"));
+    optionalType.insert(QStringLiteral("required"), false);
+    optionalType.insert(QStringLiteral("defaultInstance"), QJsonObject{
+        {QStringLiteral("id"), QStringLiteral("optional-power-default")}
+    });
+    optionalScaffoldTypes.append(optionalType);
+    optionalScaffoldManifest.insert(
+        QStringLiteral("domainTypes"), optionalScaffoldTypes);
+    expectFailure(
+        fixture.path(), optionalScaffoldManifest,
+        QStringLiteral("package.default_domain_instance_requires_required_type"),
+        QStringLiteral("defaultInstance on an optional Domain Type"));
+
+    QJsonObject duplicateScaffoldIdManifest = completeManifest;
+    QJsonArray duplicateScaffoldIdTypes = duplicateScaffoldIdManifest.value(
+        QStringLiteral("domainTypes")).toArray();
+    QJsonObject duplicateIdPower = duplicateScaffoldIdTypes[1].toObject();
+    QJsonObject duplicateIdScaffold = duplicateIdPower.value(
+        QStringLiteral("defaultInstance")).toObject();
+    duplicateIdScaffold.insert(QStringLiteral("id"), QStringLiteral("clk-main"));
+    duplicateIdPower.insert(QStringLiteral("defaultInstance"), duplicateIdScaffold);
+    duplicateScaffoldIdTypes[1] = duplicateIdPower;
+    duplicateScaffoldIdManifest.insert(
+        QStringLiteral("domainTypes"), duplicateScaffoldIdTypes);
+    expectFailure(
+        fixture.path(), duplicateScaffoldIdManifest,
+        QStringLiteral("package.duplicate_default_domain_instance_id"),
+        QStringLiteral("duplicated materialized default Domain ids"));
+
+    const auto withClockScaffoldProperties = [](
+        QJsonObject manifest, const QJsonObject& properties) {
+        QJsonArray types = manifest.value(QStringLiteral("domainTypes")).toArray();
+        QJsonObject clock = types[0].toObject();
+        QJsonObject scaffold = clock.value(
+            QStringLiteral("defaultInstance")).toObject();
+        scaffold.insert(QStringLiteral("properties"), properties);
+        clock.insert(QStringLiteral("defaultInstance"), scaffold);
+        types[0] = clock;
+        manifest.insert(QStringLiteral("domainTypes"), types);
+        return manifest;
+    };
+
+    expectFailure(
+        fixture.path(),
+        withClockScaffoldProperties(
+            completeManifest,
+            QJsonObject{
+                {QStringLiteral("frequencyMHz"), 1000},
+                {QStringLiteral("backupPowers"), QJsonArray{QStringLiteral("pd-main")}},
+                {QStringLiteral("hardcodedTrick"), true}
+            }),
+        QStringLiteral("package.unknown_default_domain_property"),
+        QStringLiteral("an undeclared default Domain property"));
+
+    expectFailure(
+        fixture.path(),
+        withClockScaffoldProperties(
+            completeManifest,
+            QJsonObject{{QStringLiteral("frequencyMHz"), 1000}}),
+        QStringLiteral("package.missing_required_default_domain_property"),
+        QStringLiteral("an explicit scaffold missing a required property"));
+
+    expectFailure(
+        fixture.path(),
+        withClockScaffoldProperties(
+            completeManifest,
+            QJsonObject{
+                {QStringLiteral("frequencyMHz"), QStringLiteral("fast")},
+                {QStringLiteral("backupPowers"), QJsonArray{QStringLiteral("pd-main")}}
+            }),
+        QStringLiteral("package.invalid_default_domain_property"),
+        QStringLiteral("a default Domain property with the wrong type"));
+
+    expectFailure(
+        fixture.path(),
+        withClockScaffoldProperties(
+            completeManifest,
+            QJsonObject{
+                {QStringLiteral("frequencyMHz"), 0},
+                {QStringLiteral("backupPowers"), QJsonArray{QStringLiteral("pd-main")}}
+            }),
+        QStringLiteral("package.default_domain_property_below_minimum"),
+        QStringLiteral("a default Domain property outside its numeric range"));
+
+    expectFailure(
+        fixture.path(),
+        withClockScaffoldProperties(
+            completeManifest,
+            QJsonObject{
+                {QStringLiteral("frequencyMHz"), 1000},
+                {QStringLiteral("backupPowers"), QJsonArray{QStringLiteral("missing-power")}}
+            }),
+        QStringLiteral("package.unknown_default_domain_reference"),
+        QStringLiteral("a scaffold reference to a non-materialized Domain"));
+
+    expectFailure(
+        fixture.path(),
+        withClockScaffoldProperties(
+            completeManifest,
+            QJsonObject{
+                {QStringLiteral("frequencyMHz"), 1000},
+                {QStringLiteral("backupPowers"), QJsonArray{QStringLiteral("clk-main")}}
+            }),
+        QStringLiteral("package.default_domain_reference_type_mismatch"),
+        QStringLiteral("a scaffold reference to the wrong Domain Type"));
 
     if (failures == 0) {
         QTextStream(stdout) << "Package Domain tests passed" << Qt::endl;

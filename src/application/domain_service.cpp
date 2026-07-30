@@ -1,4 +1,5 @@
 #include "application/domain_service.h"
+#include "application/mesh_resize_plan.h"
 
 #include <QJsonArray>
 #include <QSet>
@@ -128,22 +129,6 @@ void completeRequiredAssignments(
                 .arg(available.size()),
             path + QStringLiteral("/assignments/") + type.id,
             QStringLiteral("package"));
-    }
-}
-
-QString uniqueDomainId(const NocDesign& design, const QString& baseId) {
-    QSet<QString> ids;
-    for (const DomainDefinition& domain : design.domains) {
-        ids.insert(domain.id);
-    }
-    if (!ids.contains(baseId)) {
-        return baseId;
-    }
-    for (int suffix = 2; ; ++suffix) {
-        const QString candidate = QStringLiteral("%1-%2").arg(baseId).arg(suffix);
-        if (!ids.contains(candidate)) {
-            return candidate;
-        }
     }
 }
 
@@ -379,21 +364,56 @@ MutationResult materializeRequiredDomains(
         return result;
     }
 
+    QSet<QString> occupiedDomainIds;
+    for (const DomainDefinition& domain : design.domains) {
+        occupiedDomainIds.insert(domain.id);
+    }
+    for (const DomainTypeDefinition& type : package.domainTypes) {
+        if (!type.required) {
+            continue;
+        }
+        if (!type.defaultInstance) {
+            appendDiagnostic(
+                result.diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("domain.materialization_missing_scaffold"),
+                QStringLiteral("required Domain Type %1 has no resolved Package scaffold")
+                    .arg(type.id),
+                QStringLiteral("/domainTypes/") + type.id,
+                QStringLiteral("package"));
+            continue;
+        }
+        if (occupiedDomainIds.contains(type.defaultInstance->id)) {
+            appendDiagnostic(
+                result.diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("domain.materialization_id_conflict"),
+                QStringLiteral("resolved default Domain id %1 is already in use")
+                    .arg(type.defaultInstance->id),
+                QStringLiteral("/domainTypes/") + type.id
+                    + QStringLiteral("/defaultInstance/id"),
+                QStringLiteral("package"));
+            continue;
+        }
+        occupiedDomainIds.insert(type.defaultInstance->id);
+    }
+    if (hasErrors(result.diagnostics)) {
+        return result;
+    }
+
     QHash<QString, QString> defaultDomainIds;
     for (const DomainTypeDefinition& type : package.domainTypes) {
         if (!type.required) {
             continue;
         }
-        DomainDefinition domain;
-        domain.id = uniqueDomainId(
-            result.design, type.id + QStringLiteral("-default"));
-        domain.type = type.id;
-        domain.name = type.label.trimmed().isEmpty()
-            ? type.id
-            : type.label.trimmed();
-        domain.properties = defaultsFor(type.properties);
-        defaultDomainIds.insert(type.id, domain.id);
-        result.design.domains.append(std::move(domain));
+        const DomainDefaultInstanceDefinition& scaffold = *type.defaultInstance;
+        defaultDomainIds.insert(type.id, scaffold.id);
+        result.design.domains.append(DomainDefinition{
+            scaffold.id,
+            type.id,
+            scaffold.name,
+            scaffold.properties
+        });
     }
 
     const auto materializeMembership = [&](const ElementRef& element) {
@@ -424,116 +444,39 @@ MutationResult resizeMesh(
     const PackageDefinition& package,
     int rows,
     int columns,
-    const QVector<DomainMembership>& newRouterMemberships) {
+    const QVector<DomainMembership>& newRouterMemberships,
+    const MeshResizeImpactConfirmation& confirmation) {
     MutationResult result;
     result.design = design;
-    result.design.topology.rows = rows;
-    result.design.topology.columns = columns;
-    const TopologyProjection resizedProjection = projectTopology(result.design);
-
-    for (qsizetype index = 0; index < design.domainMemberships.size(); ++index) {
-        const DomainMembership& membership = design.domainMemberships.at(index);
-        if (membership.element.kind == ElementKind::Router
-            && !designReferenceExists(result.design, membership.element)) {
-            appendDiagnostic(
-                result.diagnostics,
-                QStringLiteral("error"),
-                QStringLiteral("mesh.resize_would_remove_domain_membership"),
-                QStringLiteral("resize would remove Router %1 with Domain assignments")
-                    .arg(membership.element.id),
-                QStringLiteral("/domainMemberships/%1/element").arg(index));
-        }
-    }
-    for (qsizetype index = 0; index < design.edgeOverrides.size(); ++index) {
-        const DomainEdgeOverride& edgeOverride = design.edgeOverrides.at(index);
-        if (edgeOverride.edge.kind == ElementKind::RouterLink
-            && !designReferenceExists(result.design, edgeOverride.edge)) {
-            appendDiagnostic(
-                result.diagnostics,
-                QStringLiteral("error"),
-                QStringLiteral("mesh.resize_would_remove_edge_override"),
-                QStringLiteral("resize would remove Router link %1 with a Domain override")
-                    .arg(edgeOverride.edge.id),
-                QStringLiteral("/edgeOverrides/%1/edge").arg(index));
-        }
-    }
+    const MeshResizePlan plan = buildMeshResizePlan(
+        design, package, rows, columns);
+    MeshResizeAssignmentResolution assignmentResolution =
+        resolveMeshResizeAssignments(
+            plan, newRouterMemberships, confirmation);
+    result.diagnostics = std::move(assignmentResolution.diagnostics);
     if (hasErrors(result.diagnostics)) {
-        result.design = design;
         return result;
     }
 
-    QSet<QString> newRouterIds;
-    for (const RouterView& router : resizedProjection.routers) {
-        if (router.position.x >= design.topology.columns
-            || router.position.y >= design.topology.rows) {
-            newRouterIds.insert(router.id);
-        }
-    }
-
-    QHash<QString, DomainMembership> providedMemberships;
-    for (qsizetype index = 0; index < newRouterMemberships.size(); ++index) {
-        const DomainMembership& membership = newRouterMemberships.at(index);
-        const QString path = QStringLiteral("/newRouterMemberships/%1").arg(index);
-        if (membership.element.kind != ElementKind::Router) {
-            appendDiagnostic(result.diagnostics,
-                             QStringLiteral("error"),
-                             QStringLiteral("domain_assignment.invalid_element_kind"),
-                             QStringLiteral("new Router membership must reference a Router"),
-                             path + QStringLiteral("/element/kind"));
-            continue;
-        }
-        if (!newRouterIds.contains(membership.element.id)) {
-            appendDiagnostic(result.diagnostics,
-                             QStringLiteral("error"),
-                             QStringLiteral("domain_assignment.not_new_router"),
-                             QStringLiteral("membership must reference a Router created by this resize"),
-                             path + QStringLiteral("/element/id"));
-            continue;
-        }
-        if (providedMemberships.contains(membership.element.id)) {
-            appendDiagnostic(result.diagnostics,
-                             QStringLiteral("error"),
-                             QStringLiteral("domain_assignment.duplicate_element"),
-                             QStringLiteral("new Router membership is duplicated"),
-                             path + QStringLiteral("/element"));
-            continue;
-        }
-        if (findMembership(design, membership.element)) {
-            appendDiagnostic(result.diagnostics,
-                             QStringLiteral("error"),
-                             QStringLiteral("domain_assignment.duplicate_element"),
-                             QStringLiteral("Router already has a Domain membership record"),
-                             path + QStringLiteral("/element"));
-            continue;
-        }
-        providedMemberships.insert(membership.element.id, membership);
-    }
-    if (hasErrors(result.diagnostics)) {
-        result.design = design;
-        return result;
-    }
-
-    for (const RouterView& router : resizedProjection.routers) {
-        if (!newRouterIds.contains(router.id)) {
-            continue;
-        }
-        DomainMembership membership = providedMemberships.value(
-            router.id,
-            DomainMembership{ElementRef{ElementKind::Router, router.id}, {}});
-        completeRequiredAssignments(result.design,
-                                    package,
-                                    ElementKind::Router,
-                                    router.id,
-                                    membership.assignments,
-                                    QStringLiteral("/newRouterMemberships/") + router.id,
-                                    result.diagnostics);
-        if (!membership.assignments.isEmpty()) {
-            result.design.domainMemberships.append(std::move(membership));
-        }
-    }
-    if (hasErrors(result.diagnostics)) {
-        result.design = design;
-    }
+    result.design.domainMemberships.erase(
+        std::remove_if(
+            result.design.domainMemberships.begin(),
+            result.design.domainMemberships.end(),
+            [&](const DomainMembership& membership) {
+                return plan.removedMemberships.contains(membership);
+            }),
+        result.design.domainMemberships.end());
+    result.design.edgeOverrides.erase(
+        std::remove_if(
+            result.design.edgeOverrides.begin(),
+            result.design.edgeOverrides.end(),
+            [&](const DomainEdgeOverride& edgeOverride) {
+                return plan.removedEdgeOverrides.contains(edgeOverride);
+            }),
+        result.design.edgeOverrides.end());
+    result.design.topology = plan.requestedTopology;
+    result.design.domainMemberships +=
+        std::move(assignmentResolution.newRouterMemberships);
     return result;
 }
 
