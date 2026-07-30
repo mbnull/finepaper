@@ -70,6 +70,7 @@ class TestV3ResetSynchronizer < Minitest::Test
       stdout, stderr, status = Open3.capture3(
         {'CCACHE_DISABLE' => '1'},
         'verilator', '--binary', '--timing', '--sv',
+        '--timescale', '1ns/1ps',
         '--top-module', 'reset_sync_tb',
         '--Mdir', build_dir,
         '-o', 'reset_sync_sim',
@@ -86,7 +87,6 @@ class TestV3ResetSynchronizer < Minitest::Test
 
   def invalid_testbench
     <<~'SYSTEM_VERILOG'
-      `timescale 1ns/1ps
       module reset_sync_tb;
         logic clk = 1'b0;
         logic reset_n;
@@ -108,7 +108,6 @@ class TestV3ResetSynchronizer < Minitest::Test
 
   def functional_testbench
     <<~'SYSTEM_VERILOG'
-      `timescale 1ns/1ps
       module reset_sync_tb;
         logic clk = 1'b0;
         logic async_reset_n = 1'b0;

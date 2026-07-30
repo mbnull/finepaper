@@ -48,7 +48,8 @@
         "properties": {}
       },
       "properties": [
-        { "id": "frequencyMHz", "label": "Frequency", "description": "Nominal clock frequency for members of this domain", "unit": "MHz", "category": "Clock", "type": "number", "required": true, "default": 1000, "minimum": 1 }
+        { "id": "frequencyMHz", "label": "Frequency", "description": "Nominal clock frequency for members of this domain", "unit": "MHz", "category": "Clock", "type": "number", "required": true, "default": 1000, "minimum": 1 },
+        { "id": "resetReleaseStages", "label": "Reset release stages", "description": "Local flip-flop stages used to release the shared asynchronous reset request synchronously in this clock domain", "category": "Reset", "advanced": true, "type": "integer", "required": false, "default": 2, "minimum": 2, "maximum": 8 }
       ],
       "relations": [
         {

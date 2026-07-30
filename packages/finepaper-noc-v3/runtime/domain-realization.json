@@ -49,6 +49,14 @@
           "property": "frequencyMHz",
           "type": "number",
           "minimum": 1
+        },
+        {
+          "name": "reset-release-stages",
+          "property": "resetReleaseStages",
+          "type": "integer",
+          "default": 2,
+          "minimum": 2,
+          "maximum": 8
         }
       ],
       "relations": [

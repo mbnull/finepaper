@@ -51,10 +51,13 @@ Every generation creates a separate `runs/op-*` directory below the chosen
 output root. The input design is copied and normalized there; the generator may
 not modify the original design.
 
-The bundled V3 Package emits deterministic `*_domain_constraints.json` and
-`*_domain_implementation.json` artifacts. The first derives physical Mesh
-crossings from Package-defined intent; the second strictly lowers them through
-the Package-owned typed realization mapping. The legacy RTL now has a complete
-payload/valid/ready link contract, while direct CDC and power-crossing
-materialization remains the next stage. Router creation, deletion and arbitrary
-Router rewiring remain outside the product boundary.
+The bundled V3 Package emits deterministic `*_domain_constraints.json`,
+`*_domain_implementation.json`, and
+`*_domain_implementation_evidence.json` artifacts. The first derives physical
+Mesh crossings from Package-defined intent, the second lowers them through the
+Package-owned typed realization mapping, and the third records what the RTL
+renderer actually materialized. Clock-Domain crossings now instantiate one
+asynchronous ready/valid FIFO per traffic direction with per-Domain clock/reset
+binding. Power stages and derived-clock relations remain explicitly deferred in
+the evidence rather than being presented as implemented. Router creation,
+deletion and arbitrary Router rewiring remain outside the product boundary.

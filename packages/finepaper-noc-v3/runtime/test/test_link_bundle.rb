@@ -66,6 +66,15 @@ class TestV3LinkBundle < Minitest::Test
     assert_includes @top, '.flit_in_e_ready(link_xp_right_to_xp_left_ready)'
   end
 
+  def test_single_timing_domain_preserves_legacy_clock_port_and_syncs_reset
+    assert_includes @top, '//  - port_mode=legacy-single-clock'
+    assert_match(/\n  input  logic clk,\n  input  logic rst_n,/, @top)
+    refute_match(/\n  input  logic clk_[A-Za-z0-9_]+,/, @top)
+    assert_equal 1, @top.scan(/fp_reset_synchronizer #\(/).size
+    assert_equal 0, @top.scan(/\.rst_n\(rst_n\)/).size
+    assert_match(/\.clk\(clk\),\n    \.rst_n\(rst_n_clock_test_/, @top)
+  end
+
   def test_endpoint_attachment_has_complete_ready_valid_in_both_directions
     assert_includes @top, 'input  logic                  ep_left_flit_in_valid'
     assert_includes @top, 'output logic                  ep_left_flit_in_ready'
@@ -174,9 +183,23 @@ class TestV3LinkBundle < Minitest::Test
   end
 
   def domain(id, type, role, members)
+    parameters = if role == 'timing-domain'
+                   {
+                     'reset-release-stages' => {
+                       'type' => 'integer',
+                       'value' => 2,
+                       'source' => {
+                         'kind' => 'realization-default',
+                         'id' => 'resetReleaseStages'
+                       }
+                     }
+                   }
+                 else
+                   {}
+                 end
     {
       'domain' => id, 'domainType' => type, 'role' => role, 'name' => id,
-      'parameters' => {}, 'members' => deep_copy(members)
+      'parameters' => parameters, 'members' => deep_copy(members)
     }
   end
 

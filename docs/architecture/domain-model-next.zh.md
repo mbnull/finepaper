@@ -274,7 +274,7 @@ Router Link 和 Endpoint attachment 都由 Mesh 与挂载关系派生。对某�
 
 Generator/Engine 接收当前版本的完整 Design。Core 不把 clock、power 或厂商 Type 转成内部特例字段。bundled V3 runtime 会把五组数据编译为确定排序的 `*_domain_constraints.json`：其中包含 Domain 实例、成员、关系、策略、单条边覆盖以及由固定 Mesh/Endpoint attachment 推导出的双向物理 crossing 与最终生效属性。Validate 与 Generate 复用同一编译路径；缺失策略、规范朝向不匹配、无效或未使用的 override 都必须在执行前失败，不能退化成 Design JSON 的原样复制。
 
-`runtimeCapabilities` 的 `true` 表示 Package 进程会校验并物化该数据面，物化目标可以是实现本身，也可以是 Package 明确声明的下游约束 artifact；它不自动等价于“主 RTL 已经插入 CDC/isolation 单元”。当前 bundled V3 的交付闭环止于 `*_domain_constraints.json`，legacy RTL 仍未实例化这些单元。下一阶段应让真正的 IP Engine 消费该 artifact，或者由 Generator 直接落实到 RTL，并用结构测试证明实现变化。
+`runtimeCapabilities` 的 `true` 表示 Package 进程会校验并消费该数据面，消费目标可以是实现本身，也可以是 Package 明确声明的下游约束 artifact；它不自动等价于“主 RTL 已经插入所有 CDC/isolation 单元”。当前 bundled V3 已将 timing-domain 归属落实为逐 Domain clock、本地同步释放 reset，以及每条异步物理边两个定向 ready/valid FIFO，并通过生成后结构、lint 与双时钟双向仿真验证。Generator 同时输出 `*_domain_implementation_evidence.json`，把实际层级与 typed plan 逐项关联；Power isolation、level shifter 与 derived-clock relation 尚未物化时必须列为 deferred，且 `completePlan=false`，不能静默省略或生成占位逻辑。
 
 ## 6. 应用层操作
 
@@ -491,4 +491,4 @@ V2 -> V3 迁移同样是显式操作：保留五组 Domain 数据，加入空 `e
 
 这些产品语义只能由 Package schema、Package Validator/Generator 或 IP Engine 拥有。bundled `finepaper-noc` runtime 中的参数映射可以是该 Package 的显式适配代码，因为它已经离开公共 Application 边界；如果多个 Package 反复出现同一映射，再把它提升为有版本的公共 schema，而不是先在 Application 中加临时分支。
 
-bundled V3 Package 使用有版本的 `runtime/domain-realization.json` 声明这种适配。通用 realizer 只理解 role、typed binding、recipe kind、selector、stage order 和来源核对，不包含 `clock`、`power` 或具体属性 ID 分支。Package 新增自定义 Domain Type 时可以任意扩展编辑 schema，但若未同时给出完整 realization mapping，Validate/Generate 必须失败关闭；不能静默忽略为“只影响 UI”。生成的 `*_domain_implementation.json` 是确定性实现计划和后续 renderer 的输入，不等同于已经生成的 CDC、UPF 或 SDC。
+bundled V3 Package 使用有版本的 `runtime/domain-realization.json` 声明这种适配。通用 realizer 只理解 role、typed binding、recipe kind、selector、stage order 和来源核对，不包含 `clock`、`power` 或具体属性 ID 分支。Package 新增自定义 Domain Type 时可以任意扩展编辑 schema，但若未同时给出完整 realization mapping，Validate/Generate 必须失败关闭；不能静默忽略为“只影响 UI”。生成的 `*_domain_implementation.json` 是确定性实现计划，不等同于已经生成的 CDC、UPF 或 SDC；实际完成范围以 renderer 输出的 `*_domain_implementation_evidence.json` 为准。当前 clock async FIFO 已有 hierarchy evidence，Power/derived-clock 项仍明确 deferred。

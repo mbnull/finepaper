@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QThread>
@@ -74,6 +75,32 @@ QJsonObject objectWithStringField(const QJsonArray& values,
                 && candidate.toObject().value(field).toString() == expected;
         });
     return value == values.cend() ? QJsonObject{} : value->toObject();
+}
+
+const Artifact* artifactWithType(const GenerationResult& result,
+                                 const QString& type) {
+    const auto artifact = std::find_if(
+        result.artifacts.cbegin(),
+        result.artifacts.cend(),
+        [&type](const Artifact& candidate) { return candidate.type == type; });
+    return artifact == result.artifacts.cend() ? nullptr : &*artifact;
+}
+
+const Artifact* primaryArtifact(const GenerationResult& result) {
+    const auto artifact = std::find_if(
+        result.artifacts.cbegin(),
+        result.artifacts.cend(),
+        [](const Artifact& candidate) { return candidate.primary; });
+    return artifact == result.artifacts.cend() ? nullptr : &*artifact;
+}
+
+QString readArtifact(const GenerationResult& result, const Artifact* artifact) {
+    if (!artifact) {
+        return {};
+    }
+    QFile file(QDir(result.outputDirectory).filePath(artifact->path));
+    return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll())
+                                          : QString{};
 }
 
 bool preparePackageFixture(const QString& packageRoot,
@@ -887,9 +914,22 @@ int main(int argc, char** argv) {
     QString crossingConstraintsText;
     QJsonObject crossingImplementation;
     QString crossingImplementationText;
+    QString crossingTopText;
+    QString crossingEvidenceText;
     if (crossingValidation.success && crossingOutput.isValid()) {
         const GenerationResult generation = finepaper.generate(
             crossingDesign, GenerationOptions{crossingOutput.path()});
+        const Artifact* topArtifact = primaryArtifact(generation);
+        const Artifact* evidenceArtifact = artifactWithType(
+            generation, QStringLiteral("implementation-evidence"));
+        crossingTopText = readArtifact(generation, topArtifact);
+        crossingEvidenceText = readArtifact(generation, evidenceArtifact);
+        QJsonObject crossingEvidence;
+        if (evidenceArtifact) {
+            crossingEvidence = loadJsonObject(
+                QDir(generation.outputDirectory).filePath(
+                    evidenceArtifact->path)).object;
+        }
         const auto constraints = std::find_if(
             generation.artifacts.cbegin(), generation.artifacts.cend(),
             [](const Artifact& artifact) {
@@ -1039,6 +1079,146 @@ int main(int argc, char** argv) {
                           QStringLiteral("down"), QStringLiteral("up")},
               QStringLiteral(
                   "Domain lowering resolves typed stages, automatic voltage direction, and edge overrides"));
+
+        const QJsonArray domainInfrastructure = crossingEvidence.value(
+            QStringLiteral("domainInfrastructure")).toArray();
+        bool clockPortsMatchEvidence = domainInfrastructure.size() == 2;
+        for (const QJsonValue& value : domainInfrastructure) {
+            const QString clockPort = value.toObject().value(
+                QStringLiteral("clockPort")).toString();
+            clockPortsMatchEvidence = clockPortsMatchEvidence
+                && !clockPort.isEmpty()
+                && crossingTopText.contains(
+                    QStringLiteral("input  logic %1").arg(clockPort));
+        }
+        check(topArtifact
+                  && topArtifact->type == QStringLiteral("rtl")
+                  && topArtifact->path.endsWith(QStringLiteral("_top.v"))
+                  && evidenceArtifact
+                  && crossingEvidence.value(QStringLiteral("format")).toString()
+                      == QStringLiteral(
+                          "finepaper.noc-domain-implementation-evidence")
+                  && crossingEvidence.value(QStringLiteral("formatVersion"))
+                         .toInt() == 1
+                  && clockPortsMatchEvidence
+                  && crossingTopText.count(
+                         QStringLiteral("fp_reset_synchronizer #(")) == 2,
+              QStringLiteral(
+                  "Domain RTL evidence maps two active clock ports and reset synchronizers to the generated top"));
+
+        QStringList realizedDirections;
+        QStringList realizedInstances;
+        bool realizedCdcMatchesTop = true;
+        int directionalFifos = 0;
+        const QString evidenceTopModule = crossingEvidence.value(
+            QStringLiteral("rtl")).toObject().value(
+            QStringLiteral("topModule")).toString();
+        const QRegularExpression fifoInstancePattern(
+            QStringLiteral(
+                R"(\bfp_async_ready_valid_fifo\s*#\s*\([^;]*?\)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\()"));
+        QStringList topFifoInstances;
+        QRegularExpressionMatchIterator fifoMatches =
+            fifoInstancePattern.globalMatch(crossingTopText);
+        while (fifoMatches.hasNext()) {
+            topFifoInstances.append(fifoMatches.next().captured(1));
+        }
+        realizedCdcMatchesTop = !evidenceTopModule.isEmpty()
+            && crossingTopText.contains(
+                QStringLiteral("module %1 #(").arg(evidenceTopModule));
+        const QJsonArray edgeRealizations = crossingEvidence.value(
+            QStringLiteral("edgeRealizations")).toArray();
+        for (const QJsonValue& value : edgeRealizations) {
+            const QJsonObject edge = value.toObject();
+            if (edge.value(QStringLiteral("status")).toString()
+                != QStringLiteral("realized")) {
+                continue;
+            }
+            const QJsonObject reference = edge.value(
+                QStringLiteral("edge")).toObject();
+            const QJsonArray directions = edge.value(
+                QStringLiteral("directions")).toArray();
+            for (const QJsonValue& directionValue : directions) {
+                const QJsonObject direction = directionValue.toObject();
+                const QJsonObject parameters = direction.value(
+                    QStringLiteral("parameters")).toObject();
+                const QString hierarchy = direction.value(
+                    QStringLiteral("instance")).toString();
+                const qsizetype hierarchySeparator = hierarchy.lastIndexOf(u'.');
+                const QString instanceName = hierarchySeparator > 0
+                    ? hierarchy.sliced(hierarchySeparator + 1)
+                    : QString{};
+                const bool instanceIsUnique =
+                    !realizedInstances.contains(instanceName);
+                realizedInstances.append(instanceName);
+                realizedDirections.append(
+                    reference.value(QStringLiteral("id")).toString()
+                    + QStringLiteral(":")
+                    + direction.value(QStringLiteral("orientation")).toString());
+                ++directionalFifos;
+                realizedCdcMatchesTop = realizedCdcMatchesTop
+                    && reference.value(QStringLiteral("kind")).toString()
+                        == QStringLiteral("router-link")
+                    && direction.value(QStringLiteral("module")).toString()
+                        == QStringLiteral("fp_async_ready_valid_fifo")
+                    && parameters.value(QStringLiteral("DEPTH")).toObject()
+                           .value(QStringLiteral("value")).toInt() == 4
+                    && parameters.value(QStringLiteral("SYNC_STAGES")).toObject()
+                           .value(QStringLiteral("value")).toInt() == 3
+                    && hierarchy == evidenceTopModule + u'.' + instanceName
+                    && !instanceName.isEmpty()
+                    && instanceIsUnique
+                    && topFifoInstances.contains(instanceName);
+            }
+        }
+        realizedDirections.sort();
+        QStringList expectedDirections = {
+            linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))
+                + QStringLiteral(":from-to"),
+            linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))
+                + QStringLiteral(":to-from"),
+            linkId(QStringLiteral("r-0-1"), QStringLiteral("r-1-1"))
+                + QStringLiteral(":from-to"),
+            linkId(QStringLiteral("r-0-1"), QStringLiteral("r-1-1"))
+                + QStringLiteral(":to-from")};
+        expectedDirections.sort();
+        realizedInstances.sort();
+        topFifoInstances.sort();
+        check(realizedCdcMatchesTop
+                  && directionalFifos == 4
+                  && realizedDirections == expectedDirections
+                  && realizedInstances == topFifoInstances
+                  && crossingTopText.count(
+                         QStringLiteral("fp_async_ready_valid_fifo #(")) == 4
+                  && crossingEvidence.value(QStringLiteral("summary")).toObject()
+                         .value(QStringLiteral("directionalFifos")).toInt() == 4,
+              QStringLiteral(
+                  "Domain RTL evidence proves two orientations for each asynchronous Router boundary"));
+
+        bool deferredIsolation = false;
+        bool deferredLevelShifter = false;
+        bool everyDeferredItemIsExplicit = true;
+        const QJsonArray deferredItems = crossingEvidence.value(
+            QStringLiteral("deferredPlanItems")).toArray();
+        for (const QJsonValue& value : deferredItems) {
+            const QJsonObject item = value.toObject();
+            everyDeferredItemIsExplicit = everyDeferredItemIsExplicit
+                && item.value(QStringLiteral("status")).toString()
+                    == QStringLiteral("deferred")
+                && !item.value(QStringLiteral("reasonCode")).toString().isEmpty();
+            const QJsonArray recipes = item.value(
+                QStringLiteral("recipes")).toArray();
+            deferredIsolation = deferredIsolation
+                || recipes.contains(QStringLiteral("power-isolation"));
+            deferredLevelShifter = deferredLevelShifter
+                || recipes.contains(QStringLiteral("power-level-shifter"));
+        }
+        check(!crossingEvidence.value(QStringLiteral("claims")).toObject()
+                   .value(QStringLiteral("completePlan")).toBool()
+                  && everyDeferredItemIsExplicit
+                  && deferredIsolation
+                  && deferredLevelShifter,
+              QStringLiteral(
+                  "Domain RTL evidence marks unmaterialized Power stages as explicit deferred work"));
     }
 
     NocDesign reorderedDomainDesign = crossingDesign;
@@ -1072,6 +1252,12 @@ int main(int argc, char** argv) {
             });
         QString reorderedText;
         QString reorderedImplementationText;
+        const QString reorderedTopText = readArtifact(
+            generation, primaryArtifact(generation));
+        const QString reorderedEvidenceText = readArtifact(
+            generation,
+            artifactWithType(
+                generation, QStringLiteral("implementation-evidence")));
         if (constraints != generation.artifacts.cend()) {
             QFile constraintsFile(QDir(generation.outputDirectory).filePath(
                 constraints->path));
@@ -1090,10 +1276,14 @@ int main(int argc, char** argv) {
         check(generation.success
                   && !crossingConstraintsText.isEmpty()
                   && !crossingImplementationText.isEmpty()
+                  && !crossingTopText.isEmpty()
+                  && !crossingEvidenceText.isEmpty()
                   && reorderedText == crossingConstraintsText
-                  && reorderedImplementationText == crossingImplementationText,
+                  && reorderedImplementationText == crossingImplementationText
+                  && reorderedTopText == crossingTopText
+                  && reorderedEvidenceText == crossingEvidenceText,
               QStringLiteral(
-                  "Domain constraints and implementation plan are deterministic across equivalent input ordering"));
+                  "Domain plan, RTL, and implementation evidence are deterministic across equivalent input ordering"));
     }
 
     NocDesign changedDomainDesign = crossingDesign;

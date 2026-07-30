@@ -32,6 +32,12 @@ class DomainRealizerTest < Minitest::Test
     assert_equal 'number', timing.dig('parameters', 'nominal-frequency-mhz', 'type')
     assert_equal 'frequencyMHz',
                  timing.dig('parameters', 'nominal-frequency-mhz', 'source', 'id')
+    assert_equal 2,
+                 timing.dig('parameters', 'reset-release-stages', 'value')
+    assert_equal 'realization-default',
+                 timing.dig('parameters', 'reset-release-stages', 'source', 'kind')
+    assert_equal 'resetReleaseStages',
+                 timing.dig('parameters', 'reset-release-stages', 'source', 'id')
 
     relation = plan.fetch('relationBindings').fetch(0)
     assert_equal 'derived-clock-divider', relation.fetch('recipe')
@@ -468,7 +474,7 @@ class DomainRealizerTest < Minitest::Test
     source = File.read(File.join(RUNTIME_ROOT, 'lib', 'domain_realizer.rb'))
     %w[
       clock power frequencyMHz voltageMv levelShift derived-from
-      synchronizerStages fifoDepth divider
+      synchronizerStages fifoDepth resetReleaseStages divider
     ].each do |product_id|
       refute_match(/['"]#{Regexp.escape(product_id)}['"]/, source)
     end

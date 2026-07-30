@@ -12,6 +12,7 @@ require 'optparse'
 require 'tmpdir'
 require_relative '../lib/domain_realizer'
 require_relative '../lib/domain_rtl_context'
+require_relative '../lib/domain_rtl_evidence'
 
 HDL_IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_]*\z/
 DOMAIN_ELEMENT_KINDS = %w[router endpoint].freeze
@@ -627,6 +628,8 @@ def artifact_list(output_dir, design_name)
              'constraints'
            elsif File.basename(path) == "#{design_name}_domain_implementation.json"
              'implementation-plan'
+           elsif File.basename(path) == "#{design_name}_domain_implementation_evidence.json"
+             'implementation-evidence'
            elsif %w[.v .sv].include?(File.extname(path).downcase)
              'rtl'
            else
@@ -723,6 +726,8 @@ begin
 rescue FinepaperNoc::DomainRealizationError => error
   fail_operation(error.message, options[:result], code: error.code, path: error.path)
 rescue FinepaperNoc::DomainRtlContextError => error
+  fail_operation(error.message, options[:result], code: error.code, path: error.path)
+rescue FinepaperNoc::DomainRtlEvidenceError => error
   fail_operation(error.message, options[:result], code: error.code, path: error.path)
 rescue StandardError => error
   fail_operation(error.message, options[:result])

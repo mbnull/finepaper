@@ -540,12 +540,11 @@ module FinepaperNoc
                 'realization.domain_mismatch', path,
                 "compiled Domain #{id} differs from the normalized Design")
         properties = object!(instance['properties'], "#{path}/properties")
+        validate_mapped_property_keys!(
+          properties, mapping.fetch('bindings'), "#{path}/properties"
+        )
         bindings = typed_values(properties, mapping.fetch('bindings'), "#{path}/properties",
                                 'domain-property')
-        expected_properties = mapping.fetch('bindings').map { |entry| entry.fetch('property') }.sort
-        expect!(properties.keys.sort == expected_properties,
-                'realization.unconsumed_domain_property', "#{path}/properties",
-                "Domain #{id} has missing or unmapped properties")
         members = array!(instance['members'], "#{path}/members").map.with_index do |member, member_index|
           reference = element_reference!(member, "#{path}/members/#{member_index}", ELEMENT_KINDS)
           expect!(graph.fetch(:entities).key?(reference_key(reference)),
@@ -1116,6 +1115,20 @@ module FinepaperNoc
                 "#{path}/#{property}",
                 "crossing selector value #{value.inspect} is not mapped")
       end
+    end
+
+    def validate_mapped_property_keys!(properties, declarations, path)
+      by_property = declarations.to_h do |declaration|
+        [declaration.fetch('property'), declaration]
+      end
+      unknown = properties.keys - by_property.keys
+      missing = by_property.reject do |property, declaration|
+        properties.key?(property) || declaration.key?('default')
+      end.keys
+      expect!(unknown.empty?, 'realization.unconsumed_domain_property', path,
+              "Domain property #{unknown.first} has no realization mapping")
+      expect!(missing.empty?, 'realization.unconsumed_domain_property', path,
+              "Domain property #{missing.first} is missing")
     end
 
     def crossing_property!(properties, declaration, path)

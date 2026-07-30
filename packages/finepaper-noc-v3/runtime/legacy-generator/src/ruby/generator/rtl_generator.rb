@@ -1,8 +1,14 @@
 require 'erb'
 require 'fileutils'
+require 'json'
 require_relative '../../../../lib/domain_rtl_context'
+require_relative '../../../../lib/domain_rtl_evidence'
 
 class RtlGenerator
+  TIMING_ROLE = 'timing-domain'.freeze
+  SUPPLY_ROLE = 'supply-domain'.freeze
+  ASYNC_FIFO_RECIPE = 'clock-async-fifo'.freeze
+
   DIRECTION_ORDER = [
     { name: :east, abbr: 'e' },
     { name: :west, abbr: 'w' },
@@ -51,10 +57,12 @@ class RtlGenerator
   def generate_partitioned(output_dir, ipcore_dir: nil)
     domain_context = build_domain_rtl_context
     validate_domain_rtl_context!(domain_context)
+    domain_rendering = build_domain_rtl_rendering(domain_context)
     FileUtils.mkdir_p(output_dir)
 
     lookup = xp_module_lookup
     set_context(:@domain_rtl_context, domain_context)
+    set_context(:@domain_rtl_rendering, domain_rendering)
     set_context(:@xp_module_lookup, lookup)
     set_context(:@xp_link_directions_by_id, xp_link_directions_by_id)
     set_context(:@ni_module_lookup, ni_module_lookup)
@@ -74,10 +82,11 @@ class RtlGenerator
 
     ni_paths = ni_variants.map do |variant|
       xp = variant[:xp]
+      endpoint = variant[:endpoint]
       set_context(:@xp, xp)
       set_context(:@ni_module_name, variant[:module_name])
       set_context(:@ni_variant_signature, variant[:signature])
-      set_context(:@ni_endpoint_slots, ni_endpoint_slots(xp))
+      set_context(:@ni_endpoint_slots, [ni_endpoint_slot(endpoint)])
       output_path = File.join(output_dir, variant[:folder], ni_variant_filename(variant))
       render('ni.sv.erb', output_path)
       output_path
@@ -91,13 +100,15 @@ class RtlGenerator
     top_path = File.join(output_dir, "#{@noc.name}_top.v")
     render('top.v.erb', top_path)
     write_filelist(output_dir, xp_paths + ni_paths + [top_path], library_dirs: library_dirs)
+    write_domain_evidence(output_dir, domain_context, domain_rendering)
   ensure
     clear_context(:@xp, :@xp_module_name, :@xp_variant_signature,
                   :@xp_port_directions, :@xp_local_port_count,
                   :@xp_module_lookup, :@xp_link_directions_by_id,
                   :@ni_module_lookup, :@ni_module_name,
                   :@ni_variant_signature, :@ni_endpoint_slots,
-                  :@ni_features, :@domain_rtl_context)
+                  :@ni_features, :@domain_rtl_context,
+                  :@domain_rtl_rendering)
   end
 
   def build_domain_rtl_context
@@ -118,11 +129,27 @@ class RtlGenerator
     end
     @noc.endpoints.each do |endpoint|
       validate_domain_entity!(context, 'endpoint', endpoint.id)
-      raise "Domain RTL context is missing Endpoint attachment #{endpoint.id}" unless context.edge('endpoint-attachment', endpoint.id)
+      edge = context.edge('endpoint-attachment', endpoint.id)
+      raise "Domain RTL context is missing Endpoint attachment #{endpoint.id}" unless edge
+
+      xp = xp_for_endpoint(endpoint.id)
+      validate_edge_elements!(
+        edge,
+        {'kind' => 'router', 'id' => domain_router_id(xp)},
+        {'kind' => 'endpoint', 'id' => endpoint.id}
+      )
     end
     @noc.connections.each do |connection|
       id = domain_link_id(connection)
-      raise "Domain RTL context is missing Router Link #{id}" unless context.edge('router-link', id)
+      edge = context.edge('router-link', id)
+      raise "Domain RTL context is missing Router Link #{id}" unless edge
+
+      endpoints = domain_link_endpoints(connection)
+      validate_edge_elements!(
+        edge,
+        {'kind' => 'router', 'id' => domain_router_id(endpoints.fetch(0))},
+        {'kind' => 'router', 'id' => domain_router_id(endpoints.fetch(1))}
+      )
     end
 
     context.edges.each_value do |edge|
@@ -131,8 +158,19 @@ class RtlGenerator
   end
 
   def validate_domain_entity!(context, kind, id)
-    context.entity_domain(kind, id, 'timing-domain')
-    context.entity_domain(kind, id, 'supply-domain')
+    context.entity_domain(kind, id, TIMING_ROLE)
+    context.entity_domain(kind, id, SUPPLY_ROLE)
+  end
+
+  def validate_edge_elements!(edge, expected_from, expected_to)
+    return if edge.fetch('fromElement') == expected_from &&
+              edge.fetch('toElement') == expected_to
+
+    reference = edge.fetch('edge')
+    raise FinepaperNoc::DomainRtlContextError.new(
+      'rtl_context.legacy_edge_mismatch', '/edgeBindings',
+      "edge #{reference.fetch('kind')} #{reference.fetch('id')} differs from the legacy Mesh graph"
+    )
   end
 
   def validate_domain_edge!(context, edge)
@@ -141,10 +179,10 @@ class RtlGenerator
     from = edge.fetch('fromElement')
     to = edge.fetch('toElement')
     from_timing = context.entity_domain(from.fetch('kind'), from.fetch('id'),
-                                        'timing-domain')
+                                        TIMING_ROLE)
     to_timing = context.entity_domain(to.fetch('kind'), to.fetch('id'),
-                                      'timing-domain')
-    fifo_stage = context.edge_stage(edge_kind, edge_id, 'clock-async-fifo')
+                                      TIMING_ROLE)
+    fifo_stage = context.edge_stage(edge_kind, edge_id, ASYNC_FIFO_RECIPE)
     timing_differs = from_timing.fetch('domain') != to_timing.fetch('domain')
     if timing_differs != !fifo_stage.nil?
       raise FinepaperNoc::DomainRtlContextError.new(
@@ -156,21 +194,21 @@ class RtlGenerator
     edge.fetch('stages').each do |stage|
       if stage.key?('directions')
         stage.fetch('directions').each do |direction|
-          validate_renderer_recipe!(direction.fetch('recipe'),
-                                    direction.fetch('recipeKind'),
-                                    direction.fetch('parameters'), edge_id)
+          validate_plan_recipe!(direction.fetch('recipe'),
+                                direction.fetch('recipeKind'),
+                                direction.fetch('parameters'), edge_id)
         end
       else
-        validate_renderer_recipe!(stage.fetch('recipe'),
-                                  stage.fetch('recipeKind'),
-                                  stage.fetch('parameters'), edge_id)
+        validate_plan_recipe!(stage.fetch('recipe'),
+                              stage.fetch('recipeKind'),
+                              stage.fetch('parameters'), edge_id)
       end
     end
   end
 
-  def validate_renderer_recipe!(recipe, kind, parameters, edge_id)
+  def validate_plan_recipe!(recipe, kind, parameters, edge_id)
     case recipe
-    when 'clock-async-fifo'
+    when ASYNC_FIFO_RECIPE
       raise "#{recipe} on #{edge_id} must be bidirectional" unless kind == 'bidirectional-stage'
       raise "#{recipe} on #{edge_id} has unexpected parameters" unless parameters.keys.sort == %w[fifo-depth metastability-stages]
       depth = parameters.dig('fifo-depth', 'value')
@@ -206,10 +244,160 @@ class RtlGenerator
   end
 
   def domain_link_id(connection)
-    by_id = @noc.xps.to_h { |xp| [xp.id, xp] }
-    endpoints = [by_id.fetch(connection.from), by_id.fetch(connection.to)]
-                .sort_by { |xp| [xp.y, xp.x] }
+    endpoints = domain_link_endpoints(connection)
     "link-#{domain_router_id(endpoints.fetch(0))}--#{domain_router_id(endpoints.fetch(1))}"
+  end
+
+  def domain_link_endpoints(connection)
+    by_id = @noc.xps.to_h { |xp| [xp.id, xp] }
+    [by_id.fetch(connection.from), by_id.fetch(connection.to)]
+      .sort_by { |xp| [xp.y, xp.x] }
+  end
+
+  def build_domain_rtl_rendering(context)
+    active_domains = context.domains_for_role(TIMING_ROLE).select do |domain|
+      !domain.fetch('members').empty?
+    end
+    if active_domains.empty?
+      raise FinepaperNoc::DomainRtlContextError.new(
+        'rtl_context.missing_timing_domain', '/domainBindings',
+        'the RTL graph requires at least one active timing Domain'
+      )
+    end
+
+    clock_port_mode = active_domains.one? ? 'legacy-single-clock' : 'domain-token'
+    clock_domains = active_domains.map do |domain|
+      token = domain.fetch('token')
+      reset_release_stages = context.parameter_value(
+        domain, 'reset-release-stages', expected_type: 'integer'
+      )
+      unless reset_release_stages.between?(2, 8)
+        raise FinepaperNoc::DomainRtlContextError.new(
+          'rtl_context.invalid_reset_release_stages', '/domainBindings',
+          "reset release stages for Domain #{domain.fetch('domain')} must be in 2..8"
+        )
+      end
+      {
+        'domain' => domain.fetch('domain'),
+        'name' => domain.fetch('name'),
+        'token' => token,
+        'clockSignal' => clock_port_mode == 'legacy-single-clock' ?
+          'clk' : "clk_#{token}",
+        'resetSignal' => "rst_n_#{token}",
+        'resetReleaseStages' => reset_release_stages
+      }
+    end
+    clock_by_domain = clock_domains.to_h do |domain|
+      [domain.fetch('domain'), domain]
+    end
+
+    entity_signals = context.entities.each_value.each_with_object({}) do |entry, result|
+      element = entry.fetch('element')
+      timing = context.entity_domain(
+        element.fetch('kind'), element.fetch('id'), TIMING_ROLE
+      )
+      result[[element.fetch('kind'), element.fetch('id')]] =
+        clock_by_domain.fetch(timing.fetch('domain'))
+    end
+
+    router_domain_to_rtl = @noc.xps.to_h do |xp|
+      [domain_router_id(xp), xp.id]
+    end
+    router_signals = @noc.xps.to_h do |xp|
+      [xp.id, entity_signals.fetch(['router', domain_router_id(xp)])]
+    end
+    endpoint_signals = @noc.endpoints.to_h do |endpoint|
+      [endpoint.id, entity_signals.fetch(['endpoint', endpoint.id])]
+    end
+
+    router_traffic = {}
+    @noc.connections.each do |connection|
+      edge_id = domain_link_id(connection)
+      FinepaperNoc::DomainRtlContext::ORIENTATIONS.each do |orientation|
+        traffic = context.traffic('router-link', edge_id, orientation)
+        producer = traffic.fetch('producer')
+        consumer = traffic.fetch('consumer')
+        unless producer.fetch('kind') == 'router' && consumer.fetch('kind') == 'router'
+          raise FinepaperNoc::DomainRtlContextError.new(
+            'rtl_context.invalid_router_traffic', '/edgeBindings',
+            "Router Link #{edge_id} traffic endpoints must both be Routers"
+          )
+        end
+        producer_id = router_domain_to_rtl.fetch(producer.fetch('id'))
+        consumer_id = router_domain_to_rtl.fetch(consumer.fetch('id'))
+        base = "link_#{producer_id}_to_#{consumer_id}"
+        router_traffic[[producer_id, consumer_id]] = compile_traffic_bridge(
+          context, 'router-link', edge_id, orientation, traffic, base,
+          entity_signals
+        )
+      end
+    end
+
+    endpoint_attachments = @noc.endpoints.to_h do |endpoint|
+      edge_id = endpoint.id
+      router_to_endpoint = context.traffic(
+        'endpoint-attachment', edge_id, 'from-to'
+      )
+      endpoint_to_router = context.traffic(
+        'endpoint-attachment', edge_id, 'to-from'
+      )
+      [endpoint.id, {
+        'routerToEndpoint' => compile_traffic_bridge(
+          context, 'endpoint-attachment', edge_id, 'from-to',
+          router_to_endpoint, "router_to_ni_#{endpoint.id}", entity_signals
+        ),
+        'endpointToRouter' => compile_traffic_bridge(
+          context, 'endpoint-attachment', edge_id, 'to-from',
+          endpoint_to_router, "ni_#{endpoint.id}_to_router", entity_signals
+        )
+      }]
+    end
+
+    {
+      'clockPortMode' => clock_port_mode,
+      'clockDomains' => clock_domains,
+      'routerSignals' => router_signals,
+      'endpointSignals' => endpoint_signals,
+      'routerTraffic' => router_traffic,
+      'endpointAttachments' => endpoint_attachments
+    }
+  end
+
+  def compile_traffic_bridge(context, edge_kind, edge_id, orientation, traffic,
+                             base, entity_signals)
+    fifo = context.edge_stage(edge_kind, edge_id, ASYNC_FIFO_RECIPE)
+    crossing = !fifo.nil?
+    producer = traffic.fetch('producer')
+    consumer = traffic.fetch('consumer')
+    source_domain = entity_signals.fetch(
+      [producer.fetch('kind'), producer.fetch('id')]
+    )
+    destination_domain = entity_signals.fetch(
+      [consumer.fetch('kind'), consumer.fetch('id')]
+    )
+    bridge = {
+      'edge' => {'kind' => edge_kind, 'id' => edge_id},
+      'orientation' => orientation,
+      'producer' => producer,
+      'consumer' => consumer,
+      'baseSignal' => base,
+      'sourceSignal' => crossing ? "#{base}_src" : base,
+      'destinationSignal' => crossing ? "#{base}_dst" : base,
+      'sourceDomain' => source_domain,
+      'destinationDomain' => destination_domain,
+      'crossing' => crossing
+    }
+    return bridge unless crossing
+
+    bridge.merge(
+      'instance' => "u_cdc_#{base}",
+      'fifoDepth' => context.parameter_value(
+        fifo, 'fifo-depth', expected_type: 'integer'
+      ),
+      'synchronizerStages' => context.parameter_value(
+        fifo, 'metastability-stages', expected_type: 'integer'
+      )
+    )
   end
 
   def xp_variants
@@ -250,13 +438,13 @@ class RtlGenerator
   end
 
   def ni_variants
-    @noc.xps.each_with_object({}) do |xp, variants|
-      next if xp.endpoints.empty?
-
-      signature = ni_signature(xp)
-      key = ni_variant_key(xp)
+    @noc.endpoints.each_with_object({}) do |endpoint, variants|
+      xp = xp_for_endpoint(endpoint.id)
+      signature = ni_signature(endpoint)
+      key = ni_variant_key(endpoint)
       variants[key] ||= {
         xp: xp,
+        endpoint: endpoint,
         signature: signature,
         folder: "ni_#{key}",
         module_name: "ni_bridge_#{key}"
@@ -264,36 +452,31 @@ class RtlGenerator
     end.values
   end
 
-  def ni_signature(xp)
-    slot_signature = ni_endpoint_slots(xp).map do |slot|
-      base = "#{slot[:protocol]}_#{slot[:role_code]}#{slot[:data_width]}"
-      slot[:port_signature] == 'flit' ? base : "#{base}_#{slot[:port_signature]}"
-    end.join('_')
-
-    "#{slot_signature}_feat_#{ni_feature_signature}"
+  def ni_signature(endpoint)
+    slot = ni_endpoint_slot(endpoint)
+    base = "#{slot[:protocol]}_#{slot[:role_code]}#{slot[:data_width]}"
+    base = "#{base}_#{slot[:port_signature]}" unless slot[:port_signature] == 'flit'
+    qos = slot[:config][:qos_enabled] ? 1 : 0
+    "#{base}_buf#{slot[:config][:buffer_depth]}_q#{qos}_feat_#{ni_feature_signature}"
   end
 
   def ni_variant_filename(variant)
     "#{file_token(@noc.name)}_#{variant[:folder]}.v"
   end
 
-  def ni_endpoint_slots(xp)
-    endpoint_by_id = @noc.endpoints.to_h { |ep| [ep.id, ep] }
-    xp.endpoints.each_with_index.map do |ep_id, index|
-      ep = endpoint_by_id.fetch(ep_id)
-      {
-        index: index,
-        id: ep.id,
-        generic_id: "ep#{index}",
-        type: ep.type,
-        role_code: endpoint_role_code(ep),
-        protocol: file_token(ep.protocol.downcase),
-        data_width: ep.data_width,
-        config: ep.config,
-        ports: ep.ports,
-        port_signature: endpoint_port_signature(ep)
-      }
-    end
+  def ni_endpoint_slot(endpoint)
+    {
+      index: 0,
+      id: endpoint.id,
+      generic_id: 'ep0',
+      type: endpoint.type,
+      role_code: endpoint_role_code(endpoint),
+      protocol: file_token(endpoint.protocol.downcase),
+      data_width: endpoint.data_width,
+      config: endpoint.config,
+      ports: endpoint.ports,
+      port_signature: endpoint_port_signature(endpoint)
+    }
   end
 
   def link_directions_for(xp)
@@ -327,8 +510,8 @@ class RtlGenerator
     "#{signature}_ep#{xp.endpoints.size}"
   end
 
-  def ni_variant_key(xp)
-    ni_signature(xp)
+  def ni_variant_key(endpoint)
+    ni_signature(endpoint)
   end
 
   def xp_module_lookup
@@ -336,11 +519,18 @@ class RtlGenerator
   end
 
   def ni_module_lookup
-    @noc.xps.each_with_object({}) do |xp, lookup|
-      next if xp.endpoints.empty?
-
-      lookup[xp.id] = "ni_bridge_#{ni_variant_key(xp)}"
+    @noc.endpoints.to_h do |endpoint|
+      [endpoint.id, "ni_bridge_#{ni_variant_key(endpoint)}"]
     end
+  end
+
+  def xp_for_endpoint(endpoint_id)
+    matches = @noc.xps.select { |xp| xp.endpoints.include?(endpoint_id) }
+    unless matches.size == 1
+      raise "Endpoint #{endpoint_id} must belong to exactly one Router"
+    end
+
+    matches.first
   end
 
   def xp_link_directions_by_id
@@ -446,6 +636,26 @@ class RtlGenerator
     lines.concat(source_paths.map { |path| File.expand_path(path) })
     lines.uniq!
     File.write(File.join(output_dir, 'filelist.f'), "#{lines.join("\n")}\n")
+  end
+
+  def write_domain_evidence(output_dir, context, rendering)
+    plan_name = "#{@noc.name}_domain_implementation.json"
+    evidence_name = "#{@noc.name}_domain_implementation_evidence.json"
+    plan_contents = JSON.pretty_generate(context.plan) + "\n"
+    File.write(File.join(output_dir, plan_name), plan_contents)
+    evidence = FinepaperNoc::DomainRtlEvidenceBuilder.build(
+      context: context,
+      domain_rendering: rendering,
+      top_module: "#{@noc.name}_top",
+      top_artifact: "#{@noc.name}_top.v",
+      filelist_artifact: 'filelist.f',
+      source_plan_artifact: plan_name,
+      source_plan_contents: plan_contents
+    )
+    File.write(
+      File.join(output_dir, evidence_name),
+      JSON.pretty_generate(evidence) + "\n"
+    )
   end
 
   def set_context(name, value)

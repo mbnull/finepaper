@@ -62,6 +62,16 @@ int main(int argc, char** argv) {
         ruby,
         projectRoot,
         QStringLiteral(
+            "packages/finepaper-noc-v3/runtime/test/test_domain_rtl_materialization.rb"));
+    runRubyTest(
+        ruby,
+        projectRoot,
+        QStringLiteral(
+            "packages/finepaper-noc-v3/runtime/test/test_domain_rtl_evidence.rb"));
+    runRubyTest(
+        ruby,
+        projectRoot,
+        QStringLiteral(
             "packages/finepaper-noc-v3/runtime/test/test_async_fifo.rb"));
     runRubyTest(
         ruby,

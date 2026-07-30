@@ -1,7 +1,6 @@
 // Asynchronous-assert, synchronous-deassert reset synchronizer for one clock
 // Domain. The incoming reset may assert without a running clock; release is
 // observed only after STAGES consecutive local clock edges.
-`timescale 1ns/1ps
 `default_nettype none
 
 module fp_reset_synchronizer #(

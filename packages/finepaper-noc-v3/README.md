@@ -50,13 +50,27 @@ topology fixed to a rectangular Mesh.
   than hiding it in global parameters. Before writing RTL it verifies plan
   headers, entity/edge membership, role cardinality, traffic orientation, and
   recipe parameters against the concrete Mesh graph.
-- The Package carries linted asynchronous ready/valid FIFO and local reset
-  synchronizer primitives as the implementation vocabulary for the next
-  renderer stage. They are regression-tested independently, including unsafe
-  parameter rejection and asynchronous-assert/synchronous-release reset.
-- The current legacy RTL backend does not yet instantiate CDC, isolation, or
-  level-shifting cells from the typed plan. Direct RTL realization is the next
-  implementation stage and is not implied by the capability booleans alone.
+- Every active timing Domain receives an explicit clock binding and a local
+  asynchronous-assert/synchronous-release reset synchronizer. A single active
+  Domain preserves the legacy `clk` top-level ABI; a multi-Domain design uses
+  collision-safe tokenized clock ports. The compatibility mode is recorded in
+  generated RTL and implementation evidence instead of being inferred later.
+- Each timing-Domain crossing on a Router Link or Endpoint attachment
+  instantiates two `fp_async_ready_valid_fifo` cells, one for each traffic
+  orientation. Same-Domain edges keep their direct payload/valid/ready bundle.
+  Network interfaces are instantiated per Endpoint in the Endpoint timing
+  Domain, while identical modules are still reused by complete NI signature.
+- FIFO/reset primitives are regression-tested independently and through
+  generated multi-clock tops, including unsafe parameter rejection,
+  asynchronous reset assertion, synchronous release, bidirectional traffic,
+  ordering, and backpressure.
+- Generation emits
+  `<design>_domain_implementation_evidence.json`, which maps active Domain
+  ports/reset instances and every physical edge to concrete RTL hierarchy and
+  typed parameters. It also lists every unmaterialized plan item. Power
+  isolation, level shifting, and derived-clock relations are currently
+  explicit deferred items, so `claims.completePlan` remains false when they are
+  present; the backend does not generate placeholder power logic.
 - `<design>_design_intent.json` is retained as a compatibility/debug snapshot;
   it is not the Domain implementation contract.
 - `runtimeCapabilities.domainConfiguration` declares complete consumption of

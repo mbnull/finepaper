@@ -10,7 +10,6 @@
 // one coordinated operation. A unilateral live reset is outside this module's
 // contract and may replay, lose, or overwrite data. Each reset must be
 // deasserted through a synchronizer for its local clock.
-`timescale 1ns/1ps
 `default_nettype none
 
 module fp_async_ready_valid_fifo #(

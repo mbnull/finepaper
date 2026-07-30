@@ -102,6 +102,7 @@ class TestV3AsyncReadyValidFifo < Minitest::Test
       stdout, stderr, status = Open3.capture3(
         {'CCACHE_DISABLE' => '1'},
         'verilator', '--binary', '--timing', '--assert', '--sv',
+        '--timescale', '1ns/1ps',
         '--top-module', 'async_fifo_tb',
         '--Mdir', build_dir,
         '-o', 'async_fifo_sim',
@@ -131,6 +132,7 @@ class TestV3AsyncReadyValidFifo < Minitest::Test
       stdout, stderr, status = Open3.capture3(
         {'CCACHE_DISABLE' => '1'},
         'verilator', '--binary', '--timing', '--sv',
+        '--timescale', '1ns/1ps',
         '--top-module', 'invalid_fifo_tb',
         '--Mdir', build_dir,
         '-o', 'invalid_fifo_sim',
@@ -147,7 +149,6 @@ class TestV3AsyncReadyValidFifo < Minitest::Test
 
   def invalid_parameter_testbench(width:, depth:, stages:)
     <<~SYSTEM_VERILOG
-      `timescale 1ns/1ps
       module invalid_fifo_tb;
         localparam int unsigned PAYLOAD_WIDTH = #{width};
         logic clk = 1'b0;
@@ -184,7 +185,6 @@ class TestV3AsyncReadyValidFifo < Minitest::Test
 
   def randomized_testbench
     <<~'SYSTEM_VERILOG'
-      `timescale 1ns/1ps
       module async_fifo_tb;
         localparam int unsigned PAYLOAD_WIDTH = 32;
         localparam int unsigned TRANSACTIONS = 257;
