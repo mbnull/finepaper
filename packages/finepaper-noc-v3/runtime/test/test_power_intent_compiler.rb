@@ -31,6 +31,15 @@ class PowerIntentCompilerTest < Minitest::Test
                                'cells', 'minItems')
     assert_equal true, schema.dig('$defs', 'interfaceCell', 'properties',
                                   'cells', 'uniqueItems')
+    assert_equal %w[external-port internal-switched],
+                 schema.dig('$defs', 'supply', 'properties', 'exposure', 'enum')
+    assert schema.dig('$defs', 'supply', 'allOf')
+    assert_equal false, schema.dig('$defs', 'isolation', 'additionalProperties')
+    assert_equal %w[self parent automatic],
+                 schema.dig('$defs', 'levelShifter', 'properties',
+                            'location', 'enum')
+    assert_includes schema.dig('$defs', 'interfaceCell', 'properties',
+                               'kind', 'enum'), 'power-switch'
   end
 
   def test_compiles_a_standalone_canonical_plan_with_context_facts
@@ -46,7 +55,7 @@ class PowerIntentCompilerTest < Minitest::Test
                  plan.dig('implementationPlan', 'format')
     assert_equal %w[vdd_a vdd_b vdd_in vret vss],
                  plan.fetch('supplies').map { |entry| entry.fetch('id') }
-    assert_equal %w[restore save switch_b],
+    assert_equal %w[isolate_b restore save switch_b],
                  plan.fetch('controls').map { |entry| entry.fetch('id') }
     assert_equal %w[power-always power-switch power-unused],
                  plan.fetch('domains').map { |entry| entry.fetch('domain') }
@@ -62,6 +71,13 @@ class PowerIntentCompilerTest < Minitest::Test
     assert_equal [{'kind' => 'router', 'id' => 'r1'}], switchable.fetch('members')
     assert_equal true,
                  switchable.dig('parameters', 'retains-state', 'value')
+    assert_equal 'isolate_b', switchable.dig('isolation', 'control')
+    assert_equal 'vret', switchable.dig('isolation', 'supply')
+    assert_equal 0, switchable.dig('isolation', 'clampValue')
+    assert_equal 'self', switchable.dig('isolation', 'location')
+    assert_equal 'automatic', switchable.dig('levelShifter', 'location')
+    assert_equal 'posedge', switchable.dig('retention', 'saveEdge')
+    assert_equal 'negedge', switchable.dig('retention', 'restoreEdge')
     assert_equal %w[on sleep],
                  switchable.fetch('states').map { |entry| entry.fetch('id') }
 
@@ -73,10 +89,17 @@ class PowerIntentCompilerTest < Minitest::Test
     interface_cell_ids = plan.dig('technology', 'interfaceCells').map do |entry|
       entry.fetch('id')
     end
-    assert_equal %w[iso_generic ls_down ls_up retention_generic],
+    assert_equal %w[
+      iso_generic ls_down ls_up power_switch_generic retention_generic
+    ],
                  interface_cell_ids
     assert_equal %w[ISO_A ISO_B],
                  plan.dig('technology', 'interfaceCells', 0, 'cells')
+    internal_supply = plan.fetch('supplies').find do |entry|
+      entry.fetch('id') == 'vdd_b'
+    end
+    assert_equal 'internal-switched', internal_supply.fetch('exposure')
+    refute internal_supply.key?('port')
     assert plan.frozen?
     assert plan.fetch('domains').first.frozen?
     assert plan.dig('supplies', 0, 'port').frozen?
@@ -102,6 +125,7 @@ class PowerIntentCompilerTest < Minitest::Test
     supply(document, 'vdd_a').fetch('states').find do |state|
       state.fetch('condition') == 'full-on'
     end['voltageMv'] = 900.0
+    domain(document, 'power-switch').fetch('isolation')['clampValue'] = 0.0
 
     plan = compile(document: document)
     voltage = plan.fetch('supplies').find do |entry|
@@ -111,6 +135,11 @@ class PowerIntentCompilerTest < Minitest::Test
     end.fetch('voltageMv')
     assert_instance_of Integer, voltage
     assert_equal 900, voltage
+    clamp_value = plan.fetch('domains').find do |entry|
+      entry.fetch('domain') == 'power-switch'
+    end.dig('isolation', 'clampValue')
+    assert_instance_of Integer, clamp_value
+    assert_equal 0, clamp_value
   end
 
   def test_equivalent_input_and_context_reordering_is_byte_deterministic
@@ -166,6 +195,12 @@ class PowerIntentCompilerTest < Minitest::Test
         supply(doc, 'vdd_a').fetch('states').find do |state|
           state.fetch('condition') == 'off'
         end['voltageMv'] = 0
+      end],
+      ['missing external port', 'power_intent.missing_supply_port', lambda do |doc|
+        supply(doc, 'vdd_a').delete('port')
+      end],
+      ['internal port', 'power_intent.unexpected_supply_port', lambda do |doc|
+        supply(doc, 'vdd_b')['port'] = 'vdd_b_port'
       end]
     ]
 
@@ -344,6 +379,9 @@ class PowerIntentCompilerTest < Minitest::Test
       end],
       ['retains without retained state', 'power_intent.missing_retained_state', lambda do |doc|
         domain_state(doc, 'power-switch', 'sleep')['behavior'] = 'corrupt'
+      end],
+      ['isolation supply can turn off', 'power_intent.isolation_supply_can_turn_off', lambda do |doc|
+        domain(doc, 'power-switch').fetch('isolation')['supply'] = 'vdd_a'
       end]
     ]
     assert_failures(cases)
@@ -355,6 +393,27 @@ class PowerIntentCompilerTest < Minitest::Test
       compile(context: FinepaperNoc::DomainRtlContext.new(plan))
     end
     assert_equal 'power_intent.unexpected_retained_state', error.code
+  end
+
+  def test_supply_exposure_and_switch_ownership_fail_closed
+    cases = [
+      ['external switch output', 'power_intent.externally_driven_switch_output', lambda do |doc|
+        target = supply(doc, 'vdd_b')
+        target['exposure'] = 'external-port'
+        target['port'] = 'vdd_b_port'
+      end],
+      ['unowned internal supply', 'power_intent.invalid_internal_supply_driver', lambda do |doc|
+        target = supply(doc, 'vdd_a')
+        target['exposure'] = 'internal-switched'
+        target.delete('port')
+      end],
+      ['internal ground supply', 'power_intent.invalid_internal_supply_kind', lambda do |doc|
+        target = supply(doc, 'vss')
+        target['exposure'] = 'internal-switched'
+        target.delete('port')
+      end]
+    ]
+    assert_failures(cases)
   end
 
   def test_default_system_state_and_state_reachability_fail_closed
@@ -378,7 +437,7 @@ class PowerIntentCompilerTest < Minitest::Test
   def test_names_pointer_escaping_and_technology_coverage_fail_closed
     cases = [
       ['duplicate supply port', 'power_intent.duplicate_supply_port', lambda do |doc|
-        supply(doc, 'vdd_b')['port'] = supply(doc, 'vdd_a').fetch('port')
+        supply(doc, 'vdd_in')['port'] = supply(doc, 'vdd_a').fetch('port')
       end],
       ['duplicate supply net', 'power_intent.duplicate_supply_net', lambda do |doc|
         supply(doc, 'vdd_b')['net'] = supply(doc, 'vdd_a').fetch('net')
@@ -403,6 +462,26 @@ class PowerIntentCompilerTest < Minitest::Test
       end],
       ['missing retention cells', 'power_intent.missing_technology_mapping', lambda do |doc|
         remove_interface_kind(doc, 'retention')
+      end],
+      ['missing power-switch cells', 'power_intent.missing_technology_mapping', lambda do |doc|
+        remove_interface_kind(doc, 'power-switch')
+      end],
+      ['duplicate isolation mapping', 'power_intent.duplicate_technology_mapping', lambda do |doc|
+        duplicate = deep_copy(doc.dig('technology', 'interfaceCells').find do |entry|
+          entry.fetch('kind') == 'isolation'
+        end)
+        duplicate['id'] = 'iso_duplicate'
+        doc.dig('technology', 'interfaceCells') << duplicate
+      end],
+      ['missing isolation configuration', 'power_intent.missing_isolation_configuration', lambda do |doc|
+        domain(doc, 'power-switch').delete('isolation')
+      end],
+      ['isolation on always-on Domain', 'power_intent.unexpected_isolation_configuration', lambda do |doc|
+        domain(doc, 'power-always')['isolation'] =
+          deep_copy(domain(doc, 'power-switch').fetch('isolation'))
+      end],
+      ['missing level-shifter placement', 'power_intent.missing_level_shifter_configuration', lambda do |doc|
+        domain(doc, 'power-always').delete('levelShifter')
       end]
     ]
     assert_failures(cases)
@@ -547,13 +626,16 @@ class PowerIntentCompilerTest < Minitest::Test
       'supplies' => [
         supply_entry('vret', 'power', 900, off: false),
         supply_entry('vss', 'ground', 0, off: false),
-        supply_entry('vdd_b', 'power', 750),
+        supply_entry(
+          'vdd_b', 'power', 750, exposure: 'internal-switched'
+        ),
         supply_entry('vdd_a', 'power', 900),
         supply_entry('vdd_in', 'power', 900, off: false)
       ],
       'controls' => [
         control_entry('restore', 'restore_req'),
         control_entry('switch_b', 'power_enable'),
+        control_entry('isolate_b', 'isolate_req'),
         control_entry('save', 'save_req')
       ],
       'domains' => [
@@ -602,16 +684,30 @@ class PowerIntentCompilerTest < Minitest::Test
             'id' => 'retention_generic',
             'kind' => 'retention',
             'cells' => %w[RET_A]
+          },
+          {
+            'id' => 'power_switch_generic',
+            'kind' => 'power-switch',
+            'cells' => %w[SWITCH_A]
           }
         ]
       }
     }
   end
 
-  def supply_entry(id, kind, voltage, off: true)
+  def supply_entry(id, kind, voltage, off: true,
+                   exposure: 'external-port')
     states = [{'id' => 'ON', 'condition' => 'full-on', 'voltageMv' => voltage}]
     states.unshift({'id' => 'OFF', 'condition' => 'off'}) if off
-    {'id' => id, 'kind' => kind, 'port' => "#{id}_port", 'net' => id, 'states' => states}
+    supply = {
+      'id' => id,
+      'kind' => kind,
+      'exposure' => exposure,
+      'net' => id,
+      'states' => states
+    }
+    supply['port'] = "#{id}_port" if exposure == 'external-port'
+    supply
   end
 
   def control_entry(id, signal)
@@ -625,7 +721,7 @@ class PowerIntentCompilerTest < Minitest::Test
   end
 
   def always_on_domain(id, primary_power)
-    {
+    result = {
       'domain' => id,
       'primaryPower' => primary_power,
       'primaryGround' => 'vss',
@@ -636,6 +732,8 @@ class PowerIntentCompilerTest < Minitest::Test
          'behavior' => 'operational'}
       ]
     }
+    result['levelShifter'] = {'location' => 'automatic'} if id == 'power-always'
+    result
   end
 
   def switchable_domain
@@ -661,8 +759,17 @@ class PowerIntentCompilerTest < Minitest::Test
         'supply' => 'vret',
         'saveControl' => 'save',
         'restoreControl' => 'restore',
+        'saveEdge' => 'posedge',
+        'restoreEdge' => 'negedge',
         'location' => 'self'
-      }
+      },
+      'isolation' => {
+        'control' => 'isolate_b',
+        'supply' => 'vret',
+        'clampValue' => 0,
+        'location' => 'self'
+      },
+      'levelShifter' => {'location' => 'automatic'}
     }
   end
 

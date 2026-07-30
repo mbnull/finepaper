@@ -65,13 +65,16 @@
     "supply": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "kind", "port", "net", "states"],
+      "required": ["id", "kind", "exposure", "net", "states"],
       "properties": {
         "id": {
           "$ref": "#/$defs/nonEmptyString"
         },
         "kind": {
           "enum": ["power", "ground"]
+        },
+        "exposure": {
+          "enum": ["external-port", "internal-switched"]
         },
         "port": {
           "$ref": "#/$defs/hdlIdentifier"
@@ -88,6 +91,29 @@
         }
       },
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "exposure": {
+                "const": "external-port"
+              }
+            },
+            "required": ["exposure"]
+          },
+          "then": {
+            "required": ["port"]
+          },
+          "else": {
+            "not": {
+              "required": ["port"]
+            },
+            "properties": {
+              "kind": {
+                "const": "power"
+              }
+            }
+          }
+        },
         {
           "if": {
             "properties": {
@@ -244,6 +270,12 @@
         },
         "retention": {
           "$ref": "#/$defs/retention"
+        },
+        "isolation": {
+          "$ref": "#/$defs/isolation"
+        },
+        "levelShifter": {
+          "$ref": "#/$defs/levelShifter"
         }
       },
       "allOf": [
@@ -323,6 +355,8 @@
         "supply",
         "saveControl",
         "restoreControl",
+        "saveEdge",
+        "restoreEdge",
         "location"
       ],
       "properties": {
@@ -335,8 +369,49 @@
         "restoreControl": {
           "$ref": "#/$defs/nonEmptyString"
         },
+        "saveEdge": {
+          "enum": ["posedge", "negedge"]
+        },
+        "restoreEdge": {
+          "enum": ["posedge", "negedge"]
+        },
         "location": {
           "enum": ["self", "parent"]
+        }
+      }
+    },
+    "isolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "control",
+        "supply",
+        "clampValue",
+        "location"
+      ],
+      "properties": {
+        "control": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "supply": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "clampValue": {
+          "type": "integer",
+          "enum": [0, 1]
+        },
+        "location": {
+          "enum": ["self", "parent"]
+        }
+      }
+    },
+    "levelShifter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "location": {
+          "enum": ["self", "parent", "automatic"]
         }
       }
     },
@@ -420,7 +495,12 @@
           "$ref": "#/$defs/nonEmptyString"
         },
         "kind": {
-          "enum": ["isolation", "level-shifter", "retention"]
+          "enum": [
+            "isolation",
+            "level-shifter",
+            "retention",
+            "power-switch"
+          ]
         },
         "cells": {
           "type": "array",

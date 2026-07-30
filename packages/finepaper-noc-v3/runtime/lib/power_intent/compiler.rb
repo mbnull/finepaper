@@ -44,9 +44,11 @@ module FinepaperNoc
         index_plan_domains!
         validate_domain_coverage!
         validate_control_owners!
+        index_crossing_requirements!
         compiled_domains = intent.fetch('domains').map do |domain|
           compile_domain(domain)
         end
+        validate_supply_topology!(compiled_domains)
         validate_system_states!(intent.fetch('systemStates'),
                                 intent.fetch('defaultSystemState'))
         validate_technology!(intent['technology'])
@@ -123,16 +125,30 @@ module FinepaperNoc
 
       def parse_supply(value, path)
         supply = object!(value, path)
-        exact_keys!(supply, %w[id kind port net states], [], path)
+        exact_keys!(supply, %w[id kind exposure net states], %w[port], path)
         result = {
           'id' => string!(supply['id'], "#{path}/id"),
           'kind' => enum!(supply['kind'], %w[power ground], "#{path}/kind"),
-          'port' => hdl_identifier!(supply['port'], "#{path}/port"),
+          'exposure' => enum!(supply['exposure'],
+                              %w[external-port internal-switched],
+                              "#{path}/exposure"),
           'net' => hdl_identifier!(supply['net'], "#{path}/net"),
           'states' => parse_array(supply['states'], "#{path}/states", nonempty: true) do |entry, state_path|
             parse_supply_state(entry, state_path)
           end
         }
+        if result.fetch('exposure') == 'external-port'
+          expect!(supply.key?('port'), 'power_intent.missing_supply_port',
+                  "#{path}/port", 'an external supply requires port')
+          result['port'] = hdl_identifier!(supply['port'], "#{path}/port")
+        else
+          expect!(!supply.key?('port'), 'power_intent.unexpected_supply_port',
+                  "#{path}/port", 'an internal switched supply forbids port')
+          expect!(result.fetch('kind') == 'power',
+                  'power_intent.invalid_internal_supply_kind',
+                  "#{path}/kind",
+                  'only a power supply may be internally switched')
+        end
         unique_ids!(result.fetch('states'), "#{path}/states", 'power_intent.duplicate_supply_state')
         result.fetch('states').each_with_index do |state, index|
           next unless state.fetch('condition') == 'full-on'
@@ -187,7 +203,7 @@ module FinepaperNoc
         domain = object!(value, path)
         exact_keys!(domain,
                     %w[domain primaryPower primaryGround mode defaultState states],
-                    %w[powerSwitch retention], path)
+                    %w[powerSwitch retention isolation levelShifter], path)
         result = {
           'domain' => string!(domain['domain'], "#{path}/domain"),
           'primaryPower' => string!(domain['primaryPower'], "#{path}/primaryPower"),
@@ -205,6 +221,12 @@ module FinepaperNoc
           )
         end
         result['retention'] = parse_retention(domain['retention'], "#{path}/retention") if domain.key?('retention')
+        result['isolation'] = parse_isolation(domain['isolation'], "#{path}/isolation") if domain.key?('isolation')
+        if domain.key?('levelShifter')
+          result['levelShifter'] = parse_level_shifter(
+            domain['levelShifter'], "#{path}/levelShifter"
+          )
+        end
         result
       end
 
@@ -234,12 +256,46 @@ module FinepaperNoc
       def parse_retention(value, path)
         retention = object!(value, path)
         exact_keys!(retention,
-                    %w[supply saveControl restoreControl location], [], path)
+                    %w[
+                      supply saveControl restoreControl saveEdge restoreEdge
+                      location
+                    ], [], path)
         {
           'supply' => string!(retention['supply'], "#{path}/supply"),
           'saveControl' => string!(retention['saveControl'], "#{path}/saveControl"),
           'restoreControl' => string!(retention['restoreControl'], "#{path}/restoreControl"),
+          'saveEdge' => enum!(retention['saveEdge'], %w[posedge negedge],
+                              "#{path}/saveEdge"),
+          'restoreEdge' => enum!(retention['restoreEdge'],
+                                 %w[posedge negedge],
+                                 "#{path}/restoreEdge"),
           'location' => enum!(retention['location'], %w[self parent], "#{path}/location")
+        }
+      end
+
+      def parse_isolation(value, path)
+        isolation = object!(value, path)
+        exact_keys!(isolation,
+                    %w[control supply clampValue location], [], path)
+        clamp_value = json_integer!(isolation['clampValue'],
+                                    "#{path}/clampValue")
+        {
+          'control' => string!(isolation['control'], "#{path}/control"),
+          'supply' => string!(isolation['supply'], "#{path}/supply"),
+          'clampValue' => enum!(clamp_value, [0, 1],
+                                "#{path}/clampValue"),
+          'location' => enum!(isolation['location'], %w[self parent],
+                              "#{path}/location")
+        }
+      end
+
+      def parse_level_shifter(value, path)
+        level_shifter = object!(value, path)
+        exact_keys!(level_shifter, %w[location], [], path)
+        {
+          'location' => enum!(level_shifter['location'],
+                              %w[self parent automatic],
+                              "#{path}/location")
         }
       end
 
@@ -284,7 +340,8 @@ module FinepaperNoc
         result = {
           'id' => string!(cell['id'], "#{path}/id"),
           'kind' => enum!(cell['kind'],
-                          %w[isolation level-shifter retention], "#{path}/kind"),
+                          %w[isolation level-shifter retention power-switch],
+                          "#{path}/kind"),
           'cells' => cells.sort
         }
         result['direction'] = enum!(cell['direction'], %w[up down], "#{path}/direction") if cell.key?('direction')
@@ -295,7 +352,7 @@ module FinepaperNoc
         @supplies, @supply_paths = indexed(intent.fetch('supplies'), 'id', '/supplies',
                                            'power_intent.duplicate_supply')
         unique_values!(intent.fetch('supplies'), 'port', '/supplies',
-                       'power_intent.duplicate_supply_port')
+                       'power_intent.duplicate_supply_port', optional: true)
         unique_values!(intent.fetch('supplies'), 'net', '/supplies',
                        'power_intent.duplicate_supply_net')
         @controls, @control_paths = indexed(intent.fetch('controls'), 'id', '/controls',
@@ -316,6 +373,34 @@ module FinepaperNoc
         end
         @plan_domain_paths = @context.plan.fetch('domainBindings').each_with_index.to_h do |domain, index|
           [domain.fetch('domain'), "/context/domainBindings/#{index}"]
+        end
+      end
+
+      def index_crossing_requirements!
+        @isolation_domains = {}
+        @level_shifter_domains = {}
+        @context.plan.fetch('edgeBindings').each do |edge|
+          edge.fetch('stages').each do |stage|
+            domains = [stage.fetch('fromDomain'), stage.fetch('toDomain')]
+            register_crossing_domains!(
+              stage, domains, @isolation_domains, @level_shifter_domains
+            )
+            stage.fetch('directions', []).each do |direction|
+              register_crossing_domains!(
+                direction, domains, @isolation_domains,
+                @level_shifter_domains
+              )
+            end
+          end
+        end
+      end
+
+      def register_crossing_domains!(entry, domains, isolation, level_shifter)
+        case entry['recipe']
+        when ISOLATION_RECIPE
+          domains.each { |domain| isolation[domain] = true }
+        when LEVEL_SHIFTER_RECIPE
+          domains.each { |domain| level_shifter[domain] = true }
         end
       end
 
@@ -393,6 +478,8 @@ module FinepaperNoc
         end
         validate_switch!(domain, path)
         validate_retention!(domain, plan_domain, path)
+        validate_isolation!(domain, path)
+        validate_level_shifter!(domain, path)
 
         domain.merge(
           'name' => plan_domain.fetch('name'),
@@ -520,6 +607,69 @@ module FinepaperNoc
         control_ref!(retention.fetch('restoreControl'), "#{path}/retention/restoreControl")
       end
 
+      def validate_isolation!(domain, path)
+        isolation = domain['isolation']
+        required = @isolation_domains.key?(domain.fetch('domain')) &&
+                   domain.fetch('mode') == 'switchable'
+        if required
+          expect!(isolation, 'power_intent.missing_isolation_configuration',
+                  "#{path}/isolation",
+                  'a switchable Domain on an isolation boundary requires isolation configuration')
+        end
+        return unless isolation
+
+        expect!(domain.fetch('mode') == 'switchable',
+                'power_intent.unexpected_isolation_configuration',
+                "#{path}/isolation",
+                'an always-on Domain does not accept isolation configuration')
+        supply = supply_ref!(isolation.fetch('supply'), 'power',
+                             "#{path}/isolation/supply")
+        can_turn_off = supply.fetch('states').any? do |state|
+          state.fetch('condition') == 'off'
+        end
+        expect!(!can_turn_off,
+                'power_intent.isolation_supply_can_turn_off',
+                "#{path}/isolation/supply",
+                'isolation supply must not declare an off state')
+        control_ref!(isolation.fetch('control'),
+                     "#{path}/isolation/control")
+      end
+
+      def validate_level_shifter!(domain, path)
+        return unless @level_shifter_domains.key?(domain.fetch('domain'))
+
+        expect!(domain['levelShifter'],
+                'power_intent.missing_level_shifter_configuration',
+                "#{path}/levelShifter",
+                'a Domain on a level-shifter boundary requires placement configuration')
+      end
+
+      def validate_supply_topology!(domains)
+        switch_outputs = Hash.new { |result, supply| result[supply] = [] }
+        domains.each do |domain|
+          power_switch = domain['powerSwitch']
+          next unless power_switch
+
+          switch_outputs[power_switch.fetch('outputSupply')] <<
+            domain.fetch('domain')
+        end
+        @supplies.each do |id, supply|
+          owners = switch_outputs.fetch(id, [])
+          path = @supply_paths.fetch(id)
+          if supply.fetch('exposure') == 'internal-switched'
+            expect!(owners.size == 1,
+                    'power_intent.invalid_internal_supply_driver',
+                    "#{path}/exposure",
+                    'an internal switched supply requires exactly one powerSwitch output')
+          else
+            expect!(owners.empty?,
+                    'power_intent.externally_driven_switch_output',
+                    "#{path}/exposure",
+                    'a powerSwitch output must be an internal switched supply')
+          end
+        end
+      end
+
       def validate_system_states!(states, default_system_state)
         active_ids = @plan_domains.values.select do |domain|
           !domain.fetch('members').empty?
@@ -591,11 +741,13 @@ module FinepaperNoc
                   "/technology/interfaceCells/#{index}/direction",
                   'direction applies only to level-shifter cells')
         end
+        unique_technology_mappings!(cells)
         requirements = technology_requirements
         require_cell_kind!(cells, 'isolation') if requirements.fetch('isolation')
         require_cell_kind!(cells, 'retention') if requirements.fetch('retention')
+        require_cell_kind!(cells, 'power-switch') if requirements.fetch('powerSwitch')
         requirements.fetch('levelShifterDirections').each do |direction|
-          covered = cells.any? do |cell|
+          covered = cells.one? do |cell|
             cell.fetch('kind') == 'level-shifter' &&
               cell['direction'] == direction
           end
@@ -610,6 +762,9 @@ module FinepaperNoc
           'isolation' => false,
           'retention' => @plan_domains.values.any? do |domain|
             domain.dig('parameters', 'retains-state', 'value') == true
+          end,
+          'powerSwitch' => @domain_configs.values.any? do |domain|
+            domain.fetch('mode') == 'switchable'
           end,
           'levelShifterDirections' => []
         }
@@ -644,10 +799,22 @@ module FinepaperNoc
       end
 
       def require_cell_kind!(cells, kind)
-        expect!(cells.any? { |cell| cell.fetch('kind') == kind },
+        expect!(cells.one? { |cell| cell.fetch('kind') == kind },
                 'power_intent.missing_technology_mapping',
                 '/technology/interfaceCells',
-                "missing #{kind} technology mapping")
+                "expected exactly one #{kind} technology mapping")
+      end
+
+      def unique_technology_mappings!(cells)
+        seen = {}
+        cells.each_with_index do |cell, index|
+          key = [cell.fetch('kind'), cell['direction']]
+          expect!(!seen.key?(key),
+                  'power_intent.duplicate_technology_mapping',
+                  "/technology/interfaceCells/#{index}",
+                  "duplicate technology mapping for #{key.compact.join(' ')}")
+          seen[key] = true
+        end
       end
 
       def supply_ref!(id, expected_kind, path)
@@ -703,9 +870,11 @@ module FinepaperNoc
         end
       end
 
-      def unique_values!(values, key, path, code)
+      def unique_values!(values, key, path, code, optional: false)
         seen = {}
         values.each_with_index do |value, index|
+          next if optional && !value.key?(key)
+
           entry = value.fetch(key)
           expect!(!seen.key?(entry), code, "#{path}/#{index}/#{key}",
                   "duplicate #{key} #{entry}")

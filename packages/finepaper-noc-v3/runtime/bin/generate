@@ -13,10 +13,13 @@ require 'tmpdir'
 require_relative '../lib/domain_realizer'
 require_relative '../lib/domain_rtl_context'
 require_relative '../lib/domain_rtl_evidence'
+require_relative '../lib/power_intent/compiler'
 
 HDL_IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_]*\z/
 DOMAIN_ELEMENT_KINDS = %w[router endpoint].freeze
 DOMAIN_EDGE_KINDS = %w[router-link endpoint-attachment].freeze
+POWER_INTENT_EXTENSION = 'finepaper.noc.powerIntent'
+POWER_INTENT_PLAN_SUFFIX = '_power_intent_plan.json'
 
 def write_result(path, success:, artifacts: [], diagnostics: [])
   FileUtils.mkdir_p(File.dirname(path))
@@ -128,6 +131,27 @@ def canonical_json(value)
   else
     value
   end
+end
+
+def json_pointer_token(value)
+  value.to_s.gsub('~', '~0').gsub('/', '~1')
+end
+
+def design_extension(design, namespace)
+  return [false, nil] unless design.key?('packageData')
+
+  package_data = design.fetch('packageData')
+  raise 'design.packageData must be an object' unless package_data.is_a?(Hash)
+
+  [package_data.key?(namespace), package_data[namespace]]
+end
+
+def design_extension_path(namespace, compiler_path)
+  base = "/design/packageData/#{json_pointer_token(namespace)}"
+  return base if compiler_path.nil? || compiler_path.empty? || compiler_path == '/'
+
+  suffix = compiler_path.start_with?('/') ? compiler_path : "/#{json_pointer_token(compiler_path)}"
+  "#{base}#{suffix}"
 end
 
 def element_reference(value, owner, allowed_kinds)
@@ -632,6 +656,8 @@ def artifact_list(output_dir, design_name)
              'implementation-evidence'
            elsif File.basename(path) == "#{design_name}_rtl_hierarchy.json"
              'rtl-hierarchy'
+           elsif File.basename(path) == "#{design_name}#{POWER_INTENT_PLAN_SUFFIX}"
+             'power-intent-plan'
            elsif %w[.v .sv].include?(File.extname(path).downcase)
              'rtl'
            else
@@ -681,7 +707,16 @@ begin
   # Validate the renderer-facing contract in this process so its stable code
   # and JSON path survive the Package boundary instead of being flattened into
   # an opaque legacy-generator subprocess error.
-  FinepaperNoc::DomainRtlContext.new(implementation_plan)
+  rtl_context = FinepaperNoc::DomainRtlContext.new(implementation_plan)
+  has_power_intent, power_intent_document = design_extension(
+    design, POWER_INTENT_EXTENSION
+  )
+  power_intent_plan = if has_power_intent
+                        FinepaperNoc::PowerIntent::Compiler.compile(
+                          context: rtl_context,
+                          document: power_intent_document
+                        )
+                      end
   translated_input = legacy_input(design, implementation_plan)
   legacy_root = File.expand_path('../legacy-generator', __dir__)
   legacy_program = File.join(legacy_root, 'bin', command == 'validate' ? 'drc' : 'generate')
@@ -720,6 +755,13 @@ begin
       )
       File.write(implementation_path, JSON.pretty_generate(implementation_plan) + "\n")
     end
+    if power_intent_plan
+      power_intent_path = File.join(
+        File.expand_path(options[:output]),
+        "#{design_id}#{POWER_INTENT_PLAN_SUFFIX}"
+      )
+      File.write(power_intent_path, JSON.pretty_generate(power_intent_plan) + "\n")
+    end
   end
   artifacts = command == 'generate' ? artifact_list(File.expand_path(options[:output]), design_id) : []
   raise 'legacy generator did not produce any artifacts' if command == 'generate' && artifacts.empty?
@@ -731,6 +773,13 @@ rescue FinepaperNoc::DomainRtlContextError => error
   fail_operation(error.message, options[:result], code: error.code, path: error.path)
 rescue FinepaperNoc::DomainRtlEvidenceError => error
   fail_operation(error.message, options[:result], code: error.code, path: error.path)
+rescue FinepaperNoc::PowerIntent::Error => error
+  fail_operation(
+    error.message,
+    options[:result],
+    code: error.code,
+    path: design_extension_path(POWER_INTENT_EXTENSION, error.path)
+  )
 rescue StandardError => error
   fail_operation(error.message, options[:result])
 end
