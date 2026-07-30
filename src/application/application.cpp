@@ -777,6 +777,28 @@ DesignResult FinepaperApplication::assignDomainsToElements(
     return validated;
 }
 
+DesignResult FinepaperApplication::patchDomainAssignments(
+    const NocDesign& design,
+    const QVector<ElementRef>& elements,
+    const QString& domainType,
+    DomainAssignmentPatch patch) const {
+    const auto package = m_catalog.resolve(design.package);
+    if (!package) {
+        return validateEditedDesign(design);
+    }
+    domain_service::MutationResult domainResult =
+        domain_service::patchDomainAssignments(
+            design, *package, elements, domainType, std::move(patch));
+    if (hasErrors(domainResult.diagnostics)) {
+        return DesignResult{false, design, std::move(domainResult.diagnostics)};
+    }
+    DesignResult validated = validateEditedDesign(domainResult.design);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
 DesignResult FinepaperApplication::clearDomainAssignment(
     const NocDesign& design,
     const QVector<ElementRef>& elements,

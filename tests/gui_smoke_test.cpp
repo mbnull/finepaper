@@ -1,5 +1,6 @@
 #include "gui/main_window.h"
 #include "gui/animated_graphics_view.h"
+#include "gui/domain_manager_panel.h"
 #include "gui/noc_editor_style.h"
 #include "gui/noc_node_editor.h"
 #include "gui/workbench_config.h"
@@ -2330,6 +2331,90 @@ int main(int argc, char** argv) {
               && domainSelector->findData(QStringLiteral("fabric-tier")) > 0,
           QStringLiteral("Color by lists Package labels backed by arbitrary stable Domain type ids"));
 
+    auto* domainManagerDock = domainWindow.findChild<QDockWidget*>(
+        finepaper::workbench::domainManagerDockName);
+    QAction* domainManagerToggle = domainWindow.findChild<QAction*>(
+        finepaper::workbench::domainManagerToggleActionName);
+    if (domainManagerToggle && !domainManagerToggle->isChecked()) {
+        domainManagerToggle->trigger();
+        application.processEvents();
+    }
+    check(domainManagerDock && domainManagerToggle
+              && domainWindow.dockWidgetArea(domainManagerDock)
+                  == Qt::RightDockWidgetArea
+              && domainManagerDock->isVisible()
+              && domainManagerToggle->isChecked(),
+          QStringLiteral("the Package-driven Domain Manager is a toggleable right-side Dock"));
+    if (domainManagerDock && domainManagerToggle) {
+        domainManagerToggle->trigger();
+        application.processEvents();
+        check(!domainManagerDock->isVisible() && !domainManagerToggle->isChecked(),
+              QStringLiteral("the Domain Manager toggle hides its Dock"));
+        domainManagerToggle->trigger();
+        domainManagerDock->raise();
+        application.processEvents();
+        check(domainManagerDock->isVisible() && domainManagerToggle->isChecked()
+                  && !domainWindow.isWindowModified(),
+              QStringLiteral("restoring the Domain Manager is Workspace-only and does not dirty the design"));
+    }
+
+    auto* domainManagerType = domainWindow.findChild<QComboBox*>(
+        QStringLiteral("finepaper.domainManager.typeSelector"));
+    auto* domainManagerInstances = domainWindow.findChild<QTableWidget*>(
+        QStringLiteral("finepaper.domainManager.instanceView"));
+    auto* domainManagerTabs = domainWindow.findChild<QTabWidget*>(
+        QStringLiteral("finepaper.domainManager.tabs"));
+    auto* domainAssignmentState = domainWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.domainManager.assignmentState"));
+    auto* domainMultipleAssignment = domainWindow.findChild<QListWidget*>(
+        QStringLiteral("finepaper.domainManager.assignmentEditor.multiple"));
+    auto* domainApplyAssignment = domainWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainManager.applyAssignment"));
+    if (domainManagerType) {
+        domainManagerType->setCurrentIndex(
+            domainManagerType->findData(QStringLiteral("security-zone")));
+        application.processEvents();
+    }
+    const auto domainInstanceRow = [domainManagerInstances](const QString& id) {
+        if (!domainManagerInstances) {
+            return -1;
+        }
+        for (int row = 0; row < domainManagerInstances->rowCount(); ++row) {
+            QTableWidgetItem* item = domainManagerInstances->item(row, 2);
+            if (item && item->data(finepaper::domainManagerDomainIdRole).toString()
+                    == id) {
+                return row;
+            }
+        }
+        return -1;
+    };
+    const int zoneARow = domainInstanceRow(QStringLiteral("zone-a"));
+    const int zoneBRow = domainInstanceRow(QStringLiteral("zone-b"));
+    check(domainManagerType && domainManagerType->count() == 2
+              && domainManagerType->findData(QStringLiteral("security-zone")) >= 0
+              && domainManagerType->findData(QStringLiteral("fabric-tier")) >= 0
+              && domainManagerInstances && domainManagerInstances->rowCount() == 2
+              && zoneARow >= 0 && zoneBRow >= 0,
+          QStringLiteral("Domain Manager lists arbitrary Package types and their instances"));
+    check(zoneARow >= 0 && zoneBRow >= 0
+              && domainManagerInstances->item(zoneARow, 1)->text()
+                  == QStringLiteral("Trusted")
+              && domainManagerInstances->item(zoneBRow, 1)->text()
+                  == QStringLiteral("Restricted")
+              && domainManagerInstances->item(zoneARow, 3)->data(
+                     finepaper::domainManagerMemberCountRole).toInt() == 1
+              && domainManagerInstances->item(zoneBRow, 3)->data(
+                     finepaper::domainManagerMemberCountRole).toInt() == 1
+              && domainManagerInstances->item(zoneARow, 4)->data(
+                     finepaper::domainManagerCrossingCountRole).toInt() == 1
+              && domainManagerInstances->item(zoneBRow, 4)->data(
+                     finepaper::domainManagerCrossingCountRole).toInt() == 1
+              && domainManagerInstances->item(zoneARow, 0)->data(
+                     finepaper::domainManagerColorRole).value<QColor>().isValid()
+              && domainManagerInstances->item(zoneBRow, 0)->data(
+                     finepaper::domainManagerColorRole).value<QColor>().isValid(),
+          QStringLiteral("Domain Manager instances double as a deterministic color/member/crossing Legend"));
+
     auto* domainEditor = dynamic_cast<finepaper::NocNodeEditor*>(
         domainWindow.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor")));
     auto* domainView = domainEditor
@@ -2338,9 +2423,14 @@ int main(int argc, char** argv) {
         ? dynamic_cast<QtNodes::BasicGraphicsScene*>(domainView->scene()) : nullptr;
     const auto domainRouter = nodeIdWithCaption(
         domainScene, QStringLiteral("r-0-0"));
+    const auto domainRouter1 = nodeIdWithCaption(
+        domainScene, QStringLiteral("r-1-0"));
     QtNodes::NodeGraphicsObject* domainRouterGraphics =
         domainScene && domainRouter
         ? domainScene->nodeGraphicsObject(*domainRouter) : nullptr;
+    QtNodes::NodeGraphicsObject* domainRouter1Graphics =
+        domainScene && domainRouter1
+        ? domainScene->nodeGraphicsObject(*domainRouter1) : nullptr;
     const qsizetype domainNodeCount = domainScene
         ? static_cast<qsizetype>(domainScene->graphModel().allNodeIds().size()) : 0;
     const qsizetype domainConnectionCount = static_cast<qsizetype>(
@@ -2413,6 +2503,143 @@ int main(int argc, char** argv) {
               .value(domainWorkspaceKey).toString()
               == QStringLiteral("security-zone"),
           QStringLiteral("the active Domain layer is saved as per-design Workspace state"));
+
+    if (domainManagerTabs) {
+        domainManagerTabs->setCurrentIndex(1);
+    }
+    if (domainScene && domainRouterGraphics && domainRouter1Graphics) {
+        domainScene->clearSelection();
+        domainRouterGraphics->setSelected(true);
+        domainRouter1Graphics->setSelected(true);
+        application.processEvents();
+    }
+    const auto domainAssignmentItem = [domainMultipleAssignment](const QString& id) {
+        if (!domainMultipleAssignment) {
+            return static_cast<QListWidgetItem*>(nullptr);
+        }
+        for (int row = 0; row < domainMultipleAssignment->count(); ++row) {
+            QListWidgetItem* item = domainMultipleAssignment->item(row);
+            if (item && item->data(finepaper::domainManagerDomainIdRole).toString()
+                    == id) {
+                return item;
+            }
+        }
+        return static_cast<QListWidgetItem*>(nullptr);
+    };
+    QListWidgetItem* zoneAAssignment = domainAssignmentItem(
+        QStringLiteral("zone-a"));
+    QListWidgetItem* zoneBAssignment = domainAssignmentItem(
+        QStringLiteral("zone-b"));
+    check(domainAssignmentState
+              && domainAssignmentState->property("assignmentState").toString()
+                  == QStringLiteral("mixed")
+              && domainAssignmentState->text().contains(QStringLiteral("Mixed"))
+              && zoneAAssignment && zoneBAssignment
+              && zoneAAssignment->checkState() == Qt::PartiallyChecked
+              && zoneBAssignment->checkState() == Qt::PartiallyChecked,
+          QStringLiteral("two Routers with different generic multiple assignments expose Mixed tri-state choices"));
+
+    const int callbacksBeforeDomainApply = domainLayerSelectionCallbacks;
+    if (zoneAAssignment && zoneBAssignment) {
+        zoneAAssignment->setCheckState(Qt::Checked);
+        zoneBAssignment->setCheckState(Qt::Unchecked);
+        application.processEvents();
+    }
+    check(domainApplyAssignment && domainApplyAssignment->isEnabled()
+              && !domainWindow.isWindowModified(),
+          QStringLiteral("editing Mixed choices stages an explicit atomic assignment without mutating the design"));
+    if (domainApplyAssignment) {
+        domainApplyAssignment->click();
+        application.processEvents();
+        application.processEvents();
+    }
+
+    const finepaper::DomainElementPresentation* assignedRouter0 = domainEditor
+        ? domainEditor->domainPresentation().element(
+              finepaper::ElementRef{
+                  finepaper::ElementKind::Router, QStringLiteral("r-0-0")})
+        : nullptr;
+    const finepaper::DomainElementPresentation* assignedRouter1 = domainEditor
+        ? domainEditor->domainPresentation().element(
+              finepaper::ElementRef{
+                  finepaper::ElementKind::Router, QStringLiteral("r-1-0")})
+        : nullptr;
+    zoneAAssignment = domainAssignmentItem(QStringLiteral("zone-a"));
+    zoneBAssignment = domainAssignmentItem(QStringLiteral("zone-b"));
+    check(domainWindow.isWindowModified()
+              && assignedRouter0
+              && assignedRouter0->domainIds
+                  == QStringList{QStringLiteral("zone-a")}
+              && assignedRouter1
+              && assignedRouter1->domainIds
+                  == QStringList{QStringLiteral("zone-a")}
+              && domainAssignmentState
+              && domainAssignmentState->property("assignmentState").toString()
+                  == QStringLiteral("common")
+              && zoneAAssignment && zoneAAssignment->checkState() == Qt::Checked
+              && zoneBAssignment && zoneBAssignment->checkState() == Qt::Unchecked,
+          QStringLiteral("one Apply atomically converges every selected Router on the requested assignment set"));
+    check(domainView && domainView->scene() == domainScene
+              && domainScene && domainRouter && domainRouter1
+              && domainScene->nodeGraphicsObject(*domainRouter)
+                  == domainRouterGraphics
+              && domainScene->nodeGraphicsObject(*domainRouter1)
+                  == domainRouter1Graphics
+              && domainScene->graphModel().allNodeIds().size()
+                  == static_cast<size_t>(domainNodeCount)
+              && sceneConnectionIds(domainScene).size()
+                  == static_cast<size_t>(domainConnectionCount)
+              && domainRouterGraphics->isSelected()
+              && domainRouter1Graphics->isSelected()
+              && domainLayerSelectionCallbacks == callbacksBeforeDomainApply
+              && domainLinkGraphics
+              && !domainLinkGraphics->data(
+                  finepaper::domainCrossingDataRole).toBool(),
+          QStringLiteral("Domain-only assignment refresh repaints the existing scene without rebuilding or disturbing selection"));
+
+    const int updatedZoneARow = domainInstanceRow(QStringLiteral("zone-a"));
+    const int updatedZoneBRow = domainInstanceRow(QStringLiteral("zone-b"));
+    check(updatedZoneARow >= 0 && updatedZoneBRow >= 0
+              && domainManagerInstances->item(updatedZoneARow, 3)->data(
+                     finepaper::domainManagerMemberCountRole).toInt() == 2
+              && domainManagerInstances->item(updatedZoneBRow, 3)->data(
+                     finepaper::domainManagerMemberCountRole).toInt() == 0
+              && domainManagerInstances->item(updatedZoneARow, 4)->data(
+                     finepaper::domainManagerCrossingCountRole).toInt() == 0
+              && domainManagerInstances->item(updatedZoneBRow, 4)->data(
+                     finepaper::domainManagerCrossingCountRole).toInt() == 0,
+          QStringLiteral("Legend membership and crossing counts refresh with the Domain-only mutation"));
+
+    QAction* domainSaveAction = actionWithText(domainWindow, QStringLiteral("Save"));
+    check(domainSaveAction && domainSaveAction->isEnabled(),
+          QStringLiteral("a Domain assignment mutation enables Save"));
+    if (domainSaveAction) {
+        domainSaveAction->trigger();
+        application.processEvents();
+    }
+    finepaper::FinepaperApplication persistedDomainApplication;
+    persistedDomainApplication.reloadPackages(
+        QStringList{domainPackageRoot.path()});
+    const finepaper::DesignResult persistedDomainResult =
+        persistedDomainApplication.loadDesignFile(domainDesignPath);
+    const auto persistedAssignment = [&persistedDomainResult](const QString& routerId) {
+        for (const finepaper::DomainMembership& membership
+             : persistedDomainResult.design.domainMemberships) {
+            if (membership.element.kind == finepaper::ElementKind::Router
+                && membership.element.id == routerId) {
+                return membership.assignments.value(
+                    QStringLiteral("security-zone"));
+            }
+        }
+        return QStringList{};
+    };
+    check(!domainWindow.isWindowModified()
+              && persistedDomainResult.success
+              && persistedAssignment(QStringLiteral("r-0-0"))
+                  == QStringList{QStringLiteral("zone-a")}
+              && persistedAssignment(QStringLiteral("r-1-0"))
+                  == QStringList{QStringLiteral("zone-a")},
+          QStringLiteral("saving clears dirty state and persists the atomic generic Domain assignment"));
     if (domainEditor) {
         domainEditor->semanticSelectionChanged = domainMainWindowSelectionHandler;
     }

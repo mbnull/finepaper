@@ -126,6 +126,53 @@ target("finepaper-domain-presentation-tests")
         trim_output = true
     })
 
+target("finepaper-domain-manager-projection-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/domain_manager_projection_tests.cpp")
+    add_files("src/gui/domain_manager_projection.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
+target("finepaper-domain-schema-editor-tests")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/domain_schema_editor_tests.cpp")
+    add_files("src/gui/domain_property_form.cpp")
+    add_files("src/gui/schema_value_editor.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+
+target("finepaper-domain-manager-panel-tests")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/domain_manager_panel_tests.cpp")
+    add_files("src/gui/domain_instance_dialog.cpp")
+    add_files("src/gui/domain_manager_panel.cpp")
+    add_files("src/gui/domain_manager_projection.cpp")
+    add_files("src/gui/domain_presentation.cpp")
+    add_files("src/gui/domain_property_form.cpp")
+    add_files("src/gui/schema_value_editor.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+
 target("finepaper-gui-smoke")
     add_rules("qt.widgetapp")
     add_frameworks("QtConcurrent")
@@ -137,9 +184,14 @@ target("finepaper-gui-smoke")
     add_files("tests/gui_smoke_test.cpp")
     add_files("src/gui/main_window.cpp")
     add_files("src/gui/animated_graphics_view.cpp")
+    add_files("src/gui/domain_instance_dialog.cpp")
+    add_files("src/gui/domain_manager_panel.cpp")
+    add_files("src/gui/domain_manager_projection.cpp")
     add_files("src/gui/domain_presentation.cpp")
+    add_files("src/gui/domain_property_form.cpp")
     add_files("src/gui/noc_editor_style.cpp")
     add_files("src/gui/noc_node_editor.cpp")
+    add_files("src/gui/schema_value_editor.cpp")
     add_files("src/gui/workbench_view_registry.cpp")
     add_includedirs("src")
     add_defines('FINEPAPER_SOURCE_DIR="' .. path.unix(os.projectdir()) .. '"')

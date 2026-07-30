@@ -19,6 +19,8 @@ inline const QString domainLayerSelectionsSetting =
 
 inline const QString packageDockName = QStringLiteral("finepaper.packageDock");
 inline const QString inspectorDockName = QStringLiteral("finepaper.inspectorDock");
+inline const QString domainManagerDockName =
+    QStringLiteral("finepaper.domainManagerDock");
 inline const QString resultsDockName = QStringLiteral("finepaper.resultsDock");
 inline const QString activityBarName = QStringLiteral("finepaper.activityBar");
 inline const QString selectionInspectorName = QStringLiteral("finepaper.selectionInspector");
@@ -35,6 +37,8 @@ inline const QString connectRouterMenuName = QStringLiteral("finepaper.connectRo
 
 inline const QString packageToggleActionName = QStringLiteral("finepaper.togglePackagePanel");
 inline const QString inspectorToggleActionName = QStringLiteral("finepaper.toggleInspectorPanel");
+inline const QString domainManagerToggleActionName =
+    QStringLiteral("finepaper.toggleDomainManagerPanel");
 inline const QString resultsToggleActionName = QStringLiteral("finepaper.toggleResultsPanel");
 inline const QString regularizeActionName = QStringLiteral("finepaper.regularizeLayout");
 inline const QString domainLayerSelectorName =

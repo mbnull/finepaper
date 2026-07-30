@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/domain_assignment.h"
 #include "application/domain_configuration.h"
 #include "execution/package_protocol.h"
 #include "noc/model.h"
@@ -90,6 +91,11 @@ public:
         const QVector<ElementRef>& elements,
         const QString& domainType,
         const QStringList& domainIds) const;
+    DesignResult patchDomainAssignments(
+        const NocDesign& design,
+        const QVector<ElementRef>& elements,
+        const QString& domainType,
+        DomainAssignmentPatch patch) const;
     DesignResult clearDomainAssignment(
         const NocDesign& design,
         const QVector<ElementRef>& elements,

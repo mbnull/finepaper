@@ -662,6 +662,206 @@ int main(int argc, char** argv) {
         QStringLiteral("domain_assignment.required"),
         QStringLiteral("clearing a required assignment is rejected and returns the original Design"));
 
+    const DesignResult addedTagC = application.addDomain(
+        twoTags,
+        domain(QStringLiteral("tag-c"), QStringLiteral("tag"), QStringLiteral("Tag C")));
+    const NocDesign threeTags = addedTagC.success ? addedTagC.design : twoTags;
+    const DesignResult assignedLeftTags = application.assignDomainsToElements(
+        threeTags,
+        QVector<ElementRef>{ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}},
+        QStringLiteral("tag"),
+        QStringList{QStringLiteral("tag-a"), QStringLiteral("tag-c")});
+    const DesignResult assignedRightTags = application.assignDomainsToElements(
+        assignedLeftTags.success ? assignedLeftTags.design : threeTags,
+        QVector<ElementRef>{ElementRef{ElementKind::Router, QStringLiteral("r-1-0")}},
+        QStringLiteral("tag"),
+        QStringList{QStringLiteral("tag-b"), QStringLiteral("tag-c")});
+    const NocDesign mixedTags = assignedRightTags.success
+        ? assignedRightTags.design
+        : threeTags;
+    check(addedTagC.success && assignedLeftTags.success && assignedRightTags.success,
+          QStringLiteral("mixed assignment patch fixture is prepared"));
+
+    DomainAssignmentPatch mixedPatch;
+    mixedPatch.ensurePresent = {
+        QStringLiteral(" tag-a "), QStringLiteral("tag-a")};
+    mixedPatch.ensureAbsent = {
+        QStringLiteral("tag-b"), QStringLiteral(" tag-b ")};
+    const DesignResult patchedMixed = application.patchDomainAssignments(
+        mixedTags,
+        QVector<ElementRef>{
+            ElementRef{ElementKind::Router, QStringLiteral("r-0-0")},
+            ElementRef{ElementKind::Router, QStringLiteral("r-1-0")},
+            ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}
+        },
+        QStringLiteral(" tag "),
+        mixedPatch);
+    check(patchedMixed.success
+              && hasAssignment(patchedMixed.design,
+                               ElementKind::Router,
+                               QStringLiteral("r-0-0"),
+                               QStringLiteral("tag"),
+                               QStringList{QStringLiteral("tag-a"),
+                                           QStringLiteral("tag-c")})
+              && hasAssignment(patchedMixed.design,
+                               ElementKind::Router,
+                               QStringLiteral("r-1-0"),
+                               QStringLiteral("tag"),
+                               QStringList{QStringLiteral("tag-a"),
+                                           QStringLiteral("tag-c")})
+              && hasAssignment(patchedMixed.design,
+                               ElementKind::Router,
+                               QStringLiteral("r-1-0"),
+                               QStringLiteral("clock"),
+                               QStringList{QStringLiteral("clock-default")}),
+          QStringLiteral("mixed add/remove patches normalize input, deduplicate elements, and preserve untouched assignments"));
+
+    DomainAssignmentPatch replacementPatch;
+    replacementPatch.replacement = QStringList{
+        QStringLiteral(" tag-b "),
+        QStringLiteral("tag-a"),
+        QStringLiteral("tag-b")
+    };
+    const DesignResult replacedMixed = application.patchDomainAssignments(
+        mixedTags,
+        QVector<ElementRef>{
+            ElementRef{ElementKind::Router, QStringLiteral("r-0-0")},
+            ElementRef{ElementKind::Router, QStringLiteral("r-1-0")}
+        },
+        QStringLiteral("tag"),
+        replacementPatch);
+    check(replacedMixed.success
+              && hasAssignment(replacedMixed.design,
+                               ElementKind::Router,
+                               QStringLiteral("r-0-0"),
+                               QStringLiteral("tag"),
+                               QStringList{QStringLiteral("tag-a"),
+                                           QStringLiteral("tag-b")})
+              && hasAssignment(replacedMixed.design,
+                               ElementKind::Router,
+                               QStringLiteral("r-1-0"),
+                               QStringLiteral("tag"),
+                               QStringList{QStringLiteral("tag-a"),
+                                           QStringLiteral("tag-b")}),
+          QStringLiteral("replacement patches atomically replace and normalize every selected assignment"));
+
+    DomainAssignmentPatch clearOptionalPatch;
+    clearOptionalPatch.replacement = QStringList{};
+    const DesignResult clearedOptional = application.patchDomainAssignments(
+        mixedTags,
+        QVector<ElementRef>{ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}},
+        QStringLiteral("tag"),
+        clearOptionalPatch);
+    const DomainMembership* clearedMembership = findMembership(
+        clearedOptional.design, ElementKind::Router, QStringLiteral("r-0-0"));
+    check(clearedOptional.success
+              && clearedMembership
+              && !clearedMembership->assignments.contains(QStringLiteral("tag"))
+              && clearedMembership->assignments.contains(QStringLiteral("clock")),
+          QStringLiteral("an empty replacement removes only the patched assignment and retains other membership data"));
+
+    const DesignResult noOpPatch = application.patchDomainAssignments(
+        mixedTags,
+        QVector<ElementRef>{ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}},
+        QStringLiteral("tag"),
+        DomainAssignmentPatch{});
+    check(noOpPatch.success && sameDesign(noOpPatch.design, mixedTags),
+          QStringLiteral("an empty assignment patch is a semantic no-op"));
+
+    DomainAssignmentPatch singleCardinalityPatch;
+    singleCardinalityPatch.ensurePresent = {QStringLiteral("clock-alt")};
+    checkAtomicFailure(
+        application.patchDomainAssignments(
+            multiClock,
+            QVector<ElementRef>{ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}},
+            QStringLiteral("clock"),
+            singleCardinalityPatch),
+        multiClock,
+        QStringLiteral("domain_assignment.cardinality"),
+        QStringLiteral("a patch that violates single cardinality is rejected atomically"));
+
+    DomainAssignmentPatch requiredPatch;
+    requiredPatch.replacement = QStringList{};
+    checkAtomicFailure(
+        application.patchDomainAssignments(
+            base,
+            QVector<ElementRef>{ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}},
+            QStringLiteral("clock"),
+            requiredPatch),
+        base,
+        QStringLiteral("domain_assignment.required"),
+        QStringLiteral("a patch cannot clear a required assignment"));
+
+    DomainAssignmentPatch unknownDomainPatch;
+    unknownDomainPatch.ensureAbsent = {QStringLiteral("tag-missing")};
+    checkAtomicFailure(
+        application.patchDomainAssignments(
+            threeTags,
+            QVector<ElementRef>{ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}},
+            QStringLiteral("tag"),
+            unknownDomainPatch),
+        threeTags,
+        QStringLiteral("domain_assignment.unknown_domain"),
+        QStringLiteral("unknown Domains are rejected even when an ensure-absent patch would otherwise be a no-op"));
+
+    DomainAssignmentPatch knownTagPatch;
+    knownTagPatch.ensurePresent = {QStringLiteral("tag-a")};
+    checkAtomicFailure(
+        application.patchDomainAssignments(
+            threeTags,
+            QVector<ElementRef>{ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}},
+            QStringLiteral("unknown-type"),
+            knownTagPatch),
+        threeTags,
+        QStringLiteral("domain_assignment.unknown_type"),
+        QStringLiteral("unknown Domain types are rejected before mutation"));
+    checkAtomicFailure(
+        application.patchDomainAssignments(
+            threeTags,
+            QVector<ElementRef>{ElementRef{ElementKind::Router, QStringLiteral("r-9-9")}},
+            QStringLiteral("tag"),
+            knownTagPatch),
+        threeTags,
+        QStringLiteral("domain_assignment.unknown_element"),
+        QStringLiteral("unknown elements are rejected before mutation"));
+    checkAtomicFailure(
+        application.patchDomainAssignments(
+            threeTags,
+            QVector<ElementRef>{ElementRef{
+                ElementKind::RouterLink,
+                linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))}},
+            QStringLiteral("tag"),
+            knownTagPatch),
+        threeTags,
+        QStringLiteral("domain_assignment.not_applicable"),
+        QStringLiteral("derived edges cannot be used as Domain membership elements"));
+
+    DomainAssignmentPatch conflictingPatch;
+    conflictingPatch.ensurePresent = {QStringLiteral("tag-a")};
+    conflictingPatch.replacement = QStringList{QStringLiteral("tag-b")};
+    checkAtomicFailure(
+        application.patchDomainAssignments(
+            threeTags,
+            QVector<ElementRef>{ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}},
+            QStringLiteral("tag"),
+            conflictingPatch),
+        threeTags,
+        QStringLiteral("domain_assignment.patch_conflict"),
+        QStringLiteral("replacement and incremental assignment changes are mutually exclusive"));
+
+    DomainAssignmentPatch overlappingPatch;
+    overlappingPatch.ensurePresent = {QStringLiteral("tag-a")};
+    overlappingPatch.ensureAbsent = {QStringLiteral(" tag-a ")};
+    checkAtomicFailure(
+        application.patchDomainAssignments(
+            threeTags,
+            QVector<ElementRef>{ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}},
+            QStringLiteral("tag"),
+            overlappingPatch),
+        threeTags,
+        QStringLiteral("domain_assignment.patch_overlap"),
+        QStringLiteral("the same Domain cannot be requested present and absent"));
+
     const DesignResult automaticEndpoint = application.addEndpoint(
         base,
         endpoint(QStringLiteral("auto_ep"), RouterPosition{0, 0}));

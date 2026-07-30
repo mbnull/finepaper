@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/domain_assignment.h"
 #include "noc/model.h"
 #include "package/package.h"
 
@@ -47,6 +48,12 @@ MutationResult assignDomainsToElements(
     const QVector<ElementRef>& elements,
     const QString& domainType,
     const QStringList& domainIds);
+MutationResult patchDomainAssignments(
+    const NocDesign& design,
+    const PackageDefinition& package,
+    const QVector<ElementRef>& elements,
+    const QString& domainType,
+    DomainAssignmentPatch patch);
 MutationResult clearDomainAssignment(
     const NocDesign& design,
     const PackageDefinition& package,

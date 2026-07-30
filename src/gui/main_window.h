@@ -32,10 +32,12 @@ class QWidget;
 namespace finepaper {
 
 class EndpointPaletteList;
+class DomainManagerPanel;
 
 class FinepaperMainWindow final : public QMainWindow {
 public:
     explicit FinepaperMainWindow(RuntimeLocations locations, QWidget* parent = nullptr);
+    ~FinepaperMainWindow() override;
     bool openDesignFile(const QString& path);
     bool installPackageDirectory(const QString& directory);
     bool operationBusy() const;
@@ -44,6 +46,11 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private:
+    enum class DesignRefreshScope {
+        FullProjection,
+        DomainsOnly
+    };
+
     struct AttachmentSlotChoice {
         bool accepted = false;
         std::optional<QString> slot;
@@ -59,6 +66,7 @@ private:
     void createCentralViews();
     void createPackageDock();
     void createInspectorDock();
+    void createDomainDock();
     void createResultsDock();
     void restoreWorkbenchState();
     void loadInstalledPackageRoots();
@@ -67,10 +75,12 @@ private:
     void updatePackageControls();
     void updateDomainLayerControls();
     void applyDomainLayer(const QString& domainType);
+    void updateDomainManager();
     void updateEndpointPalette();
     void updateUiState();
     void setOperationBusy(bool busy, const QString& message = {});
     void setDirty(bool dirty);
+    bool confirmDiscardPendingDomainAssignments(const QString& action);
     bool maybeSave();
     void createDesign();
     void openDesign();
@@ -86,8 +96,13 @@ private:
     bool removeEndpoint(const QString& endpointId);
     void applyParameters();
     void updateInspector(const NocEditorSelectionSet& selection);
-    void adoptDesignResult(const DesignResult& result, const QString& action);
+    void adoptDesignResult(
+        const DesignResult& result,
+        const QString& action,
+        DesignRefreshScope scope = DesignRefreshScope::FullProjection);
+    void adoptDomainResult(const DesignResult& result, const QString& action);
     void refreshDesignViews();
+    void refreshDomainViews();
     void rebuildParameterEditors();
     void populateDiagnostics(const QVector<Diagnostic>& diagnostics);
     void populateGenerationOutputs(const GenerationResult& result);
@@ -117,6 +132,7 @@ private:
     bool m_operationBusy = false;
     QSet<QString> m_runtimeAvailablePackageKeys;
     std::optional<RouterPosition> m_selectedRouter;
+    NocEditorSelectionSet m_editorSelection;
     QVector<ParameterControl> m_parameterControls;
 
     QAction* m_newAction = nullptr;
@@ -154,6 +170,9 @@ private:
     QGroupBox* m_parameterGroup = nullptr;
     QFormLayout* m_parameterForm = nullptr;
     QPushButton* m_applyParametersButton = nullptr;
+
+    QDockWidget* m_domainDock = nullptr;
+    DomainManagerPanel* m_domainManager = nullptr;
 
     QDockWidget* m_resultsDock = nullptr;
     QTabWidget* m_resultTabs = nullptr;

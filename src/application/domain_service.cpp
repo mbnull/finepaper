@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace finepaper::domain_service {
 namespace {
@@ -77,6 +78,16 @@ void setMembershipAssignments(NocDesign& design,
     for (auto it = assignments.constBegin(); it != assignments.constEnd(); ++it) {
         membership->assignments.insert(it.key(), it.value());
     }
+}
+
+QStringList normalizeDomainIds(QStringList domainIds) {
+    for (QString& domainId : domainIds) {
+        domainId = domainId.trimmed();
+    }
+    std::sort(domainIds.begin(), domainIds.end());
+    domainIds.erase(
+        std::unique(domainIds.begin(), domainIds.end()), domainIds.end());
+    return domainIds;
 }
 
 QStringList domainIdsForType(const NocDesign& design, const QString& type) {
@@ -821,6 +832,177 @@ MutationResult assignDomainsToElements(
             element,
             QHash<QString, QStringList>{{normalizedType, normalizedDomainIds}});
     }
+    return result;
+}
+
+MutationResult patchDomainAssignments(
+    const NocDesign& design,
+    const PackageDefinition& package,
+    const QVector<ElementRef>& elements,
+    const QString& domainType,
+    DomainAssignmentPatch patch) {
+    MutationResult result;
+    result.design = design;
+    if (elements.isEmpty()) {
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("domain_assignment.no_elements"),
+                         QStringLiteral("at least one element is required"),
+                         QStringLiteral("/domainMemberships"));
+        return result;
+    }
+
+    const QString normalizedType = domainType.trimmed();
+    const DomainTypeDefinition* type = package.domainType(normalizedType);
+    if (!type) {
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("domain_assignment.unknown_type"),
+                         QStringLiteral("Domain assignment type is not declared by the Package"),
+                         QStringLiteral("/domainMemberships"),
+                         QStringLiteral("package"));
+        return result;
+    }
+
+    patch.ensurePresent = normalizeDomainIds(std::move(patch.ensurePresent));
+    patch.ensureAbsent = normalizeDomainIds(std::move(patch.ensureAbsent));
+    if (patch.replacement) {
+        *patch.replacement = normalizeDomainIds(std::move(*patch.replacement));
+    }
+    if (patch.replacement
+        && (!patch.ensurePresent.isEmpty() || !patch.ensureAbsent.isEmpty())) {
+        appendDiagnostic(
+            result.diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("domain_assignment.patch_conflict"),
+            QStringLiteral("replacement cannot be combined with ensure-present or ensure-absent changes"),
+            QStringLiteral("/domainMemberships"));
+        return result;
+    }
+
+    const QSet<QString> presentIds(patch.ensurePresent.cbegin(),
+                                   patch.ensurePresent.cend());
+    for (const QString& domainId : std::as_const(patch.ensureAbsent)) {
+        if (!presentIds.contains(domainId)) {
+            continue;
+        }
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("domain_assignment.patch_overlap"),
+                         QStringLiteral("a Domain cannot be both ensured present and absent"),
+                         QStringLiteral("/domainMemberships"));
+        return result;
+    }
+
+    QHash<QString, QString> domainTypes;
+    for (const DomainDefinition& domain : design.domains) {
+        domainTypes.insert(domain.id, domain.type);
+    }
+    QStringList referencedDomainIds = patch.replacement.value_or(QStringList{});
+    referencedDomainIds.append(patch.ensurePresent);
+    referencedDomainIds.append(patch.ensureAbsent);
+    referencedDomainIds = normalizeDomainIds(std::move(referencedDomainIds));
+    for (const QString& domainId : std::as_const(referencedDomainIds)) {
+        const auto domain = domainTypes.constFind(domainId);
+        if (domain == domainTypes.constEnd()) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("domain_assignment.unknown_domain"),
+                             QStringLiteral("Domain assignment patch references an unknown Domain"),
+                             QStringLiteral("/domainMemberships"));
+            continue;
+        }
+        if (domain.value() != normalizedType) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("domain_assignment.domain_type_mismatch"),
+                             QStringLiteral("Domain assignment patch references a Domain of another type"),
+                             QStringLiteral("/domainMemberships"));
+        }
+    }
+
+    QVector<ElementRef> uniqueElements;
+    uniqueElements.reserve(elements.size());
+    QSet<QString> seenElements;
+    for (qsizetype index = 0; index < elements.size(); ++index) {
+        const ElementRef& element = elements.at(index);
+        const QString key = elementReferenceKey(element);
+        if (seenElements.contains(key)) {
+            continue;
+        }
+        seenElements.insert(key);
+        uniqueElements.append(element);
+        const QString path = QStringLiteral("/domainMemberships/patch/elements/%1")
+                                 .arg(index);
+        if (!designReferenceExists(design, element)) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("domain_assignment.unknown_element"),
+                             QStringLiteral("Domain assignment patch references an unknown element"),
+                             path);
+        } else if (!domainTypeAppliesTo(*type, element.kind)) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("domain_assignment.not_applicable"),
+                             QStringLiteral("Domain type %1 does not apply to this element kind")
+                                 .arg(type->id),
+                             path,
+                             QStringLiteral("package"));
+        }
+    }
+    if (hasErrors(result.diagnostics)) {
+        return result;
+    }
+
+    const bool emptyPatch = !patch.replacement
+        && patch.ensurePresent.isEmpty()
+        && patch.ensureAbsent.isEmpty();
+    if (emptyPatch) {
+        return result;
+    }
+
+    const QSet<QString> absentIds(patch.ensureAbsent.cbegin(),
+                                  patch.ensureAbsent.cend());
+    for (const ElementRef& element : std::as_const(uniqueElements)) {
+        DomainMembership* membership = findMembership(result.design, element);
+        QSet<QString> assignedIds;
+        if (patch.replacement) {
+            assignedIds = QSet<QString>(patch.replacement->cbegin(),
+                                        patch.replacement->cend());
+        } else {
+            const QStringList existing = membership
+                ? membership->assignments.value(normalizedType)
+                : QStringList{};
+            assignedIds = QSet<QString>(existing.cbegin(), existing.cend());
+            assignedIds.subtract(absentIds);
+            assignedIds.unite(presentIds);
+        }
+
+        QStringList updatedIds = assignedIds.values();
+        std::sort(updatedIds.begin(), updatedIds.end());
+        if (updatedIds.isEmpty()) {
+            if (membership) {
+                membership->assignments.remove(normalizedType);
+            }
+            continue;
+        }
+        if (!membership) {
+            result.design.domainMemberships.append(DomainMembership{
+                element,
+                QHash<QString, QStringList>{{normalizedType, updatedIds}}
+            });
+            continue;
+        }
+        membership->assignments.insert(normalizedType, std::move(updatedIds));
+    }
+    result.design.domainMemberships.erase(
+        std::remove_if(
+            result.design.domainMemberships.begin(),
+            result.design.domainMemberships.end(),
+            [](const DomainMembership& membership) {
+                return membership.assignments.isEmpty();
+            }),
+        result.design.domainMemberships.end());
     return result;
 }
 
