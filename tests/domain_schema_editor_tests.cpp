@@ -11,11 +11,34 @@
 #include <QTableWidget>
 #include <QTextStream>
 
+#include <atomic>
+#include <cstdio>
 #include <optional>
 
 namespace {
 
 int failures = 0;
+std::atomic_uint formLayoutWarningCount = 0;
+std::atomic<QtMessageHandler> messageHandlerToForward = nullptr;
+
+void captureFormLayoutWarnings(
+    QtMsgType type,
+    const QMessageLogContext& context,
+    const QString& message) {
+    if (type == QtWarningMsg
+        && message.startsWith(
+            QStringLiteral("QFormLayout::takeAt: Invalid index"))) {
+        formLayoutWarningCount.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+    if (const QtMessageHandler handler = messageHandlerToForward.load(
+            std::memory_order_acquire)) {
+        handler(type, context, message);
+        return;
+    }
+    std::fprintf(
+        stderr, "%s\n", qPrintable(qFormatLogMessage(type, context, message)));
+}
 
 void check(bool condition, const QString& description) {
     if (condition) {
@@ -405,6 +428,10 @@ int main(int argc, char** argv) {
         qputenv("QT_QPA_PLATFORM", QByteArrayLiteral("offscreen"));
     }
     QApplication application(argc, argv);
+    const QtMessageHandler previousMessageHandler =
+        qInstallMessageHandler(captureFormLayoutWarnings);
+    messageHandlerToForward.store(
+        previousMessageHandler, std::memory_order_release);
 
     exactMissingPropertyUsesDefaultWhenFirstEnabled();
     createDefaultsAreOverriddenBySuppliedValues();
@@ -413,6 +440,11 @@ int main(int argc, char** argv) {
     multipleRowsAreSelectableAndOperableThroughTheirEditors();
     completeAndPartialModesMatchAggregateValidationSemantics();
     customReferencesSupportWorkingCopyForwardReferences();
+    check(formLayoutWarningCount.load(std::memory_order_relaxed) == 0,
+          QStringLiteral(
+              "Domain schema rebuilds never probe an invalid QFormLayout row"));
+    qInstallMessageHandler(previousMessageHandler);
+    messageHandlerToForward.store(nullptr, std::memory_order_release);
 
     if (failures == 0) {
         QTextStream(stdout) << "Domain schema editor tests passed" << Qt::endl;

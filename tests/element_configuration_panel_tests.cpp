@@ -8,6 +8,8 @@
 #include <QPushButton>
 #include <QTextStream>
 
+#include <atomic>
+#include <cstdio>
 #include <optional>
 
 namespace {
@@ -15,6 +17,27 @@ namespace {
 using namespace finepaper;
 
 int failures = 0;
+std::atomic_uint formLayoutWarningCount = 0;
+std::atomic<QtMessageHandler> messageHandlerToForward = nullptr;
+
+void captureFormLayoutWarnings(
+    QtMsgType type,
+    const QMessageLogContext& context,
+    const QString& message) {
+    if (type == QtWarningMsg
+        && message.startsWith(
+            QStringLiteral("QFormLayout::takeAt: Invalid index"))) {
+        formLayoutWarningCount.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+    if (const QtMessageHandler handler = messageHandlerToForward.load(
+            std::memory_order_acquire)) {
+        handler(type, context, message);
+        return;
+    }
+    std::fprintf(
+        stderr, "%s\n", qPrintable(qFormatLogMessage(type, context, message)));
+}
 
 void check(bool condition, const QString& message) {
     if (!condition) {
@@ -105,6 +128,10 @@ NocDesign designFixture() {
 
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
+    const QtMessageHandler previousMessageHandler =
+        qInstallMessageHandler(captureFormLayoutWarnings);
+    messageHandlerToForward.store(
+        previousMessageHandler, std::memory_order_release);
 
     const PackageDefinition package = packageFixture();
     const NocDesign design = designFixture();
@@ -238,6 +265,11 @@ int main(int argc, char** argv) {
     QApplication::processEvents();
     check(status->text().contains(QStringLiteral("Endpoint instance parameters")),
           QStringLiteral("Endpoint selection points users to its separate parameter path"));
+    check(formLayoutWarningCount.load(std::memory_order_relaxed) == 0,
+          QStringLiteral(
+              "rebuilding the Package-driven form never probes an invalid QFormLayout row"));
+    qInstallMessageHandler(previousMessageHandler);
+    messageHandlerToForward.store(nullptr, std::memory_order_release);
 
     if (failures == 0) {
         QTextStream(stdout) << "Element configuration panel tests passed"

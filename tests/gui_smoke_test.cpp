@@ -39,6 +39,8 @@
 #include <QMimeData>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSettings>
 #include <QSet>
 #include <QSpinBox>
@@ -257,16 +259,7 @@ QPoint blankViewportPosition(QGraphicsView* view) {
     }
     for (int y = 24; y < view->viewport()->height() - 24; y += 32) {
         for (int x = 24; x < view->viewport()->width() - 24; x += 32) {
-            QGraphicsItem* item = view->itemAt(QPoint(x, y));
-            bool overNode = false;
-            while (item) {
-                if (qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item)) {
-                    overNode = true;
-                    break;
-                }
-                item = item->parentItem();
-            }
-            if (!overNode) {
+            if (view->items(QPoint(x, y)).isEmpty()) {
                 return QPoint(x, y);
             }
         }
@@ -1064,6 +1057,8 @@ bool writeMissingPackageDesign(const QString& path) {
 } // namespace
 
 int main(int argc, char** argv) {
+    const bool maximizeWindow =
+        qEnvironmentVariableIsSet("FINEPAPER_GUI_SMOKE_MAXIMIZED");
     QTemporaryDir configRoot(QStringLiteral("/tmp/finepaper-gui-config-XXXXXX"));
     QTemporaryDir outputRoot(QStringLiteral("/tmp/finepaper-gui-output-XXXXXX"));
     check(configRoot.isValid(), QStringLiteral("temporary GUI settings root is available"));
@@ -1095,8 +1090,15 @@ int main(int argc, char** argv) {
             QDir(configRoot.path()).filePath(QStringLiteral("missing-installed-package"))});
     finepaper::FinepaperMainWindow window(locations);
     pollutedSettings.remove(finepaper::workbench::packageRootsSetting);
-    window.show();
+    if (maximizeWindow) {
+        window.showMaximized();
+    } else {
+        window.show();
+    }
     application.processEvents();
+    check(!maximizeWindow || window.isMaximized(),
+          QStringLiteral(
+              "the native-compositor regression run enters maximized state"));
 
     auto* centerViews = qobject_cast<QTabWidget*>(window.centralWidget());
     check(centerViews && centerViews->count() == 5,
@@ -1139,12 +1141,25 @@ int main(int argc, char** argv) {
     auto* packageDock = window.findChild<QDockWidget*>(finepaper::workbench::packageDockName);
     auto* inspectorDock = window.findChild<QDockWidget*>(finepaper::workbench::inspectorDockName);
     auto* resultsDock = window.findChild<QDockWidget*>(finepaper::workbench::resultsDockName);
+    auto* inspectorScroll = window.findChild<QScrollArea*>(
+        QStringLiteral("finepaper.inspectorScroll"));
+    auto* endpointConfigurationGroup = window.findChild<QGroupBox*>(
+        QStringLiteral("finepaper.endpointConfigurationGroup"));
+    auto* elementConfigurationGroup = window.findChild<QGroupBox*>(
+        QStringLiteral("finepaper.elementConfigurationGroup"));
     check(packageDock && window.dockWidgetArea(packageDock) == Qt::LeftDockWidgetArea,
           QStringLiteral("Package and Endpoint library is docked on the left"));
     check(inspectorDock && window.dockWidgetArea(inspectorDock) == Qt::RightDockWidgetArea,
           QStringLiteral("Inspector is docked on the right"));
     check(resultsDock && window.dockWidgetArea(resultsDock) == Qt::BottomDockWidgetArea,
           QStringLiteral("diagnostics and outputs are docked at the bottom"));
+    check(inspectorDock && inspectorScroll
+              && inspectorDock->widget() == inspectorScroll
+              && inspectorScroll->widgetResizable()
+              && inspectorScroll->horizontalScrollBarPolicy()
+                     == Qt::ScrollBarAlwaysOff,
+          QStringLiteral(
+              "the complete Inspector scrolls inside its dock instead of resizing the top-level window"));
 
     auto* activityBar = window.findChild<QToolBar*>(finepaper::workbench::activityBarName);
     QAction* packagePanelAction = window.findChild<QAction*>(
@@ -1303,21 +1318,56 @@ int main(int argc, char** argv) {
         finepaper::workbench::selectCanvasActionName);
     QAction* panCanvasAction = window.findChild<QAction*>(
         finepaper::workbench::panCanvasActionName);
-    check(selectCanvasAction && panCanvasAction && selectCanvasAction->isChecked()
+    check(selectCanvasAction && panCanvasAction && panCanvasAction->isChecked()
               && nodeEditor
               && nodeEditor->canvasInteractionMode()
-                  == finepaper::NocCanvasInteractionMode::Select
-              && graphicsView->dragMode() == QGraphicsView::RubberBandDrag,
-          QStringLiteral("canvas exposes an explicit, default box-selection mode"));
-    if (panCanvasAction) {
-        panCanvasAction->trigger();
-        application.processEvents();
-    }
-    check(nodeEditor
-              && nodeEditor->canvasInteractionMode()
                   == finepaper::NocCanvasInteractionMode::Pan
+              && graphicsView
               && graphicsView->dragMode() == QGraphicsView::ScrollHandDrag,
-          QStringLiteral("Pan mode explicitly restores empty-canvas viewport dragging"));
+          QStringLiteral("canvas opens in the directly draggable Pan mode"));
+    if (graphicsView && graphicsView->viewport()) {
+        const QPoint panStart = blankViewportPosition(graphicsView);
+        const QPoint panEnd(
+            (std::min)(panStart.x() + 120,
+                       graphicsView->viewport()->width() - 8),
+            (std::min)(panStart.y() + 80,
+                       graphicsView->viewport()->height() - 8));
+        const QPoint viewportCenter = graphicsView->viewport()->rect().center();
+        const QPointF sceneCenterBeforePan =
+            graphicsView->mapToScene(viewportCenter);
+        const int selectionCountBeforePan =
+            graphicsScene ? graphicsScene->selectedItems().size() : -1;
+        dragCanvasSelection(graphicsView, panStart, panEnd);
+        application.processEvents();
+        const QPointF sceneCenterAfterPan =
+            graphicsView->mapToScene(viewportCenter);
+        const QPointF panDelta =
+            sceneCenterAfterPan - sceneCenterBeforePan;
+        check(nodeEditor
+                  && nodeEditor->canvasInteractionMode()
+                      == finepaper::NocCanvasInteractionMode::Pan
+                  && graphicsView->dragMode()
+                      == QGraphicsView::ScrollHandDrag
+                  && QPointF::dotProduct(panDelta, panDelta) > 1.0
+                  && graphicsScene
+                  && graphicsScene->selectedItems().size()
+                         == selectionCountBeforePan,
+              QStringLiteral(
+                  "default Pan mode really moves the viewport without changing selection"));
+        graphicsView->setFocus(Qt::OtherFocusReason);
+        QKeyEvent shiftPress(
+            QEvent::KeyPress, Qt::Key_Shift, Qt::ShiftModifier);
+        QApplication::sendEvent(graphicsView, &shiftPress);
+        check(graphicsView->dragMode() == QGraphicsView::RubberBandDrag,
+              QStringLiteral(
+                  "holding Shift temporarily exposes box selection from Pan mode"));
+        QKeyEvent shiftRelease(
+            QEvent::KeyRelease, Qt::Key_Shift, Qt::NoModifier);
+        QApplication::sendEvent(graphicsView, &shiftRelease);
+        check(graphicsView->dragMode() == QGraphicsView::ScrollHandDrag,
+              QStringLiteral(
+                  "releasing Shift restores the persistent Pan interaction"));
+    }
     if (selectCanvasAction) {
         selectCanvasAction->trigger();
         application.processEvents();
@@ -1425,17 +1475,44 @@ int main(int argc, char** argv) {
     }
 
     if (graphicsScene && router00 && router10 && router01 && router11) {
+        if (inspectorDock) {
+            inspectorDock->raise();
+        }
+        const int windowHeightBeforeRouterSelection = window.height();
         auto* selectedRouter = graphicsScene->nodeGraphicsObject(*router00);
-        selectedRouter->setSelected(true);
-        graphicsScene->nodeSelected(*router00);
-        application.processEvents();
-        check(graphicsScene->nodeGraphicsObject(*router10)
-                  ->data(finepaper::relatedHighlightDataRole).toBool()
-                  && graphicsScene->nodeGraphicsObject(*router01)
+        auto* eastRouterObject = graphicsScene->nodeGraphicsObject(*router10);
+        auto* southRouterObject = graphicsScene->nodeGraphicsObject(*router01);
+        auto* diagonalRouterObject = graphicsScene->nodeGraphicsObject(*router11);
+        check(selectedRouter && eastRouterObject && southRouterObject
+                  && diagonalRouterObject,
+              QStringLiteral(
+                  "all Mesh Router graphics objects exist before selection tests"));
+        if (selectedRouter) {
+            selectedRouter->setSelected(true);
+            graphicsScene->nodeSelected(*router00);
+            application.processEvents();
+        }
+        check(endpointConfigurationGroup && elementConfigurationGroup
+                  && !endpointConfigurationGroup->isVisible()
+                  && elementConfigurationGroup->isVisible(),
+              QStringLiteral(
+                  "Router selection progressively discloses only its element properties"));
+        check((maximizeWindow || windowHeightBeforeRouterSelection <= 920)
+                  && window.height() == windowHeightBeforeRouterSelection
+                  && window.minimumSizeHint().height() <= window.height(),
+              QStringLiteral(
+                  "revealing Router properties does not grow the top-level window (height %1, minimum hint %2)")
+                  .arg(window.height())
+                  .arg(window.minimumSizeHint().height()));
+        check(eastRouterObject && southRouterObject
+                  && eastRouterObject
+                         ->data(finepaper::relatedHighlightDataRole).toBool()
+                  && southRouterObject
                          ->data(finepaper::relatedHighlightDataRole).toBool(),
               QStringLiteral("selecting a Router highlights directly connected Routers"));
-        check(!graphicsScene->nodeGraphicsObject(*router11)
-                   ->data(finepaper::relatedHighlightDataRole).toBool(),
+        check(diagonalRouterObject
+                  && !diagonalRouterObject
+                          ->data(finepaper::relatedHighlightDataRole).toBool(),
               QStringLiteral("selection highlight does not spread beyond one hop"));
         const QtNodes::ConnectionId eastLink{
             *router00,
@@ -1447,18 +1524,24 @@ int main(int argc, char** argv) {
             finepaper::portIndex(finepaper::RouterOutputPort::South),
             *router01,
             finepaper::portIndex(finepaper::RouterInputPort::North)};
-        check(graphicsScene->connectionGraphicsObject(eastLink)
-                  ->data(finepaper::relatedHighlightDataRole).toBool()
-                  && graphicsScene->connectionGraphicsObject(southLink)
+        auto* eastConnectionObject =
+            graphicsScene->connectionGraphicsObject(eastLink);
+        auto* southConnectionObject =
+            graphicsScene->connectionGraphicsObject(southLink);
+        check(eastConnectionObject && southConnectionObject
+                  && eastConnectionObject
+                         ->data(finepaper::relatedHighlightDataRole).toBool()
+                  && southConnectionObject
                          ->data(finepaper::relatedHighlightDataRole).toBool(),
               QStringLiteral("selecting a Router highlights all directly connected lines"));
         graphicsScene->clearSelection();
         application.processEvents();
-        check(!graphicsScene->nodeGraphicsObject(*router10)
-                   ->data(finepaper::relatedHighlightDataRole).toBool(),
+        check(eastRouterObject
+                  && !eastRouterObject
+                          ->data(finepaper::relatedHighlightDataRole).toBool(),
               QStringLiteral("clearing selection clears connected-element highlights"));
-        if (auto* eastConnection = graphicsScene->connectionGraphicsObject(eastLink)) {
-            eastConnection->setSelected(true);
+        if (eastConnectionObject) {
+            eastConnectionObject->setSelected(true);
             if (QAction* deleteSelection = animatedView
                     ? animatedView->deleteSelectionAction() : nullptr) {
                 deleteSelection->trigger();
@@ -1620,6 +1703,38 @@ int main(int argc, char** argv) {
                    *currentRouter00,
                   finepaper::portIndex(finepaper::RouterInputPort::Endpoint)}),
           QStringLiteral("Endpoint uses the Router's dedicated EP attachment port"));
+    if (attachedEndpoint && graphicsScene) {
+        const int windowHeightBeforeEndpointSelection = window.height();
+        graphicsScene->clearSelection();
+        auto* endpointObject =
+            graphicsScene->nodeGraphicsObject(*attachedEndpoint);
+        check(endpointObject,
+              QStringLiteral(
+                  "the attached Endpoint has a graphics object before Inspector selection"));
+        if (endpointObject) {
+            endpointObject->setSelected(true);
+            graphicsScene->nodeSelected(*attachedEndpoint);
+            application.processEvents();
+        }
+        check(endpointConfigurationGroup && elementConfigurationGroup
+                  && endpointConfigurationGroup->isVisible()
+                  && !elementConfigurationGroup->isVisible(),
+              QStringLiteral(
+                  "Endpoint selection progressively discloses only Endpoint-owned properties"));
+        const bool inspectorContentFits = inspectorScroll
+            && inspectorScroll->widget()
+            && inspectorScroll->widget()->height()
+                <= inspectorScroll->viewport()->height();
+        const bool inspectorContentScrolls = inspectorScroll
+            && inspectorScroll->verticalScrollBar()->maximum() > 0;
+        check(window.height() == windowHeightBeforeEndpointSelection
+                  && window.minimumSizeHint().height() <= window.height()
+                  && (inspectorContentFits || inspectorContentScrolls),
+              QStringLiteral(
+                  "Endpoint properties stay reachable by Inspector scrolling without growing the window (height %1, minimum hint %2)")
+                  .arg(window.height())
+                  .arg(window.minimumSizeHint().height()));
+    }
     const auto firstAttachmentPort = attachedEndpoint
         ? attachmentPortForEndpoint(graphicsScene, *attachedEndpoint) : std::nullopt;
 

@@ -5,7 +5,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLabel>
-#include <QLayoutItem>
 #include <QPushButton>
 
 #include <utility>
@@ -151,7 +150,11 @@ void DomainPropertyForm::setSchema(
             && formOptions.validationMode == PropertyValidationMode::Complete) {
             label += QStringLiteral(" *");
         }
-        m_form->addRow(label, editor);
+        auto* labelWidget = new QLabel(label);
+        labelWidget->setTextFormat(Qt::PlainText);
+        labelWidget->setWordWrap(true);
+        labelWidget->setBuddy(editor);
+        m_form->addRow(labelWidget, editor);
         m_rows.append(PropertyRow{definition, editor});
     }
 }
@@ -191,9 +194,8 @@ QStringList DomainPropertyForm::localErrors() const {
 }
 
 void DomainPropertyForm::clearRows() {
-    while (QLayoutItem* item = m_form->takeAt(0)) {
-        delete item->widget();
-        delete item;
+    while (m_form->rowCount() > 0) {
+        m_form->removeRow(m_form->rowCount() - 1);
     }
     m_rows.clear();
 }

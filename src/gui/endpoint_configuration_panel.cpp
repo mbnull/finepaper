@@ -309,12 +309,18 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
 
     auto* identity = new QGroupBox(QStringLiteral("Endpoint Identity"), m_editor);
     auto* identityForm = new QFormLayout(identity);
+    identityForm->setFieldGrowthPolicy(
+        QFormLayout::AllNonFixedFieldsGrow);
+    identityForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
     m_id = new QLabel(identity);
     m_id->setObjectName(QStringLiteral("finepaper.endpointConfiguration.id"));
     m_id->setTextInteractionFlags(Qt::TextSelectableByMouse);
     identityForm->addRow(QStringLiteral("Stable ID / name"), m_id);
     m_type = new QComboBox(identity);
     m_type->setObjectName(QStringLiteral("finepaper.endpointConfiguration.type"));
+    m_type->setSizeAdjustPolicy(
+        QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_type->setMinimumContentsLength(12);
     identityForm->addRow(QStringLiteral("Endpoint type"), m_type);
     m_migration = new QComboBox(identity);
     m_migration->setObjectName(
@@ -325,12 +331,16 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     m_migration->addItem(
         QStringLiteral("Preserve compatible values, default the rest"),
         static_cast<int>(EndpointParameterMigration::PreserveCompatible));
+    m_migration->setSizeAdjustPolicy(
+        QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_migration->setMinimumContentsLength(12);
     identityForm->addRow(QStringLiteral("Type-change migration"), m_migration);
     m_migrationLabel = qobject_cast<QLabel*>(
         identityForm->labelForField(m_migration));
     if (m_migrationLabel) {
         m_migrationLabel->setObjectName(
             QStringLiteral("finepaper.endpointConfiguration.migrationLabel"));
+        m_migrationLabel->setWordWrap(true);
     }
     editorLayout->addWidget(identity);
 

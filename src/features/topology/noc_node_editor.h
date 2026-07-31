@@ -320,7 +320,7 @@ private:
     bool m_projectionRefreshDeferred = false;
     bool m_projectionZoomDeferred = false;
     NocCanvasInteractionMode m_canvasInteractionMode =
-        NocCanvasInteractionMode::Select;
+        NocCanvasInteractionMode::Pan;
     std::optional<TopologyWorkspaceIdentity> m_workspaceIdentity = std::nullopt;
     QString m_documentSessionToken;
     QString m_lastWorkspaceDiagnostic;

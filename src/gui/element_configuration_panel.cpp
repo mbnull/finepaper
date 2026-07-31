@@ -8,7 +8,6 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QLayoutItem>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
@@ -300,7 +299,11 @@ void ElementConfigurationPanel::rebuildForm() {
                 ? std::optional<QJsonValue>(definition.defaultValue)
                 : std::nullopt);
         editor->valueChanged = [this] { updateButtons(); };
-        m_form->addRow(initialLabel, editor);
+        auto* label = new QLabel(initialLabel);
+        label->setTextFormat(Qt::PlainText);
+        label->setWordWrap(true);
+        label->setBuddy(editor);
+        m_form->addRow(label, editor);
         m_rows.append(PropertyRow{definition, editor});
     }
 
@@ -319,9 +322,8 @@ void ElementConfigurationPanel::rebuildForm() {
 }
 
 void ElementConfigurationPanel::clearForm() {
-    while (QLayoutItem* item = m_form->takeAt(0)) {
-        delete item->widget();
-        delete item;
+    while (m_form->rowCount() > 0) {
+        m_form->removeRow(m_form->rowCount() - 1);
     }
     m_rows.clear();
     m_overrideState->clear();

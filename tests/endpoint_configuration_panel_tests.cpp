@@ -460,6 +460,15 @@ void inspectorEditsEndpointOnlyAndPreviewsTypeImpact() {
               && !summary->text().contains(QStringLiteral("<b>Preserve</b>"))
               && summaryScroll && summaryScroll->maximumHeight() <= 180,
           QStringLiteral("type change exposes bounded per-key drop/add/reset details without listing every preserved value"));
+    panel.resize(320, 720);
+    QApplication::processEvents();
+    check(migration && migrationLabel
+              && migrationLabel->wordWrap()
+              && !migrationLabel->geometry().intersects(
+                  migration->geometry())
+              && panel.minimumSizeHint().width() <= panel.width(),
+          QStringLiteral(
+              "narrow Inspector forms wrap long labels without overlapping their fields"));
     check(apply && apply->isEnabled() && !changedType,
           QStringLiteral("a valid type-change preview is actionable but not applied implicitly"));
 

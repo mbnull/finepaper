@@ -26,6 +26,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QFrame>
 #include <QFutureWatcher>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -811,7 +812,16 @@ void FinepaperMainWindow::createInspectorDock() {
     m_inspectorDock->setObjectName(workbench::inspectorDockName);
     m_inspectorDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    auto* content = new QWidget;
+    auto* inspectorScroll = new QScrollArea(m_inspectorDock);
+    inspectorScroll->setObjectName(
+        QStringLiteral("finepaper.inspectorScroll"));
+    inspectorScroll->setWidgetResizable(true);
+    inspectorScroll->setFrameShape(QFrame::NoFrame);
+    inspectorScroll->setHorizontalScrollBarPolicy(
+        Qt::ScrollBarAlwaysOff);
+
+    auto* content = new QWidget(inspectorScroll);
+    content->setObjectName(QStringLiteral("finepaper.inspectorContent"));
     auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(10, 10, 10, 10);
     m_designOverview = new QLabel(QStringLiteral("No design is open."));
@@ -847,27 +857,29 @@ void FinepaperMainWindow::createInspectorDock() {
     selectionLayout->addWidget(m_selectionSummary);
     layout->addWidget(selectionGroup);
 
-    auto* endpointConfigurationGroup = new QGroupBox(
-        QStringLiteral("Endpoint Configuration"));
-    endpointConfigurationGroup->setObjectName(
+    m_endpointConfigurationGroup = new QGroupBox(
+        QStringLiteral("Endpoint Configuration"), content);
+    m_endpointConfigurationGroup->setObjectName(
         QStringLiteral("finepaper.endpointConfigurationGroup"));
     auto* endpointConfigurationLayout =
-        new QVBoxLayout(endpointConfigurationGroup);
+        new QVBoxLayout(m_endpointConfigurationGroup);
     m_endpointConfigurationPanel = new EndpointConfigurationPanel(
-        endpointConfigurationGroup);
+        m_endpointConfigurationGroup);
     endpointConfigurationLayout->addWidget(m_endpointConfigurationPanel);
-    layout->addWidget(endpointConfigurationGroup);
+    m_endpointConfigurationGroup->setVisible(false);
+    layout->addWidget(m_endpointConfigurationGroup);
 
-    auto* elementConfigurationGroup = new QGroupBox(
-        QStringLiteral("Element Configuration"));
-    elementConfigurationGroup->setObjectName(
+    m_elementConfigurationGroup = new QGroupBox(
+        QStringLiteral("Element Configuration"), content);
+    m_elementConfigurationGroup->setObjectName(
         QStringLiteral("finepaper.elementConfigurationGroup"));
     auto* elementConfigurationLayout =
-        new QVBoxLayout(elementConfigurationGroup);
+        new QVBoxLayout(m_elementConfigurationGroup);
     m_elementConfigurationPanel = new ElementConfigurationPanel(
-        elementConfigurationGroup);
+        m_elementConfigurationGroup);
     elementConfigurationLayout->addWidget(m_elementConfigurationPanel);
-    layout->addWidget(elementConfigurationGroup);
+    m_elementConfigurationGroup->setVisible(false);
+    layout->addWidget(m_elementConfigurationGroup);
 
     m_parameterGroup = new QGroupBox(QStringLiteral("NoC Parameters"));
     m_parameterGroup->setObjectName(QStringLiteral("finepaper.parameterGroup"));
@@ -884,7 +896,8 @@ void FinepaperMainWindow::createInspectorDock() {
     parameterGroupLayout->addWidget(m_applyParametersButton);
     layout->addWidget(m_parameterGroup, 1);
 
-    m_inspectorDock->setWidget(content);
+    inspectorScroll->setWidget(content);
+    m_inspectorDock->setWidget(inspectorScroll);
     addDockWidget(Qt::RightDockWidgetArea, m_inspectorDock);
 
     connect(m_applyParametersButton, &QPushButton::clicked,
@@ -1247,18 +1260,20 @@ void FinepaperMainWindow::createActions() {
     m_selectCanvasAction = new QAction(QStringLiteral("Select"), this);
     m_selectCanvasAction->setObjectName(workbench::selectCanvasActionName);
     m_selectCanvasAction->setCheckable(true);
-    m_selectCanvasAction->setChecked(true);
     m_selectCanvasAction->setShortcut(QKeySequence(QStringLiteral("V")));
     m_selectCanvasAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     m_selectCanvasAction->setStatusTip(
-        QStringLiteral("Select nodes and connections; drag empty canvas to box-select"));
+        QStringLiteral(
+            "Select nodes and connections; drag empty canvas to box-select"));
     m_panCanvasAction = new QAction(QStringLiteral("Pan"), this);
     m_panCanvasAction->setObjectName(workbench::panCanvasActionName);
     m_panCanvasAction->setCheckable(true);
+    m_panCanvasAction->setChecked(true);
     m_panCanvasAction->setShortcut(QKeySequence(QStringLiteral("H")));
     m_panCanvasAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     m_panCanvasAction->setStatusTip(
-        QStringLiteral("Drag the empty canvas to pan without changing selection"));
+        QStringLiteral(
+            "Drag the canvas to pan; hold Shift and drag to box-select"));
     auto* canvasModeGroup = new QActionGroup(this);
     canvasModeGroup->setExclusive(true);
     canvasModeGroup->addAction(m_selectCanvasAction);
@@ -1296,7 +1311,9 @@ void FinepaperMainWindow::createActions() {
     connect(m_panCanvasAction, &QAction::triggered, this, [this] {
         m_nodeEditor->setCanvasInteractionMode(NocCanvasInteractionMode::Pan);
         statusBar()->showMessage(
-            QStringLiteral("Pan mode: drag empty canvas to move the view."), 5000);
+            QStringLiteral(
+                "Pan mode: drag to move the view; hold Shift and drag to box-select."),
+            5000);
     });
 
     QAction* packagePanelAction = m_packageDock->toggleViewAction();
@@ -2817,18 +2834,31 @@ void FinepaperMainWindow::applyParameters() {
 
 void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection) {
     m_editorSelection = selection;
+    std::optional<ElementRef> selectedElement = std::nullopt;
+    if (selection.items.size() == 1) {
+        selectedElement = selection.items.front().element();
+    }
+    const bool singleEndpoint = selection.items.size() == 1
+        && selection.items.front().kind
+            == NocEditorSelection::Kind::Endpoint;
+    const bool singleElementConfigurationTarget =
+        selectedElement
+        && isElementConfigurationTargetKind(selectedElement->kind);
+    if (m_endpointConfigurationGroup) {
+        m_endpointConfigurationGroup->setVisible(singleEndpoint);
+    }
+    if (m_elementConfigurationGroup) {
+        m_elementConfigurationGroup->setVisible(
+            singleElementConfigurationTarget);
+    }
     if (m_domainManager) {
         m_domainManager->setSelection(selection.elements());
     }
     if (m_elementConfigurationPanel) {
-        std::optional<ElementRef> selectedElement;
-        if (selection.items.size() == 1) {
-            selectedElement = selection.items.front().element();
-        }
         m_elementConfigurationPanel->setContext(
             m_design ? &*m_design : nullptr,
             packageForDesign(),
-            std::move(selectedElement),
+            selectedElement,
             m_operationBusy);
     }
     if (m_endpointConfigurationPanel) {
@@ -2849,8 +2879,9 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
 
     if (selection.items.isEmpty()) {
         m_selectionSummary->setText(QStringLiteral(
-            "Nothing selected.<br>Use <b>Select</b> mode and drag empty canvas "
-            "to box-select. Use <b>Pan</b> mode to move the viewport."));
+            "Nothing selected.<br><b>Pan</b> is the default: drag the canvas "
+            "to move the viewport. Hold <b>Shift</b> and drag, or press "
+            "<b>V</b>, to box-select."));
         return;
     }
 

@@ -197,6 +197,7 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
                      category));
         auto* form = new QFormLayout(group);
         form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        form->setRowWrapPolicy(QFormLayout::WrapLongRows);
         sectionLayout->addWidget(group);
         forms.insert(category, form);
         return form;
@@ -220,7 +221,12 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
             definition.hasDefault
                 ? std::optional<QJsonValue>(definition.defaultValue)
                 : std::nullopt);
-        formFor(definition)->addRow(displayLabel(definition), editor);
+        QFormLayout* form = formFor(definition);
+        auto* label = new QLabel(displayLabel(definition));
+        label->setTextFormat(Qt::PlainText);
+        label->setWordWrap(true);
+        label->setBuddy(editor);
+        form->addRow(label, editor);
         m_controls.append(Control{definition, editor});
         if (definition.advanced) {
             ++advancedCount;

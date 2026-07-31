@@ -190,7 +190,9 @@ private:
     QLabel* m_designOverview = nullptr;
     QPushButton* m_resizeMeshButton = nullptr;
     QLabel* m_selectionSummary = nullptr;
+    QGroupBox* m_endpointConfigurationGroup = nullptr;
     EndpointConfigurationPanel* m_endpointConfigurationPanel = nullptr;
+    QGroupBox* m_elementConfigurationGroup = nullptr;
     QGroupBox* m_parameterGroup = nullptr;
     PackageParameterForm* m_parameterForm = nullptr;
     QPushButton* m_applyParametersButton = nullptr;

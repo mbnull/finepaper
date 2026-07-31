@@ -676,7 +676,7 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
     m_view->setAcceptDrops(true);
     m_view->viewport()->setAcceptDrops(true);
     m_view->viewport()->installEventFilter(this);
-    setCanvasInteractionMode(NocCanvasInteractionMode::Select);
+    setCanvasInteractionMode(NocCanvasInteractionMode::Pan);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
