@@ -139,6 +139,17 @@ void bundledSchemaAndPatternProfileWork() {
     check(valid.success && valid.issues.isEmpty(),
           QStringLiteral("minimal Power intent satisfies bundled schema"));
 
+    const QJsonValue packageDefault = document.value(
+        QStringLiteral("default"));
+    const ValidationResult defaultValidation = finepaper::json_schema::validate(
+        *schema, packageDefault);
+    check(packageDefault.isObject() && defaultValidation.success
+              && packageDefault.toObject().value(
+                     QStringLiteral("format"))
+                     == QStringLiteral("finepaper.noc-power-intent"),
+          QStringLiteral(
+              "bundled Power schema owns a structurally valid editor default"));
+
     QJsonObject whitespaceId = minimalPowerIntent();
     QJsonArray supplies = whitespaceId.value(
         QStringLiteral("supplies")).toArray();

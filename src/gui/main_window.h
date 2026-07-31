@@ -33,6 +33,7 @@ namespace finepaper {
 class EndpointPaletteList;
 class DomainConfigurationWorkspace;
 class DomainManagerPanel;
+class DesignExtensionsWorkspace;
 class ElementConfigurationPanel;
 class EndpointConfigurationPanel;
 class PackageParameterForm;
@@ -75,6 +76,7 @@ private:
     void updateDomainLayerControls();
     void applyDomainLayer(const QString& domainType);
     void updateDomainManager();
+    void updateDesignExtensionsWorkspace();
     void updateEndpointPalette();
     void updateUiState();
     void setOperationBusy(bool busy, const QString& message = {});
@@ -172,6 +174,7 @@ private:
     std::optional<WorkbenchViewRegistry> m_viewRegistry;
     NocNodeEditor* m_nodeEditor = nullptr;
     DomainConfigurationWorkspace* m_domainConfigurationWorkspace = nullptr;
+    DesignExtensionsWorkspace* m_designExtensionsWorkspace = nullptr;
     QLabel* m_performanceSummary = nullptr;
     QPlainTextEdit* m_problemReport = nullptr;
 

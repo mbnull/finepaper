@@ -48,12 +48,16 @@ inline const QString domainLayerSelectorName =
 inline const QString editorViewId = QStringLiteral("noc-editor");
 inline const QString domainConfigurationViewId =
     QStringLiteral("domain-configuration");
+inline const QString designExtensionsViewId =
+    QStringLiteral("design-extensions");
 inline const QString performanceViewId = QStringLiteral("performance-analysis");
 inline const QString problemReportViewId = QStringLiteral("problem-report");
 
 inline const QString editorViewTitle = QStringLiteral("NoC Editor");
 inline const QString domainConfigurationViewTitle =
     QStringLiteral("Domain Configuration");
+inline const QString designExtensionsViewTitle =
+    QStringLiteral("Design Extensions");
 inline const QString performanceViewTitle = QStringLiteral("Performance Analysis");
 inline const QString problemReportViewTitle = QStringLiteral("Problem Report");
 

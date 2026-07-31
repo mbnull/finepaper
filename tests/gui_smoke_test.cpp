@@ -1099,8 +1099,8 @@ int main(int argc, char** argv) {
     application.processEvents();
 
     auto* centerViews = qobject_cast<QTabWidget*>(window.centralWidget());
-    check(centerViews && centerViews->count() == 4,
-          QStringLiteral("central workbench exposes four switchable views"));
+    check(centerViews && centerViews->count() == 5,
+          QStringLiteral("central workbench exposes five switchable views"));
     if (centerViews) {
         check(centerViews->tabText(0) == QStringLiteral("NoC Editor"),
               QStringLiteral("NoC Editor is the default central view"));
@@ -1110,10 +1110,30 @@ int main(int argc, char** argv) {
                           "finepaper.domainConfigurationWorkspace"),
               QStringLiteral(
                   "complete Domain configuration is a first-class persistent central Workspace"));
-        check(centerViews->tabText(2) == QStringLiteral("Performance Analysis"),
+        check(centerViews->tabText(2) == QStringLiteral("Design Extensions")
+                  && centerViews->widget(2)->objectName()
+                      == QStringLiteral("finepaper.designExtensionsWorkspace"),
+              QStringLiteral(
+                  "Package-driven Design Extensions are a first-class central Workspace"));
+        check(centerViews->tabText(3) == QStringLiteral("Performance Analysis"),
               QStringLiteral("performance analysis is a central view"));
-        check(centerViews->tabText(3) == QStringLiteral("Problem Report"),
+        check(centerViews->tabText(4) == QStringLiteral("Problem Report"),
               QStringLiteral("problem report is a central view"));
+    }
+    QAction* designExtensionsViewAction = actionWithText(
+        window, QStringLiteral("Design Extensions"));
+    if (designExtensionsViewAction) {
+        designExtensionsViewAction->trigger();
+        application.processEvents();
+    }
+    check(designExtensionsViewAction && centerViews
+              && centerViews->currentWidget()
+                     ->objectName()
+                     == QStringLiteral("finepaper.designExtensionsWorkspace"),
+          QStringLiteral(
+              "View menu can select the Design Extensions Workspace"));
+    if (centerViews) {
+        centerViews->setCurrentIndex(0);
     }
 
     auto* packageDock = window.findChild<QDockWidget*>(finepaper::workbench::packageDockName);

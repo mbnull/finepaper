@@ -3,6 +3,20 @@
   "$id": "https://finepaper.dev/schema/noc-power-intent-v1.json",
   "title": "Finepaper NoC power intent",
   "description": "Package-owned logical power intent consumed by the Finepaper NoC runtime.",
+  "default": {
+    "format": "finepaper.noc-power-intent",
+    "formatVersion": 1,
+    "supplies": [],
+    "controls": [],
+    "domains": [],
+    "defaultSystemState": "run",
+    "systemStates": [
+      {
+        "id": "run",
+        "domainStates": []
+      }
+    ]
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [

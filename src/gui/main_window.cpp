@@ -2,6 +2,7 @@
 
 #include "features/domain/domain_configuration_dialog.h"
 #include "features/domain/domain_configuration_workspace.h"
+#include "features/design_extensions/design_extensions_workspace.h"
 #include "features/domain/domain_manager_panel.h"
 #include "gui/element_configuration_panel.h"
 #include "gui/endpoint_configuration_panel.h"
@@ -434,6 +435,10 @@ FinepaperMainWindow::~FinepaperMainWindow() {
         m_domainConfigurationWorkspace->applyRequested = {};
         m_domainConfigurationWorkspace->draftStateChanged = {};
     }
+    if (m_designExtensionsWorkspace) {
+        m_designExtensionsWorkspace->applyRequested = {};
+        m_designExtensionsWorkspace->removeRequested = {};
+    }
     if (m_elementConfigurationPanel) {
         m_elementConfigurationPanel->applyRequested = {};
         m_elementConfigurationPanel->resetRequested = {};
@@ -527,6 +532,50 @@ void FinepaperMainWindow::createCentralViews() {
     };
     m_domainConfigurationWorkspace->draftStateChanged = [this](bool) {
         updateUiState();
+    };
+
+    m_designExtensionsWorkspace = new DesignExtensionsWorkspace(m_centerViews);
+    m_viewRegistry->addView(
+        {workbench::designExtensionsViewId,
+         workbench::designExtensionsViewTitle},
+        m_designExtensionsWorkspace);
+    m_designExtensionsWorkspace->applyRequested = [this](
+        QString extensionId, QJsonValue value) {
+        if (m_operationBusy || !m_design || !packageForDesign()) {
+            return DesignResult{};
+        }
+        const QString action = QStringLiteral("Apply Design Extension %1")
+                                   .arg(extensionId);
+        DesignResult result = m_application.setDesignExtension(
+            *m_design, extensionId, value);
+        if (!result.success) {
+            showDiagnostics(result.diagnostics, action, false);
+            appendActivity(action + QStringLiteral(" failed."));
+            statusBar()->showMessage(action + QStringLiteral(" failed."), 6000);
+            return result;
+        }
+        adoptDesignResult(result, action, DesignRefreshScope::InspectorOnly);
+        updateDesignExtensionsWorkspace();
+        return result;
+    };
+    m_designExtensionsWorkspace->removeRequested = [this](
+        QString extensionId) {
+        if (m_operationBusy || !m_design || !packageForDesign()) {
+            return DesignResult{};
+        }
+        const QString action = QStringLiteral("Remove Design Extension %1")
+                                   .arg(extensionId);
+        DesignResult result = m_application.removeDesignExtension(
+            *m_design, extensionId);
+        if (!result.success) {
+            showDiagnostics(result.diagnostics, action, false);
+            appendActivity(action + QStringLiteral(" failed."));
+            statusBar()->showMessage(action + QStringLiteral(" failed."), 6000);
+            return result;
+        }
+        adoptDesignResult(result, action, DesignRefreshScope::InspectorOnly);
+        updateDesignExtensionsWorkspace();
+        return result;
     };
 
     QWidget* performance = placeholderPage(
@@ -1706,6 +1755,7 @@ void FinepaperMainWindow::updatePackageControls() {
     updateEndpointPalette();
     updateDomainLayerControls();
     updateDomainManager();
+    updateDesignExtensionsWorkspace();
     updateUiState();
 }
 
@@ -1806,6 +1856,16 @@ void FinepaperMainWindow::updateDomainManager() {
     }
 }
 
+void FinepaperMainWindow::updateDesignExtensionsWorkspace() {
+    if (!m_designExtensionsWorkspace) {
+        return;
+    }
+    m_designExtensionsWorkspace->setContext(
+        m_design ? &*m_design : nullptr,
+        packageForDesign());
+    m_designExtensionsWorkspace->setBusy(m_operationBusy);
+}
+
 void FinepaperMainWindow::updateEndpointPalette() {
     m_endpointPalette->clear();
     const PackageDefinition* package = packageForDesign();
@@ -1888,6 +1948,9 @@ void FinepaperMainWindow::updateUiState() {
                 ? QStringLiteral("Choose a NoC IP and create a new design.")
                 : QStringLiteral("Install or repair a runnable NoC IP Package before "
                                  "creating a design."));
+    }
+    if (m_designExtensionsWorkspace) {
+        m_designExtensionsWorkspace->setBusy(m_operationBusy);
     }
     if (m_installPackageButton) {
         m_installPackageButton->setEnabled(!m_operationBusy);
