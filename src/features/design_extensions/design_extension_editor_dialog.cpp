@@ -1,5 +1,7 @@
 #include "features/design_extensions/design_extension_editor_dialog.h"
 
+#include "application/design_extension_references.h"
+
 #include <QDialogButtonBox>
 #include <QFontDatabase>
 #include <QHBoxLayout>
@@ -164,7 +166,16 @@ private:
 DesignExtensionEditorDialog::DesignExtensionEditorDialog(
     DesignExtensionEditorContext context,
     QWidget* parent)
-    : QDialog(parent), m_context(std::move(context)) {
+    : QDialog(parent),
+      m_context(std::move(context)),
+      m_domainReferenceIndex(m_context.domainReferenceIndex) {
+    if (m_context.definition
+        && !m_context.definition->domainReferences.isEmpty()
+        && !m_domainReferenceIndex) {
+        m_domainReferenceIndex =
+            DesignDomainReferenceIndex::fromDomains(
+                QVector<DomainDefinition>{});
+    }
     const QByteArray initialSource = serializedJson(m_context.value);
     m_valueTooLarge = initialSource.size() > maximumDraftBytes;
     const QString initialText = m_valueTooLarge
@@ -224,6 +235,13 @@ DesignExtensionEditorDialog::DesignExtensionEditorDialog(
         editorNoteText = QStringLiteral(
             "Read-only summary. The stored JSON exceeds the in-app editor "
             "limit and remains preserved unchanged in the design.");
+    } else if (m_context.editable && m_context.definition
+               && !m_context.definition->domainReferences.isEmpty()) {
+        editorNoteText = QStringLiteral(
+            "Schema-aware JSON source editor. Finepaper checks the "
+            "Package schema and Package-declared Domain references here; "
+            "deeper Package semantic checks still run during Validate / DRC "
+            "and generation.");
     } else if (m_context.editable) {
         editorNoteText = QStringLiteral(
             "Schema-aware JSON source editor. Finepaper checks the "
@@ -243,6 +261,35 @@ DesignExtensionEditorDialog::DesignExtensionEditorDialog(
     editorNote->setWordWrap(true);
     editorNote->setTextFormat(Qt::PlainText);
     layout->addWidget(editorNote);
+
+    if (!m_context.domainReferenceSummary.isEmpty()) {
+        auto* referenceHeading = new QLabel(
+            QStringLiteral("Design Domain references"), this);
+        referenceHeading->setObjectName(
+            QStringLiteral(
+                "finepaper.designExtensions.domainReferencesHeading"));
+        QFont referenceHeadingFont = referenceHeading->font();
+        referenceHeadingFont.setBold(true);
+        referenceHeading->setFont(referenceHeadingFont);
+        layout->addWidget(referenceHeading);
+
+        auto* references = new QPlainTextEdit(this);
+        references->setObjectName(
+            QStringLiteral("finepaper.designExtensions.domainReferences"));
+        references->setAccessibleName(
+            QStringLiteral("Available design Domain references"));
+        references->setAccessibleDescription(
+            QStringLiteral(
+                "Package-declared JSON paths and matching Domain ids from the current design"));
+        references->setReadOnly(true);
+        references->setTabChangesFocus(true);
+        references->setLineWrapMode(QPlainTextEdit::WidgetWidth);
+        references->setMinimumHeight(44);
+        references->setMaximumHeight(112);
+        references->setPlainText(m_context.domainReferenceSummary);
+        referenceHeading->setBuddy(references);
+        layout->addWidget(references);
+    }
 
     auto* toolRow = new QHBoxLayout;
     m_formatButton = new QPushButton(QStringLiteral("&Format JSON"), this);
@@ -304,7 +351,7 @@ DesignExtensionEditorDialog::DesignExtensionEditorDialog(
     m_diagnostics->setReadOnly(true);
     m_diagnostics->setTabChangesFocus(true);
     m_diagnostics->setMaximumBlockCount(512);
-    m_diagnostics->setMinimumHeight(90);
+    m_diagnostics->setMinimumHeight(60);
     m_diagnostics->setMaximumHeight(170);
     layout->addWidget(m_diagnostics);
     setDiagnosticsText({});
@@ -342,6 +389,7 @@ DesignExtensionEditorDialog::DesignExtensionEditorDialog(
         m_validationState->setText(QStringLiteral("Checking JSON…"));
         m_syntaxValid = false;
         m_schemaValid = false;
+        m_domainReferencesValid = false;
         updateApplyState();
         m_validationTimer->start();
     });
@@ -407,6 +455,7 @@ void DesignExtensionEditorDialog::validateDraft() {
     m_validationTimer->stop();
     m_syntaxValid = false;
     m_schemaValid = false;
+    m_domainReferencesValid = false;
     setDiagnosticsText({});
 
     if (m_valueTooLarge) {
@@ -485,25 +534,55 @@ void DesignExtensionEditorDialog::validateDraft() {
         return;
     }
 
+    QVector<Diagnostic> domainReferenceDiagnostics;
+    if (!m_context.definition->domainReferences.isEmpty()) {
+        Q_ASSERT(m_domainReferenceIndex);
+        domainReferenceDiagnostics =
+            validateDesignExtensionDomainReferences(
+                parsed.value,
+                *m_context.definition,
+                *m_domainReferenceIndex);
+    }
+    m_domainReferencesValid = !hasErrors(domainReferenceDiagnostics);
+    if (!m_domainReferencesValid) {
+        m_validationState->setText(
+            QStringLiteral(
+                "Structure valid, but one or more Domain references are invalid."));
+        setDiagnosticsText(diagnosticsText(domainReferenceDiagnostics));
+        updateApplyState();
+        return;
+    }
+
     const bool changed = !m_context.configured
         || parsed.value != m_context.value;
+    const bool hasDomainReferences =
+        !m_context.definition->domainReferences.isEmpty();
     if (!m_context.editable) {
-        m_validationState->setText(
-            QStringLiteral("Read-only; the stored value satisfies the Package schema."));
+        m_validationState->setText(hasDomainReferences
+            ? QStringLiteral(
+                  "Read-only; the stored value satisfies the Package schema and Domain references.")
+            : QStringLiteral(
+                  "Read-only; the stored value satisfies the Package schema."));
     } else if (!changed) {
-        m_validationState->setText(
-            QStringLiteral("Structure valid. No changes to apply."));
+        m_validationState->setText(hasDomainReferences
+            ? QStringLiteral(
+                  "Structure and Domain references valid. No changes to apply.")
+            : QStringLiteral("Structure valid. No changes to apply."));
     } else {
-        m_validationState->setText(
-            QStringLiteral("Structure valid. Changes are ready to apply."));
+        m_validationState->setText(hasDomainReferences
+            ? QStringLiteral(
+                  "Structure and Domain references valid. Changes are ready to apply.")
+            : QStringLiteral("Structure valid. Changes are ready to apply."));
     }
     updateApplyState();
 }
 
 void DesignExtensionEditorDialog::applyDraft() {
     if (!m_applyButton || !m_applyButton->isEnabled()
-        || !m_syntaxValid || !m_schemaValid || !applyRequested) {
-        if (!applyRequested && m_syntaxValid && m_schemaValid) {
+        || !m_syntaxValid || !m_schemaValid || !m_domainReferencesValid
+        || !applyRequested) {
+        if (!applyRequested && m_syntaxValid && m_schemaValid
+            && m_domainReferencesValid) {
             m_validationState->setText(
                 QStringLiteral("The editor is not connected to a design mutation."));
         }
@@ -616,7 +695,8 @@ void DesignExtensionEditorDialog::updateApplyState() {
     const bool changed = m_syntaxValid
         && (!m_context.configured || m_parsedValue != m_context.value);
     m_applyButton->setEnabled(m_context.editable && m_syntaxValid
-                              && m_schemaValid && changed
+                              && m_schemaValid && m_domainReferencesValid
+                              && changed
                               && !m_applyInProgress);
 }
 

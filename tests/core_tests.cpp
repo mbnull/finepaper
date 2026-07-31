@@ -864,7 +864,7 @@ QJsonObject configurableRequest() {
                         QStringLiteral("configurable_mesh"));
     QJsonObject package = configurable.value(
         QStringLiteral("package")).toObject();
-    package.insert(QStringLiteral("version"), QStringLiteral("3.0.0"));
+    package.insert(QStringLiteral("version"), QStringLiteral("3.1.0"));
     configurable.insert(QStringLiteral("package"), package);
     QJsonArray endpoints = configurable.value(
         QStringLiteral("endpoints")).toArray();
@@ -1063,12 +1063,12 @@ int main(int argc, char** argv) {
               && finepaper.packages().at(0).key()
                   == QStringLiteral("finepaper.noc@1.0.0")
               && finepaper.packages().at(1).key()
-                  == QStringLiteral("finepaper.noc@3.0.0"),
+                  == QStringLiteral("finepaper.noc@3.1.0"),
           QStringLiteral("V1 compatibility and V3 configurable Packages load together"));
     const auto configurablePackage = std::find_if(
         finepaper.packages().cbegin(), finepaper.packages().cend(),
         [](const PackageDefinition& package) {
-            return package.key() == QStringLiteral("finepaper.noc@3.0.0");
+            return package.key() == QStringLiteral("finepaper.noc@3.1.0");
         });
     const EndpointTypeDefinition* masterType =
         configurablePackage != finepaper.packages().cend()

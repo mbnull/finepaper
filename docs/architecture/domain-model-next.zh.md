@@ -489,6 +489,17 @@ V2 -> V3 迁移同样是显式操作：保留五组 Domain 数据，加入空 `e
 - 某个厂商节点、资源、crossing 实现或 DRC 的魔法字符串；
 - 根据特定 Package ID 改变通用编辑行为的例外路径。
 
+Package-owned `packageData` 如果引用 Design Domain，引用语义也不能只藏在
+runtime 的产品代码中。`designExtensions[].domainReferences` 以
+`{pointer, domainType}` 声明跨数据面强引用：`pointer` 是相对扩展根的
+RFC 6901 pattern；空字符串引用扩展根，非空值以 `/` 开头，`~0`/`~1` 按
+标准解码，独立的 `*` token 只遍历一层现存
+数组元素。Application 只执行通用的“ID 存在且 Type 相符”校验，并把诊断定位
+到具体 instance pointer；它不识别扩展 namespace、`power` 或字段名。路径零
+匹配是合法的，required/optional 仍由扩展 JSON Schema 决定。完整覆盖、唯一性、
+电压/retention 一致性等产品规则继续由 Package validator/compiler 所有，直到
+未来提供跨平面的原子 projection/reconcile API。
+
 这些产品语义只能由 Package schema、Package Validator/Generator 或 IP Engine 拥有。bundled `finepaper-noc` runtime 中的参数映射可以是该 Package 的显式适配代码，因为它已经离开公共 Application 边界；如果多个 Package 反复出现同一映射，再把它提升为有版本的公共 schema，而不是先在 Application 中加临时分支。
 
 bundled V3 Package 使用有版本的 `runtime/domain-realization.json` 声明这种适配。通用 realizer 只理解 role、typed binding、recipe kind、selector、stage order 和来源核对，不包含 `clock`、`power` 或具体属性 ID 分支。Package 新增自定义 Domain Type 时可以任意扩展编辑 schema，但若未同时给出完整 realization mapping，Validate/Generate 必须失败关闭；不能静默忽略为“只影响 UI”。生成的 `*_domain_implementation.json` 是确定性实现计划，不等同于已经生成的 CDC、UPF 或 SDC；实际完成范围以 renderer 输出的 `*_domain_implementation_evidence.json` 为准。当前 clock async FIFO 已有 hierarchy evidence，Power/derived-clock 项仍明确 deferred。

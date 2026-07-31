@@ -1,12 +1,13 @@
 #pragma once
 
 #include "application/application.h"
+#include "application/design_extension_references.h"
 #include "package/package.h"
 
-#include <QJsonObject>
 #include <QHash>
-#include <QVector>
+#include <QJsonObject>
 #include <QJsonValue>
+#include <QVector>
 #include <QWidget>
 
 #include <functional>
@@ -65,9 +66,10 @@ private:
     void removeSelected();
     [[nodiscard]] QString selectedExtensionId() const;
     [[nodiscard]] int selectedEntryIndex() const;
-    [[nodiscard]] bool structurallyValid(
+    [[nodiscard]] bool packageDeclaredValueValid(
         const DesignExtensionDefinition& definition,
         const QJsonValue& value);
+    [[nodiscard]] const DesignDomainReferenceIndex& domainReferenceIndex();
     [[nodiscard]] static QJsonValue initialValue(
         const DesignExtensionDefinition& definition);
 
@@ -75,13 +77,19 @@ private:
 
     struct ValidationCacheEntry {
         std::shared_ptr<const json_schema::CompiledSchema> schema;
+        QVector<DesignExtensionDomainReferenceDefinition> domainReferences;
         QJsonValue value;
         bool valid = false;
     };
 
     QHash<QString, ValidationCacheEntry> m_validationCache;
+    QHash<QString, QString> m_domainTypeLabels;
     QString m_validationCachePackage;
+    QVector<DomainDefinition> m_validationCacheDomains;
+    std::optional<DesignDomainReferenceIndex> m_domainReferenceIndex =
+        std::nullopt;
     QJsonObject m_packageData;
+    QVector<DomainDefinition> m_designDomains;
     QVector<Entry> m_entries;
     QString m_requiredPackage;
     bool m_hasDesign = false;

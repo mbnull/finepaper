@@ -1,4 +1,5 @@
 #include "application/application.h"
+#include "application/design_extension_references.h"
 #include "storage/json.h"
 
 #include <QCoreApplication>
@@ -17,10 +18,20 @@ using namespace finepaper;
 
 const QString kSettingsExtensionId = QStringLiteral("test.design.settings");
 const QString kMetadataExtensionId = QStringLiteral("test.design.metadata");
+const QString kDomainBindingsExtensionId =
+    QStringLiteral("test.design.domain-bindings");
 const QString kUnsupportedExtensionId =
     QStringLiteral("test.design.future-editor");
 const QString kSchemaViolationCode =
     QStringLiteral("design.extension_schema_violation");
+const QString kUnknownDomainReferenceCode =
+    QStringLiteral("design.extension_unknown_domain_reference");
+const QString kDomainReferenceTypeMismatchCode =
+    QStringLiteral("design.extension_domain_reference_type_mismatch");
+const QString kDomainReferenceInvalidContainerCode =
+    QStringLiteral("design.extension_domain_reference_invalid_container");
+const QString kDomainReferenceDiagnosticsTruncatedCode = QStringLiteral(
+    "design.extension_domain_reference_diagnostics_truncated");
 
 int failures = 0;
 
@@ -69,6 +80,20 @@ QJsonObject settingsValue(const QString &mode = QStringLiteral("safe")) {
                        {QStringLiteral("role"), QStringLiteral("request")}},
            QJsonObject{{QStringLiteral("id"), QStringLiteral("response")},
                        {QStringLiteral("role"), QStringLiteral("response")}}}}};
+}
+
+QJsonObject domainBindingsValue(
+    const QString &clockDomain = QStringLiteral("clk-main"),
+    const QString &securityDomain = QStringLiteral("sec-main"),
+    const QString &primaryDomain = QStringLiteral("clk-main")) {
+  return QJsonObject{
+      {QStringLiteral("bindings"),
+       QJsonArray{QJsonObject{{QStringLiteral("domain"), clockDomain}}}},
+      {QStringLiteral("groups/special"),
+       QJsonArray{QJsonObject{
+           {QStringLiteral("domain~id"), securityDomain}}}},
+      {QStringLiteral("primary"),
+       QJsonArray{QJsonObject{{QStringLiteral("domain"), primaryDomain}}}}};
 }
 
 QJsonObject settingsSchema() {
@@ -135,6 +160,55 @@ QJsonObject unsupportedSchema() {
                                QJsonArray{QStringLiteral("b")}}}}}};
 }
 
+QJsonObject domainBindingsSchema() {
+  const QJsonObject domainProperty{
+      {QStringLiteral("type"), QStringLiteral("string")}};
+  const auto bindingItems = [&](const QString &property) {
+    return QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("object")},
+        {QStringLiteral("additionalProperties"), false},
+        {QStringLiteral("required"), QJsonArray{property}},
+        {QStringLiteral("properties"),
+         QJsonObject{{property, domainProperty}}}};
+  };
+  return QJsonObject{
+      {QStringLiteral("$schema"),
+       QStringLiteral("https://json-schema.org/draft/2020-12/schema")},
+      {QStringLiteral("type"), QStringLiteral("object")},
+      {QStringLiteral("additionalProperties"), false},
+      {QStringLiteral("properties"),
+       QJsonObject{
+           {QStringLiteral("bindings"),
+            QJsonObject{
+                {QStringLiteral("type"), QStringLiteral("array")},
+                {QStringLiteral("items"),
+                 bindingItems(QStringLiteral("domain"))}}},
+           {QStringLiteral("groups/special"),
+            QJsonObject{
+                {QStringLiteral("type"), QStringLiteral("array")},
+                {QStringLiteral("items"),
+                 bindingItems(QStringLiteral("domain~id"))}}},
+           {QStringLiteral("primary"),
+            QJsonObject{
+                {QStringLiteral("type"), QStringLiteral("array")},
+                {QStringLiteral("items"),
+                 bindingItems(QStringLiteral("domain"))}}},
+           {QStringLiteral("loose"), QJsonObject{}}}}};
+}
+
+QJsonObject optionalDomainType(const QString &id, const QString &label) {
+  return QJsonObject{
+      {QStringLiteral("id"), id},
+      {QStringLiteral("label"), label},
+      {QStringLiteral("appliesTo"),
+       QJsonArray{QStringLiteral("router"), QStringLiteral("endpoint")}},
+      {QStringLiteral("cardinality"), QStringLiteral("multiple")},
+      {QStringLiteral("required"), false},
+      {QStringLiteral("properties"), QJsonArray{}},
+      {QStringLiteral("relations"), QJsonArray{}},
+      {QStringLiteral("crossingProperties"), QJsonArray{}}};
+}
+
 QJsonObject meshManifestFields() {
   return QJsonObject{
       {QStringLiteral("rows"), QJsonObject{{QStringLiteral("min"), 1},
@@ -170,7 +244,12 @@ QJsonObject strictPackageManifest() {
            {QStringLiteral("values"),
             QJsonArray{QStringLiteral("xy"), QStringLiteral("yx")}}}}},
       {QStringLiteral("endpointTypes"), QJsonArray{}},
-      {QStringLiteral("domainTypes"), QJsonArray{}},
+      {QStringLiteral("domainTypes"),
+       QJsonArray{
+           optionalDomainType(QStringLiteral("clock"),
+                              QStringLiteral("Clock Domain")),
+           optionalDomainType(QStringLiteral("security"),
+                              QStringLiteral("Security Domain"))}},
       {QStringLiteral("runtimeCapabilities"),
        QJsonObject{{QStringLiteral("domainConfiguration"),
                     QJsonObject{{QStringLiteral("domains"), false},
@@ -191,6 +270,34 @@ QJsonObject strictPackageManifest() {
                               {QStringLiteral("schema"),
                                QStringLiteral("schemas/metadata.schema.json")},
                               {QStringLiteral("version"), 1}},
+                  QJsonObject{
+                      {QStringLiteral("id"), kDomainBindingsExtensionId},
+                      {QStringLiteral("schema"),
+                       QStringLiteral("schemas/domain-bindings.schema.json")},
+                      {QStringLiteral("version"), 1},
+                      {QStringLiteral("domainReferences"),
+                       QJsonArray{
+                           QJsonObject{
+                               {QStringLiteral("pointer"),
+                                QStringLiteral("/bindings/*/domain")},
+                               {QStringLiteral("domainType"),
+                                QStringLiteral("clock")}},
+                           QJsonObject{
+                               {QStringLiteral("pointer"),
+                                QStringLiteral(
+                                    "/groups~1special/*/domain~0id")},
+                               {QStringLiteral("domainType"),
+                                QStringLiteral("security")}},
+                           QJsonObject{
+                               {QStringLiteral("pointer"),
+                                QStringLiteral("/primary/0/domain")},
+                               {QStringLiteral("domainType"),
+                                QStringLiteral("clock")}},
+                           QJsonObject{
+                               {QStringLiteral("pointer"),
+                                QStringLiteral("/loose/domain")},
+                               {QStringLiteral("domainType"),
+                                QStringLiteral("clock")}}}}},
                   QJsonObject{
                       {QStringLiteral("id"), kUnsupportedExtensionId},
                       {QStringLiteral("schema"),
@@ -261,6 +368,10 @@ bool prepareFixture(const QString &rootPath) {
          saveJsonObject(QDir(strictSchemaRoot)
                             .filePath(QStringLiteral("metadata.schema.json")),
                         metadataSchema()) &&
+         saveJsonObject(
+             QDir(strictSchemaRoot)
+                 .filePath(QStringLiteral("domain-bindings.schema.json")),
+             domainBindingsSchema()) &&
          saveJsonObject(QDir(strictSchemaRoot)
                             .filePath(QStringLiteral("unsupported.schema.json")),
                         unsupportedSchema()) &&
@@ -348,6 +459,209 @@ int main(int argc, char **argv) {
     return 1;
   }
   const NocDesign base = created.design;
+
+  const DesignResult emptyDomainBindings = application.setDesignExtension(
+      base, kDomainBindingsExtensionId, QJsonObject{});
+  check(emptyDomainBindings.success,
+        QStringLiteral(
+            "a missing optional Domain-reference path has zero matches"));
+
+  const DesignResult withClock = application.addDomain(
+      base,
+      DomainDefinition{QStringLiteral("clk-main"), QStringLiteral("clock"),
+                       QStringLiteral("Main clock"), QJsonObject{}});
+  const DesignResult withDomains =
+      withClock.success
+          ? application.addDomain(
+                withClock.design,
+                DomainDefinition{QStringLiteral("sec-main"),
+                                 QStringLiteral("security"),
+                                 QStringLiteral("Main security boundary"),
+                                 QJsonObject{}})
+          : DesignResult{};
+  check(withDomains.success,
+        QStringLiteral(
+            "Package-defined clock and security Domains can be prepared"));
+  if (!withDomains.success) {
+    return 1;
+  }
+
+  DesignExtensionDefinition rootReferenceDefinition;
+  DesignExtensionDomainReferenceDefinition rootReference;
+  rootReference.domainType = QStringLiteral("clock");
+  rootReferenceDefinition.domainReferences.append(rootReference);
+  check(validateDesignExtensionDomainReferences(
+            QJsonValue(QStringLiteral("clk-main")),
+            rootReferenceDefinition,
+            withDomains.design.domains,
+            QStringLiteral("/packageData/test.root-domain")).isEmpty(),
+        QStringLiteral(
+            "an empty RFC 6901 pointer validates a Domain id at the extension root"));
+
+  const QVector<Diagnostic> missingRootReference =
+      validateDesignExtensionDomainReferences(
+          QJsonValue(QStringLiteral("missing-clock")),
+          rootReferenceDefinition,
+          withDomains.design.domains,
+          QStringLiteral("/packageData/test.root-domain"));
+  check(hasDiagnostic(
+            missingRootReference,
+            kUnknownDomainReferenceCode,
+            QStringLiteral("/packageData/test.root-domain")),
+        QStringLiteral(
+            "a root Domain reference reports the extension namespace path"));
+
+  const DesignResult schemaFirst = application.setDesignExtension(
+      withDomains.design, kDomainBindingsExtensionId,
+      QJsonObject{{QStringLiteral("bindings"), QJsonObject{}}});
+  check(!schemaFirst.success &&
+            hasDiagnostic(
+                schemaFirst.diagnostics, kSchemaViolationCode,
+                extensionPath(kDomainBindingsExtensionId) +
+                    QStringLiteral("/bindings")) &&
+            !hasDiagnostic(schemaFirst.diagnostics,
+                           kDomainReferenceInvalidContainerCode),
+        QStringLiteral(
+            "Domain references are checked only after their JSON structure satisfies the schema"));
+
+  QJsonObject invalidReferenceContainer = domainBindingsValue();
+  invalidReferenceContainer.insert(QStringLiteral("loose"), 42);
+  checkAtomicFailure(
+      application.setDesignExtension(
+          withDomains.design,
+          kDomainBindingsExtensionId,
+          invalidReferenceContainer),
+      withDomains.design,
+      kDomainReferenceInvalidContainerCode,
+      extensionPath(kDomainBindingsExtensionId) + QStringLiteral("/loose"),
+      QStringLiteral(
+          "an existing scalar prefix cannot turn a declared reference into a silent zero match"));
+
+  const DesignResult emptyDomainReference = application.setDesignExtension(
+      withDomains.design, kDomainBindingsExtensionId,
+      domainBindingsValue(QString{}));
+  const Diagnostic *emptyDomainDiagnostic = findDiagnostic(
+      emptyDomainReference.diagnostics, kUnknownDomainReferenceCode);
+  check(!emptyDomainReference.success && emptyDomainDiagnostic &&
+            emptyDomainDiagnostic->path ==
+                extensionPath(kDomainBindingsExtensionId) +
+                    QStringLiteral("/bindings/0/domain") &&
+            emptyDomainDiagnostic->message.contains(QStringLiteral("\"\"")),
+        QStringLiteral(
+            "an empty Domain id is rejected with an unambiguous diagnostic"));
+
+  checkAtomicFailure(
+      application.setDesignExtension(
+          withDomains.design, kDomainBindingsExtensionId,
+          domainBindingsValue(QStringLiteral("missing-clock"))),
+      withDomains.design, kUnknownDomainReferenceCode,
+      extensionPath(kDomainBindingsExtensionId) +
+          QStringLiteral("/bindings/0/domain"),
+      QStringLiteral(
+          "a wildcard reference reports the exact unknown Domain path"));
+
+  QJsonArray manyInvalidBindings;
+  for (int index = 0; index < 300; ++index) {
+    manyInvalidBindings.append(QJsonObject{
+        {QStringLiteral("domain"),
+         QStringLiteral("missing-clock-%1").arg(index)}});
+  }
+  QJsonObject manyInvalidReferences = domainBindingsValue();
+  manyInvalidReferences.insert(
+      QStringLiteral("bindings"), manyInvalidBindings);
+  const DesignResult boundedReferenceDiagnostics =
+      application.setDesignExtension(
+          withDomains.design,
+          kDomainBindingsExtensionId,
+          manyInvalidReferences);
+  check(!boundedReferenceDiagnostics.success &&
+            sameDesign(boundedReferenceDiagnostics.design,
+                       withDomains.design) &&
+            boundedReferenceDiagnostics.diagnostics.size() ==
+                kMaximumDesignExtensionDomainReferenceDiagnostics &&
+            boundedReferenceDiagnostics.diagnostics.constLast().code ==
+                kDomainReferenceDiagnosticsTruncatedCode,
+        QStringLiteral(
+            "wildcard validation caps diagnostics and reports truncation atomically"));
+
+  checkAtomicFailure(
+      application.setDesignExtension(
+          withDomains.design, kDomainBindingsExtensionId,
+          domainBindingsValue(QStringLiteral("sec-main"))),
+      withDomains.design, kDomainReferenceTypeMismatchCode,
+      extensionPath(kDomainBindingsExtensionId) +
+          QStringLiteral("/bindings/0/domain"),
+      QStringLiteral(
+          "a reference to an existing Domain of the wrong type is rejected"));
+
+  checkAtomicFailure(
+      application.setDesignExtension(
+          withDomains.design, kDomainBindingsExtensionId,
+          domainBindingsValue(QStringLiteral("clk-main"),
+                              QStringLiteral("missing-security"))),
+      withDomains.design, kUnknownDomainReferenceCode,
+      extensionPath(kDomainBindingsExtensionId) +
+          QStringLiteral("/groups~1special/0/domain~0id"),
+      QStringLiteral(
+          "dynamic object tokens use escaped JSON Pointer diagnostic paths"));
+
+  checkAtomicFailure(
+      application.setDesignExtension(
+          withDomains.design, kDomainBindingsExtensionId,
+          domainBindingsValue(QStringLiteral("clk-main"),
+                              QStringLiteral("sec-main"),
+                              QStringLiteral("missing-primary"))),
+      withDomains.design, kUnknownDomainReferenceCode,
+      extensionPath(kDomainBindingsExtensionId) +
+          QStringLiteral("/primary/0/domain"),
+      QStringLiteral(
+          "a canonical exact array index resolves to its terminal value"));
+
+  const DesignResult withDomainBindings = application.setDesignExtension(
+      withDomains.design, kDomainBindingsExtensionId, domainBindingsValue());
+  check(withDomainBindings.success,
+        QStringLiteral(
+            "Package-declared references accept existing Domains of each declared type"));
+  if (!withDomainBindings.success) {
+    return 1;
+  }
+
+  checkAtomicFailure(
+      application.removeDomain(withDomainBindings.design,
+                               QStringLiteral("clk-main")),
+      withDomainBindings.design, kUnknownDomainReferenceCode,
+      extensionPath(kDomainBindingsExtensionId) +
+          QStringLiteral("/bindings/0/domain"),
+      QStringLiteral(
+          "removing a referenced Domain is rejected without changing the Design"));
+
+  DomainConfiguration withoutClock =
+      domain_configuration::fromDesign(withDomainBindings.design);
+  withoutClock.domains.erase(
+      std::remove_if(
+          withoutClock.domains.begin(), withoutClock.domains.end(),
+          [](const DomainDefinition &domain) {
+            return domain.id == QStringLiteral("clk-main");
+          }),
+      withoutClock.domains.end());
+  checkAtomicFailure(
+      application.replaceDomainConfiguration(withDomainBindings.design,
+                                             withoutClock),
+      withDomainBindings.design, kUnknownDomainReferenceCode,
+      extensionPath(kDomainBindingsExtensionId) +
+          QStringLiteral("/bindings/0/domain"),
+      QStringLiteral(
+          "replacing Domain configuration cannot leave extension references dangling"));
+
+  const DesignResult renamedClock = application.updateDomain(
+      withDomainBindings.design, QStringLiteral("clk-main"),
+      DomainDefinition{QStringLiteral("clk-main"), QStringLiteral("clock"),
+                       QStringLiteral("Renamed main clock"), QJsonObject{}});
+  check(renamedClock.success &&
+            renamedClock.design.packageData.value(kDomainBindingsExtensionId) ==
+                domainBindingsValue(),
+        QStringLiteral(
+            "updating a referenced Domain without changing its id or type remains valid"));
 
   checkAtomicFailure(
       application.setDesignExtension(

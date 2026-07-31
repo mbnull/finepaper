@@ -1,5 +1,6 @@
 #include "application/application.h"
 
+#include "application/design_extension_references.h"
 #include "application/domain_runtime_validation.h"
 #include "application/domain_service.h"
 
@@ -22,6 +23,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 
 namespace finepaper {
 namespace {
@@ -164,6 +166,7 @@ void mergeValues(QJsonObject& target, const QJsonObject& source) {
 QVector<Diagnostic> validateDesignExtensionValue(
     const QJsonValue& value,
     const DesignExtensionDefinition& definition,
+    const DesignDomainReferenceIndex* domains,
     const QString& basePath) {
     QVector<Diagnostic> diagnostics;
     if (definition.schemaStatus != json_schema::CompileStatus::Ready
@@ -204,6 +207,11 @@ QVector<Diagnostic> validateDesignExtensionValue(
             QStringLiteral("the extension value does not satisfy its Package schema"),
             basePath,
             QStringLiteral("package"));
+    }
+    Q_ASSERT(domains || definition.domainReferences.isEmpty());
+    if (validation.success && domains) {
+        diagnostics += validateDesignExtensionDomainReferences(
+            value, definition, *domains, basePath);
     }
     return diagnostics;
 }
@@ -1265,14 +1273,25 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
     const bool strictDesignExtensions = package.formatVersion >= 3
         || package.designExtensionsDeclared;
     if (strictDesignExtensions) {
+        std::optional<DesignDomainReferenceIndex> domainReferenceIndex =
+            std::nullopt;
         for (auto it = design.packageData.constBegin();
              it != design.packageData.constEnd(); ++it) {
             const DesignExtensionDefinition* definition =
                 package.designExtension(it.key());
             if (definition) {
+                if (!definition->domainReferences.isEmpty()
+                    && !domainReferenceIndex) {
+                    domainReferenceIndex =
+                        DesignDomainReferenceIndex::fromDomains(
+                            design.domains);
+                }
                 diagnostics += validateDesignExtensionValue(
                     it.value(),
                     *definition,
+                    domainReferenceIndex
+                        ? &*domainReferenceIndex
+                        : nullptr,
                     QStringLiteral("/packageData/")
                         + jsonPointerToken(it.key()));
                 continue;

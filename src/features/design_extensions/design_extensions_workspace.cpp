@@ -1,5 +1,6 @@
 #include "features/design_extensions/design_extensions_workspace.h"
 
+#include "application/design_extension_references.h"
 #include "features/design_extensions/design_extension_editor_dialog.h"
 
 #include <QAbstractItemView>
@@ -19,8 +20,11 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cstddef>
 #include <iterator>
+#include <queue>
 #include <utility>
+#include <vector>
 
 namespace finepaper {
 namespace {
@@ -59,6 +63,24 @@ bool supportedEditor(const DesignExtensionDefinition& definition) {
         && definition.editor->kind == QStringLiteral("json-schema");
 }
 
+struct DomainCandidateBefore {
+    bool operator()(const DomainDefinition* left,
+                    const DomainDefinition* right) const {
+        return left->id != right->id ? left->id < right->id
+                                    : left->name < right->name;
+    }
+};
+
+using DomainCandidateHeap = std::priority_queue<
+    const DomainDefinition*,
+    std::vector<const DomainDefinition*>,
+    DomainCandidateBefore>;
+
+struct DomainCandidateBucket {
+    DomainCandidateHeap candidates;
+    qsizetype matchingCount = 0;
+};
+
 QString editorUnavailableReason(
     const DesignExtensionDefinition& definition) {
     if (definition.schemaStatus != json_schema::CompileStatus::Ready
@@ -76,6 +98,112 @@ QString editorUnavailableReason(
             .arg(definition.editor->kind);
     }
     return {};
+}
+
+QString domainReferenceSummary(
+    const DesignExtensionDefinition& definition,
+    const QVector<DomainDefinition>& domains,
+    const QHash<QString, QString>& domainTypeLabels) {
+    if (definition.domainReferences.isEmpty()) {
+        return {};
+    }
+
+    QStringList lines = {QStringLiteral("Package-declared JSON paths:")};
+    QStringList referencedTypes;
+    for (const DesignExtensionDomainReferenceDefinition& reference
+         : definition.domainReferences) {
+        const QString typeLabel = domainTypeLabels.value(
+            reference.domainType, reference.domainType);
+        const QString pointer = reference.pointer();
+        const QString pointerLabel = pointer.isEmpty()
+            ? QStringLiteral("<extension root>")
+            : pointer;
+        lines.append(
+            QStringLiteral("  %1 → %2 (%3)")
+                .arg(pointerLabel,
+                     typeLabel.simplified(),
+                     reference.domainType));
+        if (!referencedTypes.contains(reference.domainType)) {
+            referencedTypes.append(reference.domainType);
+        }
+    }
+
+    lines.append(QString{});
+    lines.append(QStringLiteral("Available design Domains:"));
+    constexpr qsizetype maximumVisibleCandidates = 256;
+    constexpr qsizetype maximumCandidateLabelCharacters = 64 * 1024;
+    qsizetype remainingCandidateLabelCharacters =
+        maximumCandidateLabelCharacters;
+    QHash<QString, DomainCandidateBucket> candidateBuckets;
+    candidateBuckets.reserve(referencedTypes.size());
+    for (const QString& type : referencedTypes) {
+        candidateBuckets.insert(type, DomainCandidateBucket{});
+    }
+    const DomainCandidateBefore candidateBefore;
+    for (const DomainDefinition& domain : domains) {
+        auto bucket = candidateBuckets.find(domain.type);
+        if (bucket == candidateBuckets.end()) {
+            continue;
+        }
+        ++bucket->matchingCount;
+        if (bucket->candidates.size()
+                < static_cast<std::size_t>(maximumVisibleCandidates)) {
+            bucket->candidates.push(&domain);
+        } else if (candidateBefore(&domain, bucket->candidates.top())) {
+            bucket->candidates.pop();
+            bucket->candidates.push(&domain);
+        }
+    }
+
+    for (const QString& type : referencedTypes) {
+        DomainCandidateBucket& bucket = candidateBuckets[type];
+        QVector<const DomainDefinition*> candidates;
+        candidates.reserve(
+            static_cast<qsizetype>(bucket.candidates.size()));
+        while (!bucket.candidates.empty()) {
+            candidates.append(bucket.candidates.top());
+            bucket.candidates.pop();
+        }
+        std::sort(
+            candidates.begin(), candidates.end(), candidateBefore);
+
+        QStringList candidateLabels;
+        candidateLabels.reserve(candidates.size());
+        qsizetype displayedCount = 0;
+        for (const DomainDefinition* domain : candidates) {
+            const QString name = domain->name.simplified();
+            const QString label = name.isEmpty() || name == domain->id
+                ? domain->id
+                : QStringLiteral("%1 — %2").arg(domain->id).arg(name);
+            const qsizetype separatorCharacters = candidateLabels.isEmpty()
+                ? 0 : 2;
+            if (label.size() + separatorCharacters
+                > remainingCandidateLabelCharacters) {
+                break;
+            }
+            candidateLabels.append(label);
+            remainingCandidateLabelCharacters -=
+                label.size() + separatorCharacters;
+            ++displayedCount;
+        }
+        const qsizetype omittedCount =
+            bucket.matchingCount - displayedCount;
+        if (omittedCount > 0) {
+            candidateLabels.append(
+                QStringLiteral(
+                    "… %1 more; open Domain Configuration for the complete list")
+                    .arg(omittedCount));
+        }
+        const QString typeLabel = domainTypeLabels.value(type, type);
+        lines.append(
+            QStringLiteral("  %1 (%2): %3")
+                .arg(typeLabel.simplified(),
+                     type,
+                     candidateLabels.isEmpty()
+                         ? QStringLiteral("none configured")
+                         : candidateLabels.join(QStringLiteral(", "))));
+    }
+    return lines.join(QLatin1Char('\n'));
 }
 
 } // namespace
@@ -266,16 +394,29 @@ void DesignExtensionsWorkspace::setContext(
     m_hasDesign = design;
     m_hasPackage = package;
     m_packageData = design ? design->packageData : QJsonObject{};
+    m_designDomains = design ? design->domains
+                             : QVector<DomainDefinition>{};
     m_requiredPackage = design
         ? QStringLiteral("%1@%2")
               .arg(design->package.id, design->package.version)
         : QString();
-    if (m_validationCachePackage != m_requiredPackage) {
+    // Domain-reference validity depends on the current Domain snapshot in
+    // addition to the schema/value pair used by each cache entry.
+    if (m_validationCachePackage != m_requiredPackage
+        || m_validationCacheDomains != m_designDomains) {
         m_validationCache.clear();
         m_validationCachePackage = m_requiredPackage;
+        m_validationCacheDomains = m_designDomains;
+        m_domainReferenceIndex.reset();
     }
     m_definitions = package ? package->designExtensions
                             : QVector<DesignExtensionDefinition>{};
+    m_domainTypeLabels.clear();
+    if (package) {
+        for (const DomainTypeDefinition& type : package->domainTypes) {
+            m_domainTypeLabels.insert(type.id, type.label);
+        }
+    }
 
     rebuildEntries();
     rebuildList();
@@ -313,7 +454,8 @@ void DesignExtensionsWorkspace::rebuildEntries() {
         bool storedValueValid = true;
         if (entry.configured && schemaReady) {
             cacheable.insert(definition.id);
-            storedValueValid = structurallyValid(definition, entry.value);
+            storedValueValid = packageDeclaredValueValid(
+                definition, entry.value);
         }
 
         if (!schemaReady) {
@@ -328,8 +470,11 @@ void DesignExtensionsWorkspace::rebuildEntries() {
                 ? QStringLiteral("Invalid value · Repair available")
                 : QStringLiteral("Invalid value · Read-only");
             entry.statusDetails = entry.editable
-                ? QStringLiteral(
-                      "Open the JSON editor to repair the stored value before validation or generation.")
+                ? (definition.domainReferences.isEmpty()
+                      ? QStringLiteral(
+                            "Open the JSON editor to repair the stored value before validation or generation.")
+                      : QStringLiteral(
+                            "Open the JSON editor to repair its Package schema or Design Domain references before validation or generation."))
                 : editorUnavailableReason(definition);
         } else if (!entry.editable) {
             entry.statusKind = Entry::StatusKind::ReadOnly;
@@ -340,8 +485,11 @@ void DesignExtensionsWorkspace::rebuildEntries() {
         } else if (entry.configured) {
             entry.statusKind = Entry::StatusKind::Configured;
             entry.status = QStringLiteral("Configured · Editable");
-            entry.statusDetails = QStringLiteral(
-                "The stored JSON satisfies the Package schema. Package semantic checks run during Validate / DRC and generation.");
+            entry.statusDetails = definition.domainReferences.isEmpty()
+                ? QStringLiteral(
+                      "The stored JSON satisfies the Package schema. Package semantic checks run during Validate / DRC and generation.")
+                : QStringLiteral(
+                      "The stored JSON satisfies the Package schema and Package-declared Design Domain references. Deeper Package semantic checks run during Validate / DRC and generation.");
         } else {
             entry.status = QStringLiteral("Not configured · Editable");
             entry.statusDetails = definition.schemaDocument.contains(
@@ -532,6 +680,13 @@ void DesignExtensionsWorkspace::openSelected() {
     context.editorMessage = entry.statusDetails;
     context.value = entry.value;
     context.definition = entry.definition;
+    if (entry.definition) {
+        context.domainReferenceSummary = domainReferenceSummary(
+            *entry.definition, m_designDomains, m_domainTypeLabels);
+        if (!entry.definition->domainReferences.isEmpty()) {
+            context.domainReferenceIndex = domainReferenceIndex();
+        }
+    }
     context.configured = entry.configured;
     context.editable = entry.editable;
 
@@ -603,23 +758,44 @@ int DesignExtensionsWorkspace::selectedEntryIndex() const {
         : static_cast<int>(std::distance(m_entries.cbegin(), found));
 }
 
-bool DesignExtensionsWorkspace::structurallyValid(
+bool DesignExtensionsWorkspace::packageDeclaredValueValid(
     const DesignExtensionDefinition& definition,
     const QJsonValue& value) {
     const auto cached = m_validationCache.constFind(definition.id);
     if (cached != m_validationCache.cend()
         && cached->schema == definition.compiledSchema
+        && cached->domainReferences == definition.domainReferences
         && cached->value == value) {
         return cached->valid;
     }
-    const bool valid = definition.schemaStatus
+    const bool schemaValid = definition.schemaStatus
             == json_schema::CompileStatus::Ready
         && definition.compiledSchema
         && json_schema::validate(*definition.compiledSchema, value).success;
+    bool domainReferencesValid = true;
+    if (schemaValid && !definition.domainReferences.isEmpty()) {
+        domainReferencesValid =
+            !hasErrors(validateDesignExtensionDomainReferences(
+                value, definition, domainReferenceIndex()));
+    }
+    const bool valid = schemaValid && domainReferencesValid;
     m_validationCache.insert(
         definition.id,
-        ValidationCacheEntry{definition.compiledSchema, value, valid});
+        ValidationCacheEntry{
+            definition.compiledSchema,
+            definition.domainReferences,
+            value,
+            valid});
     return valid;
+}
+
+const DesignDomainReferenceIndex&
+DesignExtensionsWorkspace::domainReferenceIndex() {
+    if (!m_domainReferenceIndex) {
+        m_domainReferenceIndex =
+            DesignDomainReferenceIndex::fromDomains(m_designDomains);
+    }
+    return *m_domainReferenceIndex;
 }
 
 QJsonValue DesignExtensionsWorkspace::initialValue(

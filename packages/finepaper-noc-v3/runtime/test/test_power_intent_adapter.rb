@@ -608,7 +608,7 @@ class PowerIntentAdapterTest < Minitest::Test
       'formatVersion' => 3,
       'id' => 'power_adapter',
       'name' => 'Power Adapter',
-      'package' => {'id' => 'finepaper.noc', 'version' => '3.0.0'},
+      'package' => {'id' => 'finepaper.noc', 'version' => '3.1.0'},
       'topology' => {'type' => 'mesh', 'rows' => 1, 'columns' => 1},
       'parameters' => {'dataWidth' => 64, 'flitWidth' => 128, 'addrWidth' => 32},
       'endpoints' => [
@@ -673,7 +673,7 @@ class PowerIntentAdapterTest < Minitest::Test
       'formatVersion' => 3,
       'id' => 'mixed_power',
       'name' => 'Mixed Power Boundaries',
-      'package' => {'id' => 'finepaper.noc', 'version' => '3.0.0'},
+      'package' => {'id' => 'finepaper.noc', 'version' => '3.1.0'},
       'topology' => {'type' => 'mesh', 'rows' => 1, 'columns' => 2},
       'parameters' => {'dataWidth' => 64, 'flitWidth' => 128, 'addrWidth' => 32},
       'endpoints' => [

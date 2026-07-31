@@ -16,6 +16,10 @@ namespace finepaper {
 inline constexpr int kMaximumPackageTimeoutSeconds = 86'400;
 inline constexpr int kMaximumEndpointAttachmentsPerRouter = 4'096;
 inline constexpr int kMaximumDesignExtensionsPerPackage = 64;
+inline constexpr int kMaximumDesignExtensionDomainReferences = 64;
+inline constexpr int
+    kMaximumDesignExtensionDomainReferencePointerCharacters = 4'096;
+inline constexpr int kMaximumDesignExtensionDomainReferencePointerTokens = 64;
 inline constexpr int kMaximumDesignExtensionSchemaBytes = 1 * 1024 * 1024;
 inline constexpr int kMaximumDesignExtensionSchemaTotalBytes = 8 * 1024 * 1024;
 inline constexpr int kMinimumPackageFormatVersion = 1;
@@ -191,6 +195,29 @@ struct DesignExtensionEditorDefinition {
     QString kind;
 };
 
+// A Package-declared reference from one or more locations in an extension
+// value to Design Domains of a specific type. A token equal to `*` is a
+// single-array-level wildcard. The source pointer is reconstructed from the
+// sole canonical token representation so traversal and diagnostics cannot
+// disagree.
+struct DesignExtensionDomainReferenceDefinition {
+    QStringList pointerTokens;
+    QString domainType;
+
+    [[nodiscard]] QString pointer() const {
+        QString value;
+        for (QString token : pointerTokens) {
+            token.replace(QLatin1Char('~'), QStringLiteral("~0"));
+            token.replace(QLatin1Char('/'), QStringLiteral("~1"));
+            value += QLatin1Char('/');
+            value += token;
+        }
+        return value;
+    }
+
+    bool operator==(const DesignExtensionDomainReferenceDefinition&) const = default;
+};
+
 // A Package-owned namespace in NocDesign::packageData. The schema document is
 // loaded at the Package boundary after path containment, size, JSON-root, and
 // local-reference checks. Generic consumers may validate the namespace against
@@ -205,6 +232,7 @@ struct DesignExtensionDefinition {
     QVector<json_schema::Issue> schemaIssues;
     int version = 0;
     std::optional<DesignExtensionEditorDefinition> editor = std::nullopt;
+    QVector<DesignExtensionDomainReferenceDefinition> domainReferences;
 };
 
 struct PackageDefinition {

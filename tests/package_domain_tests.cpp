@@ -109,6 +109,15 @@ QJsonObject designExtensionWithEditor(
     return extension;
 }
 
+QJsonObject designExtensionDomainReference(
+    const QString& pointer,
+    const QString& domainType) {
+    return QJsonObject{
+        {QStringLiteral("pointer"), pointer},
+        {QStringLiteral("domainType"), domainType}
+    };
+}
+
 QJsonObject completeRuntimeCapabilities() {
     return QJsonObject{
         {QStringLiteral("domainConfiguration"), QJsonObject{
@@ -450,7 +459,8 @@ int main(int argc, char** argv) {
               && loadedExtension->schemaIssues.isEmpty()
               && loadedExtension->version == 1
               && loadedExtension->editor
-              && loadedExtension->editor->kind == QStringLiteral("json-schema"),
+              && loadedExtension->editor->kind == QStringLiteral("json-schema")
+              && loadedExtension->domainReferences.isEmpty(),
           QStringLiteral(
               "Package design extensions retain their loaded schema and editor capability"));
 
@@ -466,9 +476,298 @@ int main(int argc, char** argv) {
               QStringLiteral("test.package.settings"))
         : nullptr;
     check(noExtensionEditorResult.success && extensionWithoutEditor
-              && !extensionWithoutEditor->editor,
+              && !extensionWithoutEditor->editor
+              && extensionWithoutEditor->domainReferences.isEmpty(),
           QStringLiteral(
-              "an omitted editor capability remains absent instead of being inferred"));
+              "omitted editor and Domain-reference capabilities remain absent instead of being inferred"));
+
+    const auto manifestWithDomainReferences = [](const QJsonValue& references) {
+        QJsonObject manifest = baseManifest(2);
+        manifest.insert(QStringLiteral("domainTypes"), completeDomainTypes());
+        QJsonObject extension = designExtension(
+            QStringLiteral("test.package.settings"));
+        extension.insert(QStringLiteral("domainReferences"), references);
+        manifest.insert(
+            QStringLiteral("designExtensions"), QJsonArray{extension});
+        return manifest;
+    };
+
+    const QJsonArray validDomainReferences{
+        designExtensionDomainReference(
+            QStringLiteral("/domains/*/domain"),
+            QStringLiteral("power")),
+        designExtensionDomainReference(
+            QStringLiteral("/escaped~1name/~0metadata/*"),
+            QStringLiteral("clock"))
+    };
+    const PackageLoadResult domainReferenceResult = loadManifest(
+        fixture.path(), manifestWithDomainReferences(validDomainReferences));
+    const DesignExtensionDefinition* domainReferenceExtension =
+        domainReferenceResult.package
+        ? domainReferenceResult.package->designExtension(
+              QStringLiteral("test.package.settings"))
+        : nullptr;
+    check(domainReferenceResult.success && domainReferenceExtension
+              && domainReferenceExtension->domainReferences.size() == 2
+              && domainReferenceExtension->domainReferences[0].pointer()
+                  == QStringLiteral("/domains/*/domain")
+              && domainReferenceExtension->domainReferences[0].pointerTokens
+                  == QStringList{
+                      QStringLiteral("domains"),
+                      QStringLiteral("*"),
+                      QStringLiteral("domain")
+                  }
+              && domainReferenceExtension->domainReferences[0].domainType
+                  == QStringLiteral("power")
+              && domainReferenceExtension->domainReferences[1].pointer()
+                  == QStringLiteral("/escaped~1name/~0metadata/*")
+              && domainReferenceExtension->domainReferences[1].pointerTokens
+                  == QStringList{
+                      QStringLiteral("escaped/name"),
+                      QStringLiteral("~metadata"),
+                      QStringLiteral("*")
+                  }
+              && domainReferenceExtension->domainReferences[1].domainType
+                  == QStringLiteral("clock"),
+          QStringLiteral(
+              "Package Domain references preserve source pointers and decoded RFC 6901 wildcard tokens"));
+
+    const PackageLoadResult rootDomainReferenceResult = loadManifest(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{
+            designExtensionDomainReference(QString{}, QStringLiteral("power"))
+        }));
+    const DesignExtensionDefinition* rootDomainReferenceExtension =
+        rootDomainReferenceResult.package
+        ? rootDomainReferenceResult.package->designExtension(
+              QStringLiteral("test.package.settings"))
+        : nullptr;
+    check(rootDomainReferenceResult.success && rootDomainReferenceExtension
+              && rootDomainReferenceExtension->domainReferences.size() == 1
+              && rootDomainReferenceExtension->domainReferences.constFirst()
+                     .pointer().isEmpty()
+              && rootDomainReferenceExtension->domainReferences.constFirst()
+                     .pointerTokens.isEmpty(),
+          QStringLiteral(
+              "an empty RFC 6901 pointer targets the Design Extension root"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonObject{}),
+        QStringLiteral("package.invalid_design_extension_domain_references"),
+        QStringLiteral("a non-array design extension Domain-reference declaration"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{true}),
+        QStringLiteral("package.invalid_design_extension_domain_reference"),
+        QStringLiteral("a non-object design extension Domain reference"));
+
+    QJsonObject unknownDomainReferenceField = designExtensionDomainReference(
+        QStringLiteral("/domains/*/domain"), QStringLiteral("power"));
+    unknownDomainReferenceField.insert(QStringLiteral("bad/~field"), true);
+    const PackageLoadResult unknownDomainReferenceFieldResult = loadManifest(
+        fixture.path(),
+        manifestWithDomainReferences(
+            QJsonArray{unknownDomainReferenceField}));
+    const auto unknownDomainReferenceFieldDiagnostic = std::find_if(
+        unknownDomainReferenceFieldResult.diagnostics.cbegin(),
+        unknownDomainReferenceFieldResult.diagnostics.cend(),
+        [](const Diagnostic& diagnostic) {
+            return diagnostic.code
+                == QStringLiteral(
+                    "package.unknown_design_extension_domain_reference_field");
+        });
+    check(!unknownDomainReferenceFieldResult.success
+              && unknownDomainReferenceFieldDiagnostic
+                  != unknownDomainReferenceFieldResult.diagnostics.cend()
+              && unknownDomainReferenceFieldDiagnostic->path
+                  == QStringLiteral(
+                      "/designExtensions/0/domainReferences/0/bad~1~0field"),
+          QStringLiteral(
+              "unknown Domain-reference fields have escaped, item-scoped diagnostics"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{QJsonObject{
+            {QStringLiteral("domainType"), QStringLiteral("power")}
+        }}),
+        QStringLiteral(
+            "package.invalid_design_extension_domain_reference_pointer"),
+        QStringLiteral("a Domain reference without a pointer"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{QJsonObject{
+            {QStringLiteral("pointer"), true},
+            {QStringLiteral("domainType"), QStringLiteral("power")}
+        }}),
+        QStringLiteral(
+            "package.invalid_design_extension_domain_reference_pointer"),
+        QStringLiteral("a Domain reference with a non-string pointer"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{
+            designExtensionDomainReference(
+                QStringLiteral("   "), QStringLiteral("power"))
+        }),
+        QStringLiteral(
+            "package.invalid_design_extension_domain_reference_pointer"),
+        QStringLiteral("a whitespace-only Domain-reference pointer"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{
+            designExtensionDomainReference(
+                QStringLiteral("domains/*/domain"), QStringLiteral("power"))
+        }),
+        QStringLiteral(
+            "package.invalid_design_extension_domain_reference_pointer"),
+        QStringLiteral("a Domain-reference pointer outside the extension root"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{
+            designExtensionDomainReference(
+                QStringLiteral("/domains/~2/domain"), QStringLiteral("power"))
+        }),
+        QStringLiteral(
+            "package.invalid_design_extension_domain_reference_pointer"),
+        QStringLiteral("a Domain-reference pointer with an invalid RFC 6901 escape"));
+
+    QString overlongDomainReferencePointer(
+        kMaximumDesignExtensionDomainReferencePointerCharacters + 1,
+        QLatin1Char('x'));
+    overlongDomainReferencePointer[0] = QLatin1Char('/');
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{
+            designExtensionDomainReference(
+                overlongDomainReferencePointer, QStringLiteral("power"))
+        }),
+        QStringLiteral(
+            "package.design_extension_domain_reference_pointer_too_long"),
+        QStringLiteral("an overlong Domain-reference pointer"));
+
+    QStringList excessivePointerTokens;
+    excessivePointerTokens.fill(
+        QStringLiteral("item"),
+        kMaximumDesignExtensionDomainReferencePointerTokens + 1);
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{
+            designExtensionDomainReference(
+                QLatin1Char('/') + excessivePointerTokens.join(QLatin1Char('/')),
+                QStringLiteral("power"))
+        }),
+        QStringLiteral(
+            "package.design_extension_domain_reference_pointer_too_deep"),
+        QStringLiteral("an over-deep Domain-reference pointer"));
+
+    const PackageLoadResult incompletePointerEscapeResult = loadManifest(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{
+            designExtensionDomainReference(
+                QStringLiteral("/domains/domain~"), QStringLiteral("power"))
+        }));
+    const auto incompletePointerEscapeDiagnostic = std::find_if(
+        incompletePointerEscapeResult.diagnostics.cbegin(),
+        incompletePointerEscapeResult.diagnostics.cend(),
+        [](const Diagnostic& diagnostic) {
+            return diagnostic.code
+                == QStringLiteral(
+                    "package.invalid_design_extension_domain_reference_pointer");
+        });
+    check(!incompletePointerEscapeResult.success
+              && incompletePointerEscapeDiagnostic
+                  != incompletePointerEscapeResult.diagnostics.cend()
+              && incompletePointerEscapeDiagnostic->path
+                  == QStringLiteral(
+                      "/designExtensions/0/domainReferences/0/pointer"),
+          QStringLiteral(
+              "incomplete pointer escapes have a field-scoped diagnostic"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{QJsonObject{
+            {QStringLiteral("pointer"), QStringLiteral("/domains/*/domain")}
+        }}),
+        QStringLiteral(
+            "package.invalid_design_extension_domain_reference_domain_type"),
+        QStringLiteral("a Domain reference without a Domain Type"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{QJsonObject{
+            {QStringLiteral("pointer"), QStringLiteral("/domains/*/domain")},
+            {QStringLiteral("domainType"), false}
+        }}),
+        QStringLiteral(
+            "package.invalid_design_extension_domain_reference_domain_type"),
+        QStringLiteral("a Domain reference with a non-string Domain Type"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{
+            designExtensionDomainReference(
+                QStringLiteral("/domains/*/domain"), QStringLiteral("missing"))
+        }),
+        QStringLiteral(
+            "package.unknown_design_extension_domain_reference_type"),
+        QStringLiteral("a Domain reference to an undeclared Domain Type"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{
+            designExtensionDomainReference(
+                QStringLiteral("/domains/*/domain"), QStringLiteral("power")),
+            designExtensionDomainReference(
+                QStringLiteral("/domains/*/domain"), QStringLiteral("clock"))
+        }),
+        QStringLiteral(
+            "package.duplicate_design_extension_domain_reference"),
+        QStringLiteral("duplicate Domain-reference pointer patterns"));
+
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(QJsonArray{
+            designExtensionDomainReference(QString{}, QStringLiteral("power")),
+            designExtensionDomainReference(QString{}, QStringLiteral("clock"))
+        }),
+        QStringLiteral(
+            "package.duplicate_design_extension_domain_reference"),
+        QStringLiteral("duplicate root Domain-reference pointer patterns"));
+
+    QJsonArray maximumDomainReferences;
+    for (int index = 0; index < kMaximumDesignExtensionDomainReferences; ++index) {
+        maximumDomainReferences.append(designExtensionDomainReference(
+            QStringLiteral("/references/%1").arg(index),
+            QStringLiteral("power")));
+    }
+    const PackageLoadResult maximumDomainReferencesResult = loadManifest(
+        fixture.path(),
+        manifestWithDomainReferences(maximumDomainReferences));
+    const DesignExtensionDefinition* maximumDomainReferencesExtension =
+        maximumDomainReferencesResult.package
+        ? maximumDomainReferencesResult.package->designExtension(
+              QStringLiteral("test.package.settings"))
+        : nullptr;
+    check(maximumDomainReferencesResult.success
+              && maximumDomainReferencesExtension
+              && maximumDomainReferencesExtension->domainReferences.size()
+                  == kMaximumDesignExtensionDomainReferences,
+          QStringLiteral(
+              "a design extension accepts the maximum Domain-reference count"));
+
+    maximumDomainReferences.append(designExtensionDomainReference(
+        QStringLiteral("/references/overflow"), QStringLiteral("power")));
+    expectFailure(
+        fixture.path(),
+        manifestWithDomainReferences(maximumDomainReferences),
+        QStringLiteral(
+            "package.too_many_design_extension_domain_references"),
+        QStringLiteral("a design extension above the Domain-reference limit"));
 
     QJsonObject futureEditorExtension = designExtensionWithEditor(
         QStringLiteral("test.package.settings"),

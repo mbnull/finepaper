@@ -315,6 +315,47 @@ void workspaceStateMatrix() {
                      == QStringLiteral("vendor.a"),
           QStringLiteral(
               "context rebuild falls back deliberately when the selected stable id disappears"));
+
+    PackageDefinition cachedPackage;
+    cachedPackage.id = QStringLiteral("vendor.cached-noc");
+    cachedPackage.version = QStringLiteral("1.0");
+    cachedPackage.designExtensionsDeclared = true;
+    cachedPackage.designExtensions = {definitionFor(
+        QStringLiteral("vendor.cached"),
+        QJsonObject{{QStringLiteral("type"), QStringLiteral("object")}})};
+    NocDesign cachedDesign;
+    cachedDesign.package = PackageReference{
+        cachedPackage.id, cachedPackage.version};
+    cachedDesign.packageData.insert(
+        QStringLiteral("vendor.cached"),
+        QJsonObject{
+            {QStringLiteral("domain"), QStringLiteral("missing-power")}});
+    DesignExtensionsWorkspace cacheWorkspace;
+    cacheWorkspace.setContext(&cachedDesign, &cachedPackage);
+    auto* cacheList = cacheWorkspace.findChild<QListWidget*>(
+        QStringLiteral("finepaper.designExtensions.list"));
+    auto* cacheStatus = cacheWorkspace.findChild<QLabel*>(
+        QStringLiteral("finepaper.designExtensions.status"));
+    if (cacheList) {
+        cacheList->setCurrentRow(0);
+    }
+    QApplication::processEvents();
+    const bool initiallySchemaValid = cacheStatus
+        && cacheStatus->text().contains(QStringLiteral("Configured"));
+
+    DesignExtensionDomainReferenceDefinition cachedReference;
+    cachedReference.pointerTokens = {QStringLiteral("domain")};
+    cachedReference.domainType = QStringLiteral("power");
+    cachedPackage.designExtensions[0].domainReferences = {cachedReference};
+    cacheWorkspace.setContext(&cachedDesign, &cachedPackage);
+    if (cacheList) {
+        cacheList->setCurrentRow(0);
+    }
+    QApplication::processEvents();
+    check(initiallySchemaValid && cacheStatus
+              && cacheStatus->text().contains(QStringLiteral("Invalid value")),
+          QStringLiteral(
+              "same-version Package reference declaration changes invalidate cached extension validation"));
 }
 
 void dialogJsonAndTransactionSemantics() {
@@ -395,6 +436,10 @@ void dialogJsonAndTransactionSemantics() {
     failureEditor->setPlainText(rawDraft);
     check(waitUntil([&] { return failureApply->isEnabled(); }),
           QStringLiteral("schema-valid object draft enables Apply"));
+    check(!validationState->text().contains(
+              QStringLiteral("Domain reference")),
+          QStringLiteral(
+              "schema-only extension status does not claim Domain-reference validation"));
     int failedCalls = 0;
     failureDialog.applyRequested = [&](QString, QJsonValue) {
         ++failedCalls;
@@ -667,6 +712,209 @@ void dialogJsonAndTransactionSemantics() {
     QApplication::clipboard()->clear();
 }
 
+void dialogDomainReferenceContextAndValidation() {
+    using namespace finepaper;
+
+    DesignExtensionDefinition definition = definitionFor(
+        QStringLiteral("vendor.domain-aware"),
+        QJsonObject{{QStringLiteral("type"), QStringLiteral("object")}});
+    DesignExtensionDomainReferenceDefinition reference;
+    reference.pointerTokens = {
+        QStringLiteral("bindings"),
+        QStringLiteral("*"),
+        QStringLiteral("domain")};
+    reference.domainType = QStringLiteral("power");
+    definition.domainReferences.append(reference);
+    DesignExtensionDomainReferenceDefinition spacedReference;
+    spacedReference.pointerTokens = {
+        QStringLiteral("groups"),
+        QStringLiteral("with  spaces"),
+        QStringLiteral("*"),
+        QStringLiteral("domain")};
+    spacedReference.domainType = QStringLiteral("power");
+    definition.domainReferences.append(spacedReference);
+
+    const DomainDefinition powerMain{
+        QStringLiteral("power-main"),
+        QStringLiteral("power"),
+        QStringLiteral("Main power"),
+        {}};
+    const DomainDefinition powerAux{
+        QStringLiteral("power-aux"),
+        QStringLiteral("power"),
+        QStringLiteral("Auxiliary power"),
+        {}};
+    const DomainDefinition clockMain{
+        QStringLiteral("clock-main"),
+        QStringLiteral("clock"),
+        QStringLiteral("Main clock"),
+        {}};
+
+    PackageDefinition package;
+    package.id = QStringLiteral("vendor.noc");
+    package.version = QStringLiteral("1.0");
+    package.designExtensionsDeclared = true;
+    package.domainTypes = {
+        DomainTypeDefinition{
+            .id = QStringLiteral("power"),
+            .label = QStringLiteral("Power domain")},
+        DomainTypeDefinition{
+            .id = QStringLiteral("clock"),
+            .label = QStringLiteral("Clock domain")}};
+    package.designExtensions = {definition};
+
+    NocDesign design;
+    design.package = PackageReference{package.id, package.version};
+    design.domains = {powerMain, powerAux, clockMain};
+    for (int index = 0; index < 260; ++index) {
+        design.domains.append(DomainDefinition{
+            QStringLiteral("zz-power-extra-%1")
+                .arg(index, 3, 10, QLatin1Char('0')),
+            QStringLiteral("power"),
+            QStringLiteral("Extra power %1").arg(index),
+            {}});
+    }
+    const QJsonObject configuredBindings{
+        {QStringLiteral("bindings"),
+         QJsonArray{QJsonObject{
+             {QStringLiteral("domain"), QStringLiteral("power-main")}}}}};
+    design.packageData.insert(
+        definition.id, configuredBindings);
+
+    DesignExtensionsWorkspace workspace;
+    workspace.resize(900, 620);
+    workspace.show();
+    workspace.setContext(&design, &package);
+    auto* open = workspace.findChild<QPushButton*>(
+        QStringLiteral("finepaper.designExtensions.open"));
+    bool summaryObserved = false;
+    QTimer::singleShot(0, &workspace, [&summaryObserved] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (widget->objectName()
+                != QStringLiteral(
+                    "finepaper.designExtensions.editorDialog")) {
+                continue;
+            }
+            auto* summary = widget->findChild<QPlainTextEdit*>(
+                QStringLiteral(
+                    "finepaper.designExtensions.domainReferences"));
+            summaryObserved = summary && summary->isReadOnly()
+                && summary->tabChangesFocus()
+                && summary->toPlainText().contains(
+                    QStringLiteral("/bindings/*/domain"))
+                && summary->toPlainText().contains(
+                    QStringLiteral("/groups/with  spaces/*/domain"))
+                && summary->toPlainText().contains(
+                    QStringLiteral("power-main — Main power"))
+                && summary->toPlainText().contains(
+                    QStringLiteral("power-aux — Auxiliary power"))
+                && summary->toPlainText().contains(
+                    QStringLiteral("zz-power-extra-012 — Extra power 12"))
+                && summary->toPlainText().contains(
+                    QStringLiteral(
+                        "… 6 more; open Domain Configuration for the complete list"))
+                && !summary->toPlainText().contains(
+                    QStringLiteral("zz-power-extra-259"))
+                && !summary->toPlainText().contains(
+                    QStringLiteral("clock-main"));
+            widget->close();
+            return;
+        }
+    });
+    if (open) {
+        open->click();
+    }
+    check(open && summaryObserved,
+          QStringLiteral(
+              "workspace exposes only matching current-design Domain candidates for Package-declared paths"));
+
+    DesignExtensionEditorContext context;
+    context.id = definition.id;
+    context.title = QStringLiteral("Domain-aware settings");
+    context.value = design.packageData.value(definition.id);
+    context.definition = definition;
+    context.domainReferenceIndex =
+        DesignDomainReferenceIndex::fromDomains(design.domains);
+    context.domainReferenceSummary = QStringLiteral(
+        "Package-declared JSON paths:\n"
+        "  /bindings/*/domain → Power domain (power)\n\n"
+        "Available design Domains:\n"
+        "  Power domain (power): power-main, power-aux");
+    context.configured = true;
+    context.editable = true;
+    DesignExtensionEditorDialog dialog(std::move(context));
+    dialog.show();
+    auto* editor = dialog.findChild<QPlainTextEdit*>(
+        QStringLiteral("finepaper.designExtensions.json"));
+    auto* apply = dialog.findChild<QPushButton*>(
+        QStringLiteral("finepaper.designExtensions.apply"));
+    auto* state = dialog.findChild<QLabel*>(
+        QStringLiteral("finepaper.designExtensions.validationState"));
+    auto* diagnostics = dialog.findChild<QPlainTextEdit*>(
+        QStringLiteral("finepaper.designExtensions.diagnostics"));
+    check(editor && apply && state && diagnostics,
+          QStringLiteral(
+              "Domain-aware editor exposes source, validation, and diagnostics"));
+    if (!editor || !apply || !state || !diagnostics) {
+        return;
+    }
+
+    editor->setPlainText(QStringLiteral(
+        R"json({"bindings":[{"domain":"missing-power"}]})json"));
+    check(waitUntil([state] {
+              return state->text().contains(
+                  QStringLiteral("Domain references are invalid"));
+          })
+              && !apply->isEnabled()
+              && diagnostics->toPlainText().contains(
+                  QStringLiteral("/bindings/0/domain"))
+              && diagnostics->toPlainText().contains(
+                  QStringLiteral("missing-power")),
+          QStringLiteral(
+              "unknown Domain id disables Apply with an exact instance pointer"));
+
+    auto* referenceSummary = dialog.findChild<QPlainTextEdit*>(
+        QStringLiteral("finepaper.designExtensions.domainReferences"));
+    auto* format = dialog.findChild<QPushButton*>(
+        QStringLiteral("finepaper.designExtensions.format"));
+    dialog.resize(520, 480);
+    QApplication::processEvents();
+    check(dialog.size() == QSize(520, 480)
+              && referenceSummary && referenceSummary->isVisible()
+              && referenceSummary->tabChangesFocus()
+              && format && referenceSummary->geometry().bottom()
+                     < format->geometry().top()
+              && format->geometry().bottom() < editor->geometry().top()
+              && diagnostics->isVisible() && editor->isVisible()
+              && editor->height() > 0 && apply->isVisible()
+              && apply->mapTo(
+                     &dialog, QPoint(0, apply->height())).y()
+                     <= dialog.contentsRect().bottom(),
+          QStringLiteral(
+              "520x480 keeps Domain candidates, invalid-reference diagnostics, JSON, and actions reachable"));
+
+    editor->setPlainText(QStringLiteral(
+        R"json({"bindings":[{"domain":"clock-main"}]})json"));
+    check(waitUntil([diagnostics] {
+              return diagnostics->toPlainText().contains(
+                  QStringLiteral("domain_reference_type_mismatch"));
+          })
+              && !apply->isEnabled(),
+          QStringLiteral(
+              "wrong-type Domain id is rejected before the Application mutation"));
+
+    editor->setPlainText(QStringLiteral(
+        R"json({"bindings":[{"domain":"power-aux"}]})json"));
+    check(waitUntil([apply] { return apply->isEnabled(); }),
+          QStringLiteral(
+              "matching Domain id enables Apply after live reference validation"));
+
+    editor->setPlainText(QStringLiteral(R"json({"optional":true})json"));
+    check(waitUntil([apply] { return apply->isEnabled(); }),
+          QStringLiteral(
+              "an optional pointer with no matches remains valid for the schema to govern"));
+}
+
 void workspaceRemovalIsExplicit() {
     using namespace finepaper;
 
@@ -739,6 +987,7 @@ int main(int argc, char** argv) {
     QApplication application(argc, argv);
     workspaceStateMatrix();
     dialogJsonAndTransactionSemantics();
+    dialogDomainReferenceContextAndValidation();
     workspaceRemovalIsExplicit();
     QTextStream(stdout)
         << (failures == 0 ? "design-extensions-ui-tests passed"

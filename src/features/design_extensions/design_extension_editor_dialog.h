@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/application.h"
+#include "application/design_extension_references.h"
 #include "package/package.h"
 
 #include <QDialog>
@@ -23,6 +24,9 @@ struct DesignExtensionEditorContext {
     QString editorMessage;
     QJsonValue value;
     std::optional<DesignExtensionDefinition> definition = std::nullopt;
+    std::optional<DesignDomainReferenceIndex> domainReferenceIndex =
+        std::nullopt;
+    QString domainReferenceSummary;
     bool configured = false;
     bool editable = false;
 };
@@ -52,6 +56,8 @@ private:
     void updateApplyState();
 
     DesignExtensionEditorContext m_context;
+    std::optional<DesignDomainReferenceIndex> m_domainReferenceIndex =
+        std::nullopt;
     QPlainTextEdit* m_editor = nullptr;
     QLabel* m_validationState = nullptr;
     QLabel* m_diagnosticsHeading = nullptr;
@@ -64,6 +70,7 @@ private:
     QJsonValue m_parsedValue;
     bool m_syntaxValid = false;
     bool m_schemaValid = false;
+    bool m_domainReferencesValid = false;
     bool m_applyInProgress = false;
     bool m_valueTooLarge = false;
     bool m_draftTouched = false;

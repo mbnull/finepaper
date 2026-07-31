@@ -1,6 +1,6 @@
 {
   "name": "domain_mesh",
-  "package": { "id": "finepaper.noc", "version": "3.0.0" },
+  "package": { "id": "finepaper.noc", "version": "3.1.0" },
   "topology": { "type": "mesh", "rows": 2, "columns": 2 },
   "endpoints": [
     { "id": "cpu0", "type": "master", "router": [0, 0] },

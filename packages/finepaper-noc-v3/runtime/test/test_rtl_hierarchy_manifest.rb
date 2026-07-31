@@ -872,7 +872,7 @@ class TestV3RtlHierarchyManifest < Minitest::Test
       'formatVersion' => 3,
       'id' => 'artifact_mesh',
       'name' => 'Artifact Mesh',
-      'package' => {'id' => 'finepaper.noc', 'version' => '3.0.0'},
+      'package' => {'id' => 'finepaper.noc', 'version' => '3.1.0'},
       'topology' => {'type' => 'mesh', 'rows' => 1, 'columns' => 1},
       'parameters' => {'dataWidth' => 64, 'flitWidth' => 128, 'addrWidth' => 32},
       'endpoints' => [{

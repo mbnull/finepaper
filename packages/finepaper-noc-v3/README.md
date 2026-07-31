@@ -4,7 +4,7 @@ This Package exposes the cumulative V3 editing model while keeping Router
 topology fixed to a rectangular Mesh.
 
 - The runtime is self-contained inside this Package root. Installing only
-  `finepaper.noc@3.0.0` is sufficient for validation and generation; it does
+  `finepaper.noc@3.1.0` is sufficient for validation and generation; it does
   not locate or execute the V1 Package as a hidden sibling dependency.
 - V3 Router Links and Endpoint attachments expose a bidirectional
   payload/valid/ready contract. The generated XP currently uses a registered,
@@ -31,6 +31,17 @@ topology fixed to a rectangular Mesh.
   contained within the Package root, and restricts standard reference keywords
   to same-document targets so generic tooling never performs hidden file or
   network resolution.
+- The same extension declares its three references into the Design Domain
+  plane through `designExtensions[].domainReferences`. Each declaration binds
+  an RFC 6901 pointer pattern to a Package Domain Type; the empty pointer targets
+  the extension root and `*` visits one existing array item. Application and the
+  generic editor can therefore reject dangling
+  or wrong-type Domain ids without recognizing the Power extension namespace
+  or any Power Intent field name. A missing optional path remains the JSON
+  Schema's responsibility. This is a cross-plane reference contract, not an
+  automatic projection of voltage, retention, or system-state coverage.
+  Pointer size/depth, traversal work, and emitted diagnostics are bounded so a
+  damaged Package or Design cannot turn generic validation into unbounded work.
 - `router.microarchitecture` provides sparse per-Router overrides for routing
   algorithm, virtual-channel count, and buffer depth.
 - Endpoint parameters remain owned by each Endpoint instance. Their labels,
@@ -120,4 +131,7 @@ topology fixed to a rectangular Mesh.
   from the presence of `domainTypes`.
 
 The V1 Package remains installed as `finepaper.noc@1.0.0` for existing Design
-compatibility. New designs can select `finepaper.noc@3.0.0` explicitly.
+compatibility. New designs can select `finepaper.noc@3.1.0` explicitly. The
+Package minor version changed because `domainReferences` adds a validation
+capability that older Finepaper builds do not understand; an installed 3.0.0
+Package remains the exact dependency for existing 3.0.0 designs.

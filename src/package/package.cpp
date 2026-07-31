@@ -1759,9 +1759,246 @@ void appendDesignExtensionSchemaProfileDiagnostics(
     }
 }
 
+std::optional<QStringList> decodeDesignExtensionDomainReferencePointer(
+    const QString& pointer,
+    const QString& path,
+    QVector<Diagnostic>& diagnostics) {
+    // RFC 6901 uses the empty string for the whole document. Here that means
+    // the root value of the Design Extension namespace.
+    if (pointer.isEmpty()) {
+        return QStringList{};
+    }
+    if (pointer.size()
+        > kMaximumDesignExtensionDomainReferencePointerCharacters) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral(
+                "package.design_extension_domain_reference_pointer_too_long"),
+            QStringLiteral(
+                "domain reference pointer cannot contain more than %1 characters")
+                .arg(
+                    kMaximumDesignExtensionDomainReferencePointerCharacters),
+            path);
+        return std::nullopt;
+    }
+    if (!pointer.startsWith(QLatin1Char('/'))) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral(
+                "package.invalid_design_extension_domain_reference_pointer"),
+            QStringLiteral(
+                "domain reference pointer must be relative to the extension root and begin with /"),
+            path);
+        return std::nullopt;
+    }
+
+    QStringList encodedTokens = pointer.split(
+        QLatin1Char('/'), Qt::KeepEmptyParts);
+    encodedTokens.removeFirst();
+    if (encodedTokens.size()
+        > kMaximumDesignExtensionDomainReferencePointerTokens) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral(
+                "package.design_extension_domain_reference_pointer_too_deep"),
+            QStringLiteral(
+                "domain reference pointer cannot contain more than %1 tokens")
+                .arg(kMaximumDesignExtensionDomainReferencePointerTokens),
+            path);
+        return std::nullopt;
+    }
+
+    QStringList decodedTokens;
+    decodedTokens.reserve(encodedTokens.size());
+    for (const QString& encodedToken : encodedTokens) {
+        QString decodedToken;
+        decodedToken.reserve(encodedToken.size());
+        for (qsizetype index = 0; index < encodedToken.size(); ++index) {
+            const char16_t character = encodedToken.at(index).unicode();
+            if (character != u'~') {
+                decodedToken.append(character);
+                continue;
+            }
+            if (index + 1 >= encodedToken.size()) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral(
+                        "package.invalid_design_extension_domain_reference_pointer"),
+                    QStringLiteral(
+                        "domain reference pointer contains an incomplete RFC 6901 escape"),
+                    path);
+                return std::nullopt;
+            }
+            const char16_t escape = encodedToken.at(++index).unicode();
+            if (escape == u'0') {
+                decodedToken.append(QLatin1Char('~'));
+            } else if (escape == u'1') {
+                decodedToken.append(QLatin1Char('/'));
+            } else {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral(
+                        "package.invalid_design_extension_domain_reference_pointer"),
+                    QStringLiteral(
+                        "domain reference pointer uses an invalid RFC 6901 escape"),
+                    path);
+                return std::nullopt;
+            }
+        }
+        decodedTokens.append(std::move(decodedToken));
+    }
+    return decodedTokens;
+}
+
+void parseDesignExtensionDomainReferences(
+    const QJsonValue& value,
+    const QSet<QString>& domainTypeIds,
+    const QString& path,
+    DesignExtensionDefinition& definition,
+    QVector<Diagnostic>& diagnostics) {
+    if (value.isUndefined()) {
+        return;
+    }
+    if (!value.isArray()) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral(
+                "package.invalid_design_extension_domain_references"),
+            QStringLiteral("design extension domainReferences must be an array"),
+            path);
+        return;
+    }
+
+    const QJsonArray values = value.toArray();
+    if (values.size() > kMaximumDesignExtensionDomainReferences) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral(
+                "package.too_many_design_extension_domain_references"),
+            QStringLiteral(
+                "design extension domainReferences cannot contain more than %1 entries")
+                .arg(kMaximumDesignExtensionDomainReferences),
+            path);
+        return;
+    }
+
+    QSet<QString> pointers;
+    definition.domainReferences.reserve(values.size());
+    for (qsizetype index = 0; index < values.size(); ++index) {
+        const QString itemPath = QStringLiteral("%1/%2").arg(path).arg(index);
+        if (!values.at(index).isObject()) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral(
+                    "package.invalid_design_extension_domain_reference"),
+                QStringLiteral("design extension domain reference must be an object"),
+                itemPath);
+            continue;
+        }
+
+        const QJsonObject object = values.at(index).toObject();
+        static const std::array<QString, 2> allowed = {
+            QStringLiteral("pointer"),
+            QStringLiteral("domainType")
+        };
+        for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+            if (std::find(allowed.cbegin(), allowed.cend(), it.key())
+                == allowed.cend()) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral(
+                        "package.unknown_design_extension_domain_reference_field"),
+                    QStringLiteral(
+                        "design extension domain reference field %1 is not supported")
+                        .arg(it.key()),
+                    itemPath + QLatin1Char('/') + jsonPointerToken(it.key()));
+            }
+        }
+
+        const QString pointerPath = itemPath + QStringLiteral("/pointer");
+        const QJsonValue pointerValue = object.value(QStringLiteral("pointer"));
+        QString pointer;
+        std::optional<QStringList> pointerTokens = std::nullopt;
+        if (!pointerValue.isString()) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral(
+                    "package.invalid_design_extension_domain_reference_pointer"),
+                QStringLiteral("domain reference pointer must be a string"),
+                pointerPath);
+        } else {
+            pointer = pointerValue.toString();
+            pointerTokens = decodeDesignExtensionDomainReferencePointer(
+                pointer, pointerPath, diagnostics);
+        }
+
+        const QString domainTypePath = itemPath + QStringLiteral("/domainType");
+        const QJsonValue domainTypeValue = object.value(
+            QStringLiteral("domainType"));
+        QString domainType;
+        if (!domainTypeValue.isString()
+            || domainTypeValue.toString().trimmed().isEmpty()) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral(
+                    "package.invalid_design_extension_domain_reference_domain_type"),
+                QStringLiteral("domain reference domainType must be a non-empty string"),
+                domainTypePath);
+        } else {
+            domainType = domainTypeValue.toString().trimmed();
+            if (!domainTypeIds.contains(domainType)) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral(
+                        "package.unknown_design_extension_domain_reference_type"),
+                    QStringLiteral(
+                        "domain reference domainType is not declared by this Package"),
+                    domainTypePath);
+                domainType.clear();
+            }
+        }
+
+        if (pointerTokens) {
+            if (pointers.contains(pointer)) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral(
+                        "package.duplicate_design_extension_domain_reference"),
+                    QStringLiteral("domain reference pointer is duplicated"),
+                    pointerPath);
+                pointerTokens.reset();
+            } else {
+                pointers.insert(pointer);
+            }
+        }
+
+        if (pointerTokens && !domainType.isEmpty()) {
+            definition.domainReferences.append(
+                DesignExtensionDomainReferenceDefinition{
+                    std::move(*pointerTokens),
+                    std::move(domainType)
+                });
+        }
+    }
+}
+
 QVector<DesignExtensionDefinition> parseDesignExtensions(
     const QJsonValue& value,
     const QString& packageRoot,
+    const QVector<DomainTypeDefinition>& domainTypes,
     QVector<Diagnostic>& diagnostics) {
     QVector<DesignExtensionDefinition> definitions;
     const QString path = QStringLiteral("/designExtensions");
@@ -1797,6 +2034,11 @@ QVector<DesignExtensionDefinition> parseDesignExtensions(
     };
 
     QSet<QString> ids;
+    QSet<QString> domainTypeIds;
+    domainTypeIds.reserve(domainTypes.size());
+    for (const DomainTypeDefinition& domainType : domainTypes) {
+        domainTypeIds.insert(domainType.id);
+    }
     QHash<QString, CachedSchema> schemasByCanonicalPath;
     QSet<QString> attemptedSchemaPaths;
     qint64 accountedSchemaBytes = 0;
@@ -1814,11 +2056,12 @@ QVector<DesignExtensionDefinition> parseDesignExtensions(
 
         const qsizetype itemDiagnosticStart = diagnostics.size();
         const QJsonObject object = values.at(index).toObject();
-        static const std::array<QString, 4> allowed = {
+        static const std::array<QString, 5> allowed = {
             QStringLiteral("id"),
             QStringLiteral("schema"),
             QStringLiteral("version"),
-            QStringLiteral("editor")
+            QStringLiteral("editor"),
+            QStringLiteral("domainReferences")
         };
         for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
             if (std::find(allowed.cbegin(), allowed.cend(), it.key())
@@ -1874,6 +2117,14 @@ QVector<DesignExtensionDefinition> parseDesignExtensions(
                         diagnostics)
                 };
             }
+        }
+        if (object.contains(QStringLiteral("domainReferences"))) {
+            parseDesignExtensionDomainReferences(
+                object.value(QStringLiteral("domainReferences")),
+                domainTypeIds,
+                itemPath + QStringLiteral("/domainReferences"),
+                definition,
+                diagnostics);
         }
 
         const auto isAsciiLetterOrDigit = [](const auto character) {
@@ -2318,6 +2569,7 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
     package.designExtensions = parseDesignExtensions(
         rootObject->value(QStringLiteral("designExtensions")),
         package.rootPath,
+        package.domainTypes,
         result.diagnostics);
 
     const QJsonObject attachment = requiredObject(*rootObject,
