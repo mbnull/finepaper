@@ -1720,6 +1720,45 @@ void validateExecutablePath(const QString& packageRoot,
     }
 }
 
+void appendDesignExtensionSchemaProfileDiagnostics(
+    const DesignExtensionDefinition& definition,
+    const QString& itemPath,
+    QVector<Diagnostic>& diagnostics) {
+    if (definition.schemaStatus == json_schema::CompileStatus::Ready
+        && definition.compiledSchema) {
+        return;
+    }
+    const bool unsupported = definition.schemaStatus
+        == json_schema::CompileStatus::Unsupported;
+    const QString code = unsupported
+        ? QStringLiteral("package.design_extension_schema_unsupported")
+        : QStringLiteral("package.design_extension_schema_invalid");
+    const QString severity = unsupported
+        ? QStringLiteral("warning")
+        : QStringLiteral("error");
+    if (definition.schemaIssues.isEmpty()) {
+        appendDiagnostic(
+            diagnostics,
+            severity,
+            code,
+            unsupported
+                ? QStringLiteral(
+                    "design extension schema uses an unsupported feature")
+                : QStringLiteral(
+                    "design extension schema could not be compiled"),
+            itemPath + QStringLiteral("/schema"));
+        return;
+    }
+    for (const json_schema::Issue& issue : definition.schemaIssues) {
+        appendDiagnostic(
+            diagnostics,
+            severity,
+            code,
+            issue.message,
+            itemPath + QStringLiteral("/schema#") + issue.schemaPointer);
+    }
+}
+
 QVector<DesignExtensionDefinition> parseDesignExtensions(
     const QJsonValue& value,
     const QString& packageRoot,
@@ -1750,8 +1789,15 @@ QVector<DesignExtensionDefinition> parseDesignExtensions(
         return definitions;
     }
 
+    struct CachedSchema {
+        QJsonObject document;
+        json_schema::CompileStatus status = json_schema::CompileStatus::Invalid;
+        std::shared_ptr<const json_schema::CompiledSchema> compiled;
+        QVector<json_schema::Issue> issues;
+    };
+
     QSet<QString> ids;
-    QHash<QString, QJsonObject> schemasByCanonicalPath;
+    QHash<QString, CachedSchema> schemasByCanonicalPath;
     QSet<QString> attemptedSchemaPaths;
     qint64 accountedSchemaBytes = 0;
     definitions.reserve(values.size());
@@ -1913,7 +1959,12 @@ QVector<DesignExtensionDefinition> parseDesignExtensions(
                 const auto cachedSchema = schemasByCanonicalPath.constFind(
                     canonicalSchemaPath);
                 if (cachedSchema != schemasByCanonicalPath.constEnd()) {
-                    definition.schemaDocument = cachedSchema.value();
+                    definition.schemaDocument = cachedSchema->document;
+                    definition.schemaStatus = cachedSchema->status;
+                    definition.compiledSchema = cachedSchema->compiled;
+                    definition.schemaIssues = cachedSchema->issues;
+                    appendDesignExtensionSchemaProfileDiagnostics(
+                        definition, itemPath, diagnostics);
                 } else if (attemptedSchemaPaths.contains(canonicalSchemaPath)) {
                     // The first attempt already produced the authoritative
                     // diagnostic. Do not re-read an invalid shared schema.
@@ -1961,9 +2012,24 @@ QVector<DesignExtensionDefinition> parseDesignExtensions(
                                 diagnostics);
                         if (schema) {
                             definition.schemaDocument = std::move(*schema);
+                            json_schema::CompileResult compilation =
+                                json_schema::compile(
+                                    definition.schemaDocument);
+                            definition.schemaStatus = compilation.status;
+                            definition.compiledSchema = std::move(
+                                compilation.schema);
+                            definition.schemaIssues = std::move(
+                                compilation.issues);
+                            appendDesignExtensionSchemaProfileDiagnostics(
+                                definition, itemPath, diagnostics);
                             schemasByCanonicalPath.insert(
                                 canonicalSchemaPath,
-                                definition.schemaDocument);
+                                CachedSchema{
+                                    definition.schemaDocument,
+                                    definition.schemaStatus,
+                                    definition.compiledSchema,
+                                    definition.schemaIssues
+                                });
                         }
                     }
                 }

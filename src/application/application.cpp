@@ -161,6 +161,53 @@ void mergeValues(QJsonObject& target, const QJsonObject& source) {
     }
 }
 
+QVector<Diagnostic> validateDesignExtensionValue(
+    const QJsonValue& value,
+    const DesignExtensionDefinition& definition,
+    const QString& basePath) {
+    QVector<Diagnostic> diagnostics;
+    if (definition.schemaStatus != json_schema::CompileStatus::Ready
+        || !definition.compiledSchema) {
+        const QString reason = definition.schemaIssues.isEmpty()
+            ? QStringLiteral("the Package schema is not supported by this Finepaper build")
+            : definition.schemaIssues.constFirst().message;
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("design.extension_schema_unsupported"),
+            reason,
+            basePath,
+            QStringLiteral("package"));
+        return diagnostics;
+    }
+
+    const json_schema::ValidationResult validation = json_schema::validate(
+        *definition.compiledSchema, value);
+    for (const json_schema::Issue& issue : validation.issues) {
+        QString message = issue.message;
+        if (!issue.schemaPointer.isEmpty()) {
+            message += QStringLiteral(" (schema #%1)").arg(issue.schemaPointer);
+        }
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("design.extension_schema_violation"),
+            message,
+            basePath + issue.instancePointer,
+            QStringLiteral("package"));
+    }
+    if (!validation.success && validation.issues.isEmpty()) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("design.extension_schema_violation"),
+            QStringLiteral("the extension value does not satisfy its Package schema"),
+            basePath,
+            QStringLiteral("package"));
+    }
+    return diagnostics;
+}
+
 QString routerKey(RouterPosition position) {
     return QStringLiteral("%1,%2").arg(position.x).arg(position.y);
 }
@@ -850,6 +897,83 @@ DesignResult FinepaperApplication::updateParameters(const NocDesign& design,
     return validated;
 }
 
+DesignResult FinepaperApplication::setDesignExtension(
+    const NocDesign& design,
+    const QString& extensionId,
+    const QJsonValue& value) const {
+    const auto package = m_catalog.resolve(design.package);
+    if (!package) {
+        return validateEditedDesign(design);
+    }
+
+    const QString extensionPath = QStringLiteral("/packageData/")
+        + jsonPointerToken(extensionId);
+    if (!package->designExtension(extensionId)) {
+        DesignResult result;
+        result.design = design;
+        appendDiagnostic(
+            result.diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("design.undeclared_package_data_extension"),
+            QStringLiteral("packageData namespace %1 is not declared by the Package")
+                .arg(extensionId),
+            extensionPath,
+            QStringLiteral("package"));
+        return result;
+    }
+    if (value.isUndefined()) {
+        DesignResult result;
+        result.design = design;
+        appendDiagnostic(
+            result.diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("design.extension_value_undefined"),
+            QStringLiteral(
+                "an undefined extension value is ambiguous; use removeDesignExtension to delete it"),
+            extensionPath);
+        return result;
+    }
+
+    NocDesign edited = design;
+    edited.packageData.insert(extensionId, value);
+    DesignResult validated = validateEditedDesign(edited);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
+DesignResult FinepaperApplication::removeDesignExtension(
+    const NocDesign& design,
+    const QString& extensionId) const {
+    const auto package = m_catalog.resolve(design.package);
+    if (!package) {
+        return validateEditedDesign(design);
+    }
+
+    if (!package->designExtension(extensionId)) {
+        DesignResult result;
+        result.design = design;
+        appendDiagnostic(
+            result.diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("design.undeclared_package_data_extension"),
+            QStringLiteral("packageData namespace %1 is not declared by the Package")
+                .arg(extensionId),
+            QStringLiteral("/packageData/") + jsonPointerToken(extensionId),
+            QStringLiteral("package"));
+        return result;
+    }
+
+    NocDesign edited = design;
+    edited.packageData.remove(extensionId);
+    DesignResult validated = validateEditedDesign(edited);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
 DesignResult FinepaperApplication::setElementConfiguration(
     const NocDesign& design,
     ElementRef element,
@@ -1143,7 +1267,14 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
     if (strictDesignExtensions) {
         for (auto it = design.packageData.constBegin();
              it != design.packageData.constEnd(); ++it) {
-            if (package.designExtension(it.key())) {
+            const DesignExtensionDefinition* definition =
+                package.designExtension(it.key());
+            if (definition) {
+                diagnostics += validateDesignExtensionValue(
+                    it.value(),
+                    *definition,
+                    QStringLiteral("/packageData/")
+                        + jsonPointerToken(it.key()));
                 continue;
             }
             appendDiagnostic(

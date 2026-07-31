@@ -444,6 +444,10 @@ int main(int argc, char** argv) {
                   == QStringLiteral("schemas/test-extension.schema.json")
               && loadedExtension->schemaDocument.value(QStringLiteral("title"))
                   == QStringLiteral("Test extension")
+              && loadedExtension->schemaStatus
+                  == json_schema::CompileStatus::Ready
+              && loadedExtension->compiledSchema
+              && loadedExtension->schemaIssues.isEmpty()
               && loadedExtension->version == 1
               && loadedExtension->editor
               && loadedExtension->editor->kind == QStringLiteral("json-schema"),
@@ -710,8 +714,16 @@ int main(int argc, char** argv) {
           QStringLiteral("a local dynamic-reference schema can be written"));
     const PackageLoadResult localDynamicReferenceResult = loadManifest(
         fixture.path(), v1WithDesignExtension);
-    check(localDynamicReferenceResult.success,
-          QStringLiteral("a same-document dynamic reference is accepted"));
+    const DesignExtensionDefinition* localDynamicReferenceExtension =
+        localDynamicReferenceResult.package
+        ? localDynamicReferenceResult.package->designExtension(
+              QStringLiteral("test.package.settings"))
+        : nullptr;
+    check(localDynamicReferenceResult.success && localDynamicReferenceExtension
+              && localDynamicReferenceExtension->schemaStatus
+                  == json_schema::CompileStatus::Unsupported,
+          QStringLiteral(
+              "a same-document dynamic reference remains available but explicitly read-only"));
 
     check(writeFixtureSchema(
               fixture.path(),
@@ -723,6 +735,50 @@ int main(int argc, char** argv) {
     check(literalReferenceDataResult.success,
           QStringLiteral(
               "$ref-shaped properties inside schema annotations remain ordinary data"));
+
+    check(writeFixtureSchema(
+              fixture.path(),
+              QByteArrayLiteral(
+                  R"json({"type":"object","oneOf":[{"required":["a"]},{"required":["b"]}]})json")),
+          QStringLiteral("an unsupported-profile schema can be written"));
+    const PackageLoadResult unsupportedProfileResult = loadManifest(
+        fixture.path(), v1WithDesignExtension);
+    const DesignExtensionDefinition* unsupportedProfileExtension =
+        unsupportedProfileResult.package
+        ? unsupportedProfileResult.package->designExtension(
+              QStringLiteral("test.package.settings"))
+        : nullptr;
+    check(unsupportedProfileResult.success && unsupportedProfileExtension
+              && unsupportedProfileExtension->schemaStatus
+                  == json_schema::CompileStatus::Unsupported
+              && !unsupportedProfileExtension->compiledSchema
+              && hasDiagnosticCode(
+                  unsupportedProfileResult.diagnostics,
+                  QStringLiteral(
+                      "package.design_extension_schema_unsupported")),
+          QStringLiteral(
+              "unsupported schema features keep the Package available for read-only clients"));
+
+    check(writeFixtureSchema(
+              fixture.path(),
+              QByteArrayLiteral(
+                  R"json({"$defs":{},"$ref":"#/$defs/missing"})json")),
+          QStringLiteral("an unresolved-reference schema can be written"));
+    expectFailure(
+        fixture.path(),
+        v1WithDesignExtension,
+        QStringLiteral("package.design_extension_schema_invalid"),
+        QStringLiteral("an unresolved local schema reference"));
+
+    check(writeFixtureSchema(
+              fixture.path(),
+              QByteArrayLiteral(R"json({"required":"not-an-array"})json")),
+          QStringLiteral("an invalid-keyword schema can be written"));
+    expectFailure(
+        fixture.path(),
+        v1WithDesignExtension,
+        QStringLiteral("package.design_extension_schema_invalid"),
+        QStringLiteral("a malformed supported schema keyword"));
 
     check(writeFixtureSchema(
               fixture.path(),

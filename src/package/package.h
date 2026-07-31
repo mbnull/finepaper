@@ -1,12 +1,14 @@
 #pragma once
 
 #include "noc/model.h"
+#include "schema/json_schema.h"
 
 #include <QJsonValue>
 #include <QString>
 #include <QStringList>
 #include <QVector>
 
+#include <memory>
 #include <optional>
 
 namespace finepaper {
@@ -197,6 +199,10 @@ struct DesignExtensionDefinition {
     QString id;
     QString schema;
     QJsonObject schemaDocument;
+    json_schema::CompileStatus schemaStatus =
+        json_schema::CompileStatus::Invalid;
+    std::shared_ptr<const json_schema::CompiledSchema> compiledSchema;
+    QVector<json_schema::Issue> schemaIssues;
     int version = 0;
     std::optional<DesignExtensionEditorDefinition> editor = std::nullopt;
 };

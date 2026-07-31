@@ -11,6 +11,7 @@
 
 #include <QHash>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -101,6 +102,11 @@ public:
         const EndpointTypeChangeImpactConfirmation& confirmation = {}) const;
     DesignResult updateParameters(const NocDesign& design,
                                   const QJsonObject& parameters) const;
+    DesignResult setDesignExtension(const NocDesign& design,
+                                    const QString& extensionId,
+                                    const QJsonValue& value) const;
+    DesignResult removeDesignExtension(const NocDesign& design,
+                                       const QString& extensionId) const;
     DesignResult setElementConfiguration(
         const NocDesign& design,
         ElementRef element,

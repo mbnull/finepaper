@@ -14,11 +14,13 @@ target("finepaper-application")
     add_headerfiles("src/storage/*.h")
     add_headerfiles("src/execution/*.h")
     add_headerfiles("src/application/*.h")
+    add_headerfiles("src/schema/*.h")
     add_files("src/noc/*.cpp")
     add_files("src/package/*.cpp")
     add_files("src/storage/*.cpp")
     add_files("src/execution/*.cpp")
     add_files("src/application/*.cpp")
+    add_files("src/schema/*.cpp")
     add_includedirs("src", {public = true})
 
 target("finepaper")
@@ -99,6 +101,30 @@ target("finepaper-package-domain-tests")
     set_default(false)
     add_deps("finepaper-application")
     add_files("tests/package_domain_tests.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
+target("finepaper-json-schema-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/json_schema_tests.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
+target("finepaper-application-design-extension-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/application_design_extension_tests.cpp")
     add_includedirs("src")
     add_tests("default", {
         trim_output = true
