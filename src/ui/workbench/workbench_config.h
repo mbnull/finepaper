@@ -9,6 +9,7 @@ inline constexpr int defaultWindowHeight = 920;
 inline constexpr int defaultPackageDockWidth = 300;
 inline constexpr int defaultInspectorDockWidth = 360;
 inline constexpr int defaultResultsDockHeight = 190;
+inline constexpr int minimumCanvasTextLines = 7;
 
 inline const QString endpointTypeMime = QStringLiteral("application/x-finepaper-noc-endpoint-type");
 

@@ -128,7 +128,11 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
 
     m_status = new QLabel(QStringLiteral("Open a Package V2 design to edit Domains."));
     m_status->setObjectName(QStringLiteral("finepaper.domainManager.status"));
+    m_status->setAccessibleName(QStringLiteral("Domain Manager status"));
+    m_status->setTextFormat(Qt::PlainText);
     m_status->setWordWrap(true);
+    m_status->setTextInteractionFlags(
+        Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
     root->addWidget(m_status);
 
     m_completeConfiguration = new QPushButton(

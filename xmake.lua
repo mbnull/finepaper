@@ -479,6 +479,15 @@ target("finepaper-gui-smoke")
             FINEPAPER_GUI_SMOKE_FONT_SCALE = "1.5"
         }
     })
+    add_tests("compact-maximum-font", {
+        trim_output = true,
+        runenvs = {
+            QT_QPA_PLATFORM = "offscreen",
+            FINEPAPER_GUI_SMOKE_SIZE = "1280x720",
+            FINEPAPER_GUI_SMOKE_THEME = "light",
+            FINEPAPER_GUI_SMOKE_FONT_SCALE = "2.0"
+        }
+    })
 
 target("finepaper-workbench-theme-tests")
     add_rules("qt.widgetapp")

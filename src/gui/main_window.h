@@ -28,9 +28,11 @@ class QPlainTextEdit;
 class QProgressBar;
 class QPushButton;
 class QScrollArea;
+class QSplitter;
 class QStackedLayout;
 class QTabWidget;
 class QTableWidget;
+class QTimer;
 class QWidget;
 
 namespace finepaper {
@@ -91,6 +93,9 @@ private:
     void createInspectorDock();
     void createDomainDock();
     void createResultsDock();
+    void requestResultsDockReadabilityUpdate();
+    void ensureResultsDockReadable();
+    [[nodiscard]] int preferredResultsDockHeight() const;
     void resetWorkbenchLayout();
     void restoreWorkbenchState();
     void loadInstalledPackageRoots();
@@ -288,6 +293,8 @@ private:
 
     QDockWidget* m_resultsDock = nullptr;
     QTabWidget* m_resultTabs = nullptr;
+    QWidget* m_generationControls = nullptr;
+    QSplitter* m_outputSplitter = nullptr;
     QLabel* m_diagnosticsStatus = nullptr;
     QTableWidget* m_drcTable = nullptr;
     QPlainTextEdit* m_activityLog = nullptr;
@@ -298,6 +305,8 @@ private:
     QLabel* m_generationStatus = nullptr;
     QTableWidget* m_artifactTable = nullptr;
     QPlainTextEdit* m_generationDetails = nullptr;
+    QTimer* m_resultsLayoutTimer = nullptr;
+    bool m_resultsDockResizeFollowUpPending = false;
 };
 
 } // namespace finepaper

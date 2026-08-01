@@ -32,6 +32,7 @@
 #include <QGraphicsPathItem>
 #include <QGuiApplication>
 #include <QGroupBox>
+#include <QHeaderView>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -225,6 +226,15 @@ bool focusIsWithin(QWidget* target) {
     QWidget* focus = QApplication::focusWidget();
     return target && focus
         && (focus == target || target->isAncestorOf(focus));
+}
+
+bool widgetIsFullyVisibleWithin(QWidget* ancestor, QWidget* widget) {
+    if (!ancestor || !widget || !widget->isVisibleTo(ancestor)) {
+        return false;
+    }
+    const QRect widgetRect(
+        widget->mapTo(ancestor, QPoint(0, 0)), widget->size());
+    return ancestor->rect().contains(widgetRect);
 }
 
 bool widgetIntersectsScrollViewport(QScrollArea* scroll, QWidget* widget) {
@@ -1461,6 +1471,13 @@ int main(int argc, char** argv) {
           QStringLiteral("Inspector is docked on the right"));
     check(resultsDock && window.dockWidgetArea(resultsDock) == Qt::BottomDockWidgetArea,
           QStringLiteral("diagnostics and outputs are docked at the bottom"));
+    check(resultsDock
+              && resultsDock->windowTitle()
+                  == QStringLiteral("Diagnostics and Output")
+              && resultsDock->accessibleName()
+                  == QStringLiteral("Diagnostics and Output"),
+          QStringLiteral(
+              "the Results dock renders its complete text title and exposes a spoken name"));
     check(inspectorDock && inspectorScroll
               && inspectorDock->widget() == inspectorScroll
               && inspectorScroll->widgetResizable()
@@ -1560,10 +1577,14 @@ int main(int argc, char** argv) {
         finepaper::workbench::resultsNavigationActionName);
     auto* creationPackageSelector = window.findChild<QComboBox*>(
         QStringLiteral("finepaper.packageSelector"));
-    auto* domainFocusTarget = window.findChild<QWidget*>(
-        QStringLiteral("finepaper.domainManager"));
-    auto* resultTabsForNavigation = window.findChild<QTabWidget*>(
-        QStringLiteral("finepaper.resultTabs"));
+    auto* inspectorEmptyFocusTarget = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.designOverview"));
+    auto* domainEmptyFocusTarget = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.domainManager.status"));
+    auto* initialDiagnosticsStatus = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.diagnosticsStatus"));
+    auto* initialDrcTable = window.findChild<QTableWidget*>(
+        QStringLiteral("finepaper.drcTable"));
     check(packageNavigation && inspectorNavigation && domainNavigation
               && resultsNavigation,
           QStringLiteral(
@@ -1581,26 +1602,38 @@ int main(int argc, char** argv) {
         inspectorDock->hide();
         inspectorNavigation->trigger();
         application.processEvents();
-        check(inspectorDock->isVisible() && focusIsWithin(inspectorScroll),
+        check(inspectorDock->isVisible()
+                  && QApplication::focusWidget()
+                      == inspectorEmptyFocusTarget,
               QStringLiteral(
-                  "Inspector navigation shows, raises, and focuses the Inspector"));
+                  "Inspector navigation focuses its readable empty-state context"));
     }
     if (domainNavigation && domainDock) {
         domainDock->hide();
         domainNavigation->trigger();
         application.processEvents();
-        check(domainDock->isVisible() && focusIsWithin(domainFocusTarget),
+        check(domainDock->isVisible()
+                  && QApplication::focusWidget() == domainEmptyFocusTarget,
               QStringLiteral(
-                  "Domain navigation shows, raises, and focuses the Domain Manager"));
+                  "Domain navigation focuses its readable empty-state status"));
     }
     if (resultsNavigation && resultsDock) {
         resultsDock->hide();
         resultsNavigation->trigger();
         application.processEvents();
+        QWidget* expectedDiagnosticsFocus = initialDrcTable
+                && initialDrcTable->rowCount() > 0
+            ? static_cast<QWidget*>(initialDrcTable)
+            : static_cast<QWidget*>(initialDiagnosticsStatus);
         check(resultsDock->isVisible()
-                  && focusIsWithin(resultTabsForNavigation),
+                  && QApplication::focusWidget()
+                      == expectedDiagnosticsFocus,
               QStringLiteral(
-                  "Results navigation shows, raises, and focuses diagnostics"));
+                  "Results navigation focuses the active diagnostics content "
+                  "(actual %1)")
+                  .arg(QApplication::focusWidget()
+                           ? QApplication::focusWidget()->objectName()
+                           : QStringLiteral("none")));
     }
 
     QAction* resetWorkbenchLayoutAction = window.findChild<QAction*>(
@@ -2491,6 +2524,28 @@ int main(int argc, char** argv) {
                       inspectorScroll, endpointTypeEditor),
               QStringLiteral(
                   "a new Endpoint selection returns the Inspector to its visible primary editor"));
+        if (inspectorNavigation && inspectorDock) {
+            window.activateWindow();
+            application.processEvents();
+            inspectorDock->hide();
+            inspectorNavigation->trigger();
+            application.processEvents();
+            application.processEvents();
+        }
+        check(inspectorNavigation && inspectorDock
+                  && inspectorDock->isVisible()
+                  && focusIsWithin(endpointTypeEditor),
+              QStringLiteral(
+                  "Inspector navigation focuses the active Endpoint editor "
+                  "(actual %1/%2)")
+                  .arg(QApplication::focusWidget()
+                           ? QApplication::focusWidget()->objectName()
+                           : QStringLiteral("none"),
+                       QApplication::focusWidget()
+                           ? QString::fromUtf8(
+                                 QApplication::focusWidget()
+                                     ->metaObject()->className())
+                           : QStringLiteral("none")));
         const bool inspectorContentFits = inspectorScroll
             && inspectorScroll->widget()
             && inspectorScroll->widget()->height()
@@ -3413,15 +3468,60 @@ int main(int argc, char** argv) {
               "validation publishes literal plain-text provenance for arbitrary design names"));
 
     auto* outputPath = window.findChild<QLineEdit*>(QStringLiteral("finepaper.outputRoot"));
+    auto* browseOutput = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.browseOutputRoot"));
+    auto* generateOutput = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.generateButton"));
+    auto* generationControls = window.findChild<QWidget*>(
+        QStringLiteral("finepaper.generationControls"));
     if (outputPath) {
         outputPath->setText(outputRoot.path());
     }
     QAction* generateAction = actionWithText(window, QStringLiteral("Generate RTL"));
     check(generateAction != nullptr, QStringLiteral("shared RTL generation action is available"));
+    application.processEvents();
+    application.processEvents();
+    const QSize windowSizeBeforeResultsResize = window.size();
+    const int automaticResultsHeight = resultsDock
+        ? resultsDock->height() : 0;
+    const int userRequestedResultsHeight = automaticResultsHeight
+        + 3 * window.fontMetrics().lineSpacing();
+    if (resultsDock) {
+        window.resizeDocks(
+            {resultsDock}, {userRequestedResultsHeight}, Qt::Vertical);
+        application.processEvents();
+    }
+    const int userResultsHeight = resultsDock
+        ? resultsDock->height() : 0;
+    if (resultsDock) {
+        resultsDock->hide();
+    }
     if (generateAction) {
         generateAction->trigger();
         check(waitUntil([&window] { return !window.operationBusy(); }),
               QStringLiteral("GUI generation finishes asynchronously without blocking the event loop"));
+    }
+    application.processEvents();
+    application.processEvents();
+    const int restoredResultsDelta = resultsDock
+        ? resultsDock->height() - userResultsHeight : -1;
+    check(resultsDock && resultsDock->isVisible()
+              && userResultsHeight
+                  >= automaticResultsHeight
+                      + window.fontMetrics().lineSpacing()
+              && restoredResultsDelta >= -2
+              && restoredResultsDelta <= 2
+              && window.size() == windowSizeBeforeResultsResize,
+          QStringLiteral(
+              "automatic Results reopening preserves a useful user height "
+              "without resizing the window (before %1, user %2, restored %3)")
+              .arg(automaticResultsHeight)
+              .arg(userResultsHeight)
+              .arg(resultsDock ? resultsDock->height() : -1));
+    if (resultsDock) {
+        window.resizeDocks(
+            {resultsDock}, {automaticResultsHeight}, Qt::Vertical);
+        application.processEvents();
     }
 
     auto* generationStatus = window.findChild<QLabel*>(
@@ -3443,6 +3543,29 @@ int main(int argc, char** argv) {
         const QString artifactPath = artifacts->item(0, 2)->text();
         check(!artifactPath.isEmpty(), QStringLiteral("reported GUI artifact has a path"));
     }
+    if (resultsNavigation && resultsDock) {
+        window.activateWindow();
+        application.processEvents();
+        resultsDock->hide();
+        resultsNavigation->trigger();
+        application.processEvents();
+        application.processEvents();
+    }
+    check(resultsNavigation && resultsDock && artifacts
+              && resultsDock->isVisible()
+              && artifacts->rowCount() > 0
+              && focusIsWithin(artifacts),
+          QStringLiteral(
+              "Results navigation focuses generated Artifacts on the active tab "
+              "(actual %1/%2)")
+              .arg(QApplication::focusWidget()
+                       ? QApplication::focusWidget()->objectName()
+                       : QStringLiteral("none"),
+                   QApplication::focusWidget()
+                       ? QString::fromUtf8(
+                             QApplication::focusWidget()
+                                 ->metaObject()->className())
+                       : QStringLiteral("none")));
 
     const bool movedAfterResults = nodeEditor && nodeEditor->endpointMoveRequested
         ? nodeEditor->endpointMoveRequested(
@@ -3464,6 +3587,10 @@ int main(int argc, char** argv) {
               && generationStatus->text().contains(
                   QString::fromUtf8("“") + provenanceDesignName
                   + QString::fromUtf8("”"))
+              && generationStatus->accessibleDescription().contains(
+                  QStringLiteral("these artifacts were generated for"))
+              && generationStatus->accessibleDescription().contains(
+                  QStringLiteral("before delivery"))
               && resultTabsAfterMutation
               && resultTabsAfterMutation->tabText(0).contains(
                   QStringLiteral("out of date"))
@@ -3472,6 +3599,60 @@ int main(int argc, char** argv) {
           QStringLiteral(
               "a durable design mutation keeps prior results visible but labels them out of date"));
     restoreRequestedClientSize();
+    application.processEvents();
+    QWidget* generationPage = resultTabsAfterMutation
+        ? resultTabsAfterMutation->currentWidget() : nullptr;
+    const int requiredArtifactViewportHeight = artifacts
+        ? artifacts->verticalHeader()->defaultSectionSize() : 0;
+    check(generationPage && generationStatus && generationControls
+              && outputPath && browseOutput && generateOutput
+              && widgetIsFullyVisibleWithin(
+                  generationPage, generationStatus)
+              && generationStatus->height()
+                  >= generationStatus->heightForWidth(
+                      generationStatus->width())
+              && widgetIsFullyVisibleWithin(
+                  generationPage, generationControls)
+              && widgetIsFullyVisibleWithin(
+                  generationPage, outputPath)
+              && widgetIsFullyVisibleWithin(
+                  generationPage, browseOutput)
+              && widgetIsFullyVisibleWithin(
+                  generationPage, generateOutput)
+              && artifacts
+              && widgetIsFullyVisibleWithin(generationPage, artifacts)
+              && artifacts->viewport()->height()
+                  >= requiredArtifactViewportHeight,
+          QStringLiteral(
+              "Generation status, text actions, and at least one Artifact row "
+              "remain visible (page %1; status %2/%3; controls %4; table %5; "
+              "header %6; viewport %7; row %8; dock %9; center %10)")
+              .arg(generationPage ? generationPage->height() : -1)
+              .arg(generationStatus ? generationStatus->height() : -1)
+              .arg(generationStatus
+                       ? generationStatus->heightForWidth(
+                             generationStatus->width()) : -1)
+              .arg(generationControls ? generationControls->height() : -1)
+              .arg(artifacts ? artifacts->height() : -1)
+              .arg(artifacts
+                       ? artifacts->horizontalHeader()->height() : -1)
+              .arg(artifacts ? artifacts->viewport()->height() : -1)
+              .arg(requiredArtifactViewportHeight)
+              .arg(resultsDock ? resultsDock->height() : -1)
+              .arg(centerViews ? centerViews->height() : -1));
+    check(graphicsView
+              && graphicsView->viewport()->height()
+                  >= finepaper::workbench::minimumCanvasTextLines
+                      * window.fontMetrics().lineSpacing(),
+          QStringLiteral(
+              "the readable Results panel keeps a useful canvas viewport "
+              "(viewport %1; required %2; center %3; dock %4)")
+              .arg(graphicsView
+                       ? graphicsView->viewport()->height() : -1)
+              .arg(finepaper::workbench::minimumCanvasTextLines
+                   * window.fontMetrics().lineSpacing())
+              .arg(centerViews ? centerViews->height() : -1)
+              .arg(resultsDock ? resultsDock->height() : -1));
     check(!requestedWindowSize.isValid()
               || window.size() == requestedWindowSize,
           QStringLiteral(

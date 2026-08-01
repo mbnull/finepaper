@@ -63,6 +63,7 @@
 #include <QStackedLayout>
 #include <QStatusBar>
 #include <QStyle>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QToolBar>
@@ -73,6 +74,8 @@
 #include <QtConcurrentRun>
 
 #include <algorithm>
+#include <functional>
+#include <initializer_list>
 #include <utility>
 
 namespace finepaper {
@@ -219,16 +222,23 @@ QTableWidgetItem* readOnlyItem(const QString& text) {
     return item;
 }
 
-void setStatusLabel(QLabel* label,
+bool setStatusLabel(QLabel* label,
                     const QString& text,
-                    const QString& semanticRole) {
+                    const QString& semanticRole,
+                    const QString& completeDescription = {}) {
     if (!label) {
-        return;
+        return false;
     }
+    const bool textChanged = label->text() != text;
+    const bool roleChanged =
+        label->property("finepaperRole").toString() != semanticRole;
     label->setTextFormat(Qt::PlainText);
     label->setText(text);
-    if (label->property("finepaperRole").toString() == semanticRole) {
-        return;
+    label->setToolTip(completeDescription);
+    label->setAccessibleDescription(
+        completeDescription.isEmpty() ? text : completeDescription);
+    if (!roleChanged) {
+        return textChanged;
     }
     label->setProperty("finepaperRole", semanticRole);
     if (QStyle* style = label->style()) {
@@ -236,6 +246,40 @@ void setStatusLabel(QLabel* label,
         style->polish(label);
     }
     label->update();
+    return textChanged;
+}
+
+QWidget* firstPanelFocusTarget(
+    QWidget* panel,
+    std::initializer_list<QWidget*> candidates) {
+    for (QWidget* candidate : candidates) {
+        if (candidate && candidate->isEnabled()
+            && candidate->focusPolicy() != Qt::NoFocus
+            && candidate->isVisibleTo(panel)) {
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+
+int tableHeaderPresentationHeight(const QTableWidget* table) {
+    if (!table || !table->horizontalHeader()) {
+        return 0;
+    }
+    const int styledTextHeight = table->fontMetrics().height()
+        + 2 * ui::UiMetrics::spacing8
+        + table->style()->pixelMetric(QStyle::PM_DefaultFrameWidth);
+    return (std::max)({
+        table->horizontalHeader()->height(),
+        table->horizontalHeader()->sizeHint().height(),
+        styledTextHeight});
+}
+
+int readableTableHeight(const QTableWidget* table, int headerHeight) {
+    return headerHeight
+        + table->verticalHeader()->defaultSectionSize()
+        + table->style()->pixelMetric(QStyle::PM_ScrollBarExtent)
+        + 2 * table->frameWidth();
 }
 
 QString ignoredRunReason(
@@ -637,6 +681,9 @@ void FinepaperMainWindow::createCentralViews() {
     m_centerViews->setMovable(true);
     m_centerViews->setTabsClosable(false);
     m_centerViews->setElideMode(Qt::ElideRight);
+    m_centerViews->setMinimumHeight(0);
+    m_centerViews->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Ignored);
     setCentralWidget(m_centerViews);
     m_viewRegistry.emplace(m_centerViews);
 
@@ -1634,8 +1681,11 @@ void FinepaperMainWindow::createDomainDock() {
 }
 
 void FinepaperMainWindow::createResultsDock() {
-    m_resultsDock = new QDockWidget(QStringLiteral("Diagnostics & Output"), this);
+    m_resultsDock = new QDockWidget(
+        QStringLiteral("Diagnostics and Output"), this);
     m_resultsDock->setObjectName(workbench::resultsDockName);
+    m_resultsDock->setAccessibleName(
+        QStringLiteral("Diagnostics and Output"));
     m_resultsDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
 
     m_resultTabs = new QTabWidget;
@@ -1709,10 +1759,16 @@ void FinepaperMainWindow::createResultsDock() {
         QStringLiteral("No RTL has been generated for this design revision."),
         QStringLiteral("muted"));
     outputLayout->addWidget(m_generationStatus);
-    auto* outputControls = new QHBoxLayout;
+    m_generationControls = new QWidget(outputPage);
+    m_generationControls->setObjectName(
+        QStringLiteral("finepaper.generationControls"));
+    auto* outputControls = new QHBoxLayout(m_generationControls);
+    outputControls->setContentsMargins(0, 0, 0, 0);
     m_outputRoot = new QLineEdit(m_locations.defaultOutputRoot);
     m_outputRoot->setObjectName(QStringLiteral("finepaper.outputRoot"));
     m_browseOutputButton = new QPushButton(QStringLiteral("Browse…"));
+    m_browseOutputButton->setObjectName(
+        QStringLiteral("finepaper.browseOutputRoot"));
     m_generateButton = new QPushButton(QStringLiteral("Generate RTL"));
     m_generateButton->setObjectName(QStringLiteral("finepaper.generateButton"));
     m_generateButton->setProperty(
@@ -1723,9 +1779,9 @@ void FinepaperMainWindow::createResultsDock() {
     outputControls->addWidget(m_outputRoot, 1);
     outputControls->addWidget(m_browseOutputButton);
     outputControls->addWidget(m_generateButton);
-    outputLayout->addLayout(outputControls);
+    outputLayout->addWidget(m_generationControls);
 
-    auto* outputSplitter = new QSplitter(Qt::Vertical);
+    m_outputSplitter = new QSplitter(Qt::Vertical);
     m_artifactTable = new QTableWidget;
     m_artifactTable->setObjectName(QStringLiteral("finepaper.artifactTable"));
     m_artifactTable->setAccessibleName(
@@ -1745,15 +1801,30 @@ void FinepaperMainWindow::createResultsDock() {
     m_generationDetails->setMinimumHeight(0);
     m_generationDetails->setSizePolicy(
         QSizePolicy::Expanding, QSizePolicy::Ignored);
-    outputSplitter->addWidget(m_artifactTable);
-    outputSplitter->addWidget(m_generationDetails);
-    outputSplitter->setStretchFactor(0, 2);
-    outputSplitter->setStretchFactor(1, 1);
-    outputLayout->addWidget(outputSplitter, 1);
+    m_outputSplitter->addWidget(m_artifactTable);
+    m_outputSplitter->addWidget(m_generationDetails);
+    m_outputSplitter->setCollapsible(0, false);
+    m_outputSplitter->setCollapsible(1, true);
+    m_outputSplitter->setStretchFactor(0, 2);
+    m_outputSplitter->setStretchFactor(1, 1);
+    outputLayout->addWidget(m_outputSplitter, 1);
     m_resultTabs->addTab(outputPage, workbench::generationTabTitle);
 
     m_resultsDock->setWidget(m_resultTabs);
     addDockWidget(Qt::BottomDockWidgetArea, m_resultsDock);
+
+    m_resultsLayoutTimer = new QTimer(m_resultsDock);
+    m_resultsLayoutTimer->setSingleShot(true);
+    m_resultsLayoutTimer->setInterval(0);
+    connect(m_resultsLayoutTimer, &QTimer::timeout,
+            this, &FinepaperMainWindow::ensureResultsDockReadable);
+
+    connect(m_resultsDock, &QDockWidget::visibilityChanged,
+            this, [this](bool visible) {
+                if (visible) {
+                    requestResultsDockReadabilityUpdate();
+                }
+            });
 
     connect(m_browseOutputButton, &QPushButton::clicked, this, [this] {
         const QString directory = QFileDialog::getExistingDirectory(
@@ -2089,48 +2160,103 @@ void FinepaperMainWindow::createActions() {
     auto* panelNavigationMenu = new QMenu(
         QStringLiteral("Workbench Panels"), panelNavigationButton);
     panelNavigationButton->setMenu(panelNavigationMenu);
+    using PanelFocusResolver = std::function<QWidget*()>;
     const auto addPanelNavigation = [panelNavigationMenu](
         const QString& objectName,
         const QString& text,
         QDockWidget* dock,
-        QWidget* primaryFocusTarget,
-        QWidget* fallbackFocusTarget) {
+        PanelFocusResolver resolveFocusTarget) {
         auto* action = new QAction(text, panelNavigationMenu);
         action->setObjectName(objectName);
         panelNavigationMenu->addAction(action);
         QObject::connect(
             action, &QAction::triggered, dock,
-            [dock, primaryFocusTarget, fallbackFocusTarget] {
+            [dock, resolveFocusTarget] {
                 dock->show();
                 dock->raise();
-                QWidget* focusTarget = primaryFocusTarget
-                        && primaryFocusTarget->isEnabled()
-                        && primaryFocusTarget->isVisibleTo(dock)
-                    ? primaryFocusTarget : fallbackFocusTarget;
-                if (focusTarget && focusTarget->isEnabled()) {
-                    focusTarget->setFocus(Qt::ShortcutFocusReason);
-                }
+                QTimer::singleShot(
+                    0, dock,
+                    [dock, resolveFocusTarget] {
+                        QWidget* focusTarget = resolveFocusTarget();
+                        if (focusTarget && focusTarget->isEnabled()
+                            && focusTarget->isVisibleTo(dock)) {
+                            focusTarget->setFocus(
+                                Qt::ShortcutFocusReason);
+                        }
+                    });
             });
     };
     addPanelNavigation(
         workbench::packageNavigationActionName,
         QStringLiteral("Package Library"), m_packageDock,
-        m_creationPackageSelector, m_installPackageButton);
+        [this] {
+            return firstPanelFocusTarget(
+                m_packageDock,
+                {m_creationPackageSelector, m_installPackageButton});
+        });
     addPanelNavigation(
         workbench::inspectorNavigationActionName,
         QStringLiteral("Inspector"), m_inspectorDock,
-        m_resizeMeshButton, m_inspectorDock->widget());
+        [this] {
+            return firstPanelFocusTarget(
+                m_inspectorDock,
+                {m_endpointConfigurationPanel->findChild<QComboBox*>(
+                     QStringLiteral(
+                         "finepaper.endpointConfiguration.type")),
+                 m_elementConfigurationPanel->findChild<QComboBox*>(
+                     QStringLiteral(
+                         "finepaper.elementConfiguration.propertySet")),
+                 m_inspectorDesignSettings->findChild<QToolButton*>(
+                     QStringLiteral(
+                         "finepaper.inspectorDesignSettingsToggle")),
+                 m_inspectorSummaryPanel->findChild<QLabel*>(
+                     QStringLiteral("finepaper.designOverview")),
+                 m_inspectorScroll});
+        });
     addPanelNavigation(
         workbench::domainNavigationActionName,
         QStringLiteral("Domain Manager"), m_domainDock,
-        m_domainManager->findChild<QComboBox*>(
-            QStringLiteral("finepaper.domainManager.typeSelector")),
-        m_domainManager);
+        [this] {
+            return firstPanelFocusTarget(
+                m_domainDock,
+                {m_domainManager->findChild<QPushButton*>(
+                     QStringLiteral(
+                         "finepaper.domainManager.applyAssignment")),
+                 m_domainManager->findChild<QPushButton*>(
+                     QStringLiteral(
+                         "finepaper.domainManager.discardAssignment")),
+                 m_domainManager->findChild<QComboBox*>(
+                     QStringLiteral(
+                         "finepaper.domainManager.typeSelector")),
+                 m_domainManager->findChild<QPushButton*>(
+                     QStringLiteral(
+                         "finepaper.domainManager.completeConfiguration")),
+                 m_domainManager->findChild<QLabel*>(
+                     QStringLiteral("finepaper.domainManager.status"))});
+        });
     panelNavigationMenu->addSeparator();
     addPanelNavigation(
         workbench::resultsNavigationActionName,
         QStringLiteral("Diagnostics && Output"), m_resultsDock,
-        m_resultTabs, m_resultsDock->widget());
+        [this] {
+            QWidget* pageTarget = nullptr;
+            QWidget* pageFallback = nullptr;
+            if (m_resultTabs->currentIndex() == 0) {
+                pageTarget = m_drcTable->rowCount() > 0
+                    ? static_cast<QWidget*>(m_drcTable)
+                    : static_cast<QWidget*>(m_diagnosticsStatus);
+            } else if (m_resultTabs->currentIndex() == 1) {
+                pageTarget = m_activityLog;
+            } else {
+                pageTarget = m_artifactTable->rowCount() > 0
+                    ? static_cast<QWidget*>(m_artifactTable)
+                    : static_cast<QWidget*>(m_outputRoot);
+                pageFallback = m_generationStatus;
+            }
+            return firstPanelFocusTarget(
+                m_resultsDock,
+                {pageTarget, pageFallback, m_resultTabs->tabBar()});
+        });
     toolbar->addSeparator();
     toolbar->addWidget(panelNavigationButton);
 }
@@ -3662,6 +3788,7 @@ void FinepaperMainWindow::validateDesign() {
                             m_problemReportStatus,
                             status,
                             QStringLiteral("warning"));
+                        requestResultsDockReadabilityUpdate();
                     }
                     return;
                 }
@@ -3683,6 +3810,7 @@ void FinepaperMainWindow::validateDesign() {
                 ". Any report below belongs to the previous completed run "
                 "until this one finishes."),
         QStringLiteral("warning"));
+    requestResultsDockReadabilityUpdate();
     watcher->setFuture(QtConcurrent::run(
         [application = std::move(application), design = std::move(design)]() mutable {
             return application.validate(design, true);
@@ -3769,6 +3897,7 @@ void FinepaperMainWindow::generateDesign() {
                                 + QStringLiteral(
                                     ". Generate RTL again."),
                             QStringLiteral("warning"));
+                        requestResultsDockReadabilityUpdate();
                     }
                     return;
                 }
@@ -3781,6 +3910,7 @@ void FinepaperMainWindow::generateDesign() {
             + designRevisionText(ticket.input) + QStringLiteral(", in ")
             + ticket.outputRoot + QStringLiteral("."),
         QStringLiteral("warning"));
+    requestResultsDockReadabilityUpdate();
     watcher->setFuture(QtConcurrent::run(
         [application = std::move(application),
          design = std::move(design),
@@ -4572,6 +4702,7 @@ void FinepaperMainWindow::populateDiagnostics(
     setStatusLabel(m_diagnosticsStatus, status, role);
     setStatusLabel(m_problemReportStatus, status, role);
     updateResultFreshness();
+    requestResultsDockReadabilityUpdate();
 }
 
 void FinepaperMainWindow::populateGenerationOutputs(
@@ -4610,6 +4741,7 @@ void FinepaperMainWindow::populateGenerationOutputs(
                   + QString::number(result.exitCode) + QStringLiteral("."),
         result.success ? QStringLiteral("success") : QStringLiteral("error"));
     updateResultFreshness();
+    requestResultsDockReadabilityUpdate();
 }
 
 void FinepaperMainWindow::showDiagnostics(const QVector<Diagnostic>& diagnostics,
@@ -4641,10 +4773,112 @@ void FinepaperMainWindow::showResultsDock() {
         return;
     }
     m_resultsDock->show();
-    resizeDocks(
-        {m_resultsDock},
-        {workbench::defaultResultsDockHeight},
-        Qt::Vertical);
+    m_resultsDock->raise();
+    requestResultsDockReadabilityUpdate();
+}
+
+void FinepaperMainWindow::requestResultsDockReadabilityUpdate() {
+    if (m_resultsLayoutTimer && !m_resultsLayoutTimer->isActive()) {
+        m_resultsLayoutTimer->start();
+    }
+}
+
+int FinepaperMainWindow::preferredResultsDockHeight() const {
+    if (!m_resultsDock || !m_resultTabs || !m_generationControls
+        || !m_outputSplitter
+        || !m_diagnosticsStatus || !m_generationStatus || !m_drcTable
+        || !m_artifactTable) {
+        return workbench::defaultResultsDockHeight;
+    }
+
+    const int pageWidth = (std::max)(
+        1,
+        m_resultTabs->width()
+            - 2 * ui::UiMetrics::spacing8);
+    const auto labelHeight = [pageWidth](const QLabel* label) {
+        return label->hasHeightForWidth()
+            ? label->heightForWidth(pageWidth)
+            : label->sizeHint().height();
+    };
+    const int readableHeaderHeight = (std::max)(
+        tableHeaderPresentationHeight(m_drcTable),
+        tableHeaderPresentationHeight(m_artifactTable));
+
+    const int pageMargins = 2 * ui::UiMetrics::spacing8;
+    const int diagnosticsHeight = pageMargins + ui::UiMetrics::spacing8
+        + labelHeight(m_diagnosticsStatus)
+        + readableTableHeight(m_drcTable, readableHeaderHeight);
+    const int generationHeight = pageMargins
+        + 2 * ui::UiMetrics::spacing8
+        + labelHeight(m_generationStatus)
+        + m_generationControls->sizeHint().height()
+        + m_outputSplitter->handleWidth()
+        + readableTableHeight(m_artifactTable, readableHeaderHeight);
+    const int tabChrome = m_resultTabs->tabBar()->sizeHint().height()
+        + 2 * m_resultTabs->style()->pixelMetric(
+            QStyle::PM_DefaultFrameWidth);
+    const int dockChrome = (std::max)(
+        0, m_resultsDock->height() - m_resultTabs->height());
+    const int contentHeight = (std::max)(
+        diagnosticsHeight, generationHeight);
+    const int requestedHeight = (std::max)(
+        workbench::defaultResultsDockHeight,
+        dockChrome + tabChrome + contentHeight);
+    const int availableWorkbenchHeight = m_centerViews
+        ? m_centerViews->height() + m_resultsDock->height()
+        : height();
+    const int centerChromeHeight = m_centerViews && m_nodeEditor
+        ? (std::max)(
+              0, m_centerViews->height() - m_nodeEditor->height())
+            + 2 * m_nodeEditor->style()->pixelMetric(
+                QStyle::PM_DefaultFrameWidth)
+        : 0;
+    const int minimumCenterHeight = m_centerViews
+        ? centerChromeHeight
+            + workbench::minimumCanvasTextLines
+                * m_centerViews->fontMetrics().lineSpacing()
+        : 0;
+    const int maximumHeight = (std::max)(
+        0, availableWorkbenchHeight - minimumCenterHeight);
+    return (std::min)(requestedHeight, maximumHeight);
+}
+
+void FinepaperMainWindow::ensureResultsDockReadable() {
+    if (!m_resultsDock || !m_resultsDock->isVisible()
+        || m_resultsDock->isFloating()) {
+        m_resultsDockResizeFollowUpPending = false;
+        return;
+    }
+
+    const int preferredHeight = preferredResultsDockHeight();
+    const bool isPostResizePass =
+        std::exchange(m_resultsDockResizeFollowUpPending, false);
+    const bool needsDockResize =
+        m_resultsDock->height() < preferredHeight;
+    if (needsDockResize) {
+        const int previousHeight = m_resultsDock->height();
+        resizeDocks(
+            {m_resultsDock}, {preferredHeight}, Qt::Vertical);
+        if (!isPostResizePass
+            && m_resultsDock->height() != previousHeight) {
+            m_resultsDockResizeFollowUpPending = true;
+            requestResultsDockReadabilityUpdate();
+            return;
+        }
+    }
+
+    if (m_outputSplitter && m_artifactTable) {
+        const int artifactHeight = readableTableHeight(
+            m_artifactTable,
+            tableHeaderPresentationHeight(m_artifactTable));
+        const int detailsHeight = (std::max)(
+            0, m_outputSplitter->height() - artifactHeight
+                   - m_outputSplitter->handleWidth());
+        if (m_artifactTable->height() < artifactHeight) {
+            m_outputSplitter->setSizes(
+                {artifactHeight, detailsHeight});
+        }
+    }
 }
 
 void FinepaperMainWindow::selectCenterView(const QString& id) {
@@ -4723,12 +4957,14 @@ void FinepaperMainWindow::clearPublishedResults() {
         m_generationStatus,
         QStringLiteral("No RTL has been generated for this design revision."),
         QStringLiteral("muted"));
+    requestResultsDockReadabilityUpdate();
 }
 
 void FinepaperMainWindow::updateResultFreshness() {
     const operations::DesignStamp current = currentDesignStamp();
+    bool layoutChanged = false;
     if (m_diagnosticsStamp && *m_diagnosticsStamp != current) {
-        const QString status = QStringLiteral("Out of date — ")
+        const QString completeStatus = QStringLiteral("Out of date — ")
             + m_diagnosticsSource + QStringLiteral(" belongs to ")
             + designRevisionText(*m_diagnosticsStamp)
             + QStringLiteral("; the current design is revision ")
@@ -4736,21 +4972,31 @@ void FinepaperMainWindow::updateResultFreshness() {
             + QStringLiteral(
                 " or uses a reloaded Package runtime. Run Validate again "
                 "before relying on this report.");
+        const QString status = QStringLiteral("Out of date — “")
+            + m_diagnosticsStamp->designName + QStringLiteral("” r")
+            + QString::number(m_diagnosticsStamp->revision)
+            + QStringLiteral(
+                " diagnostics; current r%1 or Package runtime differs. "
+                "Validate again.")
+                  .arg(current.revision);
+        layoutChanged |= setStatusLabel(
+            m_diagnosticsStatus, status, QStringLiteral("warning"),
+            completeStatus);
         setStatusLabel(
-            m_diagnosticsStatus, status, QStringLiteral("warning"));
-        setStatusLabel(
-            m_problemReportStatus, status, QStringLiteral("warning"));
+            m_problemReportStatus, completeStatus,
+            QStringLiteral("warning"));
         if (m_resultTabs) {
-            m_resultTabs->setTabText(
-                0, QStringLiteral("%1 (out of date)")
-                       .arg(workbench::drcTabTitle));
+            const QString tabText = QStringLiteral("%1 (out of date)")
+                .arg(workbench::drcTabTitle);
+            layoutChanged |= m_resultTabs->tabText(0) != tabText;
+            m_resultTabs->setTabText(0, tabText);
         }
     }
     if (m_generationStamp && *m_generationStamp != current) {
         const bool failedAttempt =
             m_generationPublicationKind
             == GenerationPublicationKind::FailedAttempt;
-        const QString status = failedAttempt
+        const QString completeStatus = failedAttempt
             ? QStringLiteral(
                   "Out of date — a failed generation attempt belongs to ")
                   + designRevisionText(*m_generationStamp)
@@ -4767,16 +5013,30 @@ void FinepaperMainWindow::updateResultFreshness() {
                   + QStringLiteral(
                       " or uses a reloaded Package runtime. Generate RTL "
                       "again before delivery.");
-        setStatusLabel(
+        const QString status = QStringLiteral("Out of date — “")
+            + m_generationStamp->designName + QStringLiteral("” r")
+            + QString::number(m_generationStamp->revision)
+            + (failedAttempt
+                   ? QStringLiteral(" failed generation attempt; ")
+                   : QStringLiteral(" artifacts; "))
+            + QStringLiteral(
+                "current r%1 or Package runtime differs. Regenerate RTL.")
+                  .arg(current.revision);
+        layoutChanged |= setStatusLabel(
             m_generationStatus,
             status,
             failedAttempt ? QStringLiteral("error")
-                          : QStringLiteral("warning"));
+                          : QStringLiteral("warning"),
+            completeStatus);
         if (m_resultTabs) {
-            m_resultTabs->setTabText(
-                2, QStringLiteral("%1 (out of date)")
-                       .arg(workbench::generationTabTitle));
+            const QString tabText = QStringLiteral("%1 (out of date)")
+                .arg(workbench::generationTabTitle);
+            layoutChanged |= m_resultTabs->tabText(2) != tabText;
+            m_resultTabs->setTabText(2, tabText);
         }
+    }
+    if (layoutChanged) {
+        requestResultsDockReadabilityUpdate();
     }
 }
 
