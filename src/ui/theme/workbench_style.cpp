@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QEvent>
+#include <QFont>
 #include <QObject>
 #include <QPalette>
 #include <QTextStream>
@@ -20,6 +21,19 @@ constexpr auto kStylePaletteKeyProperty =
 
 QString cssColor(const QColor& color) {
     return color.name(QColor::HexRgb);
+}
+
+void ensureReadableApplicationFont(QApplication& application) {
+    QFont font = application.font();
+    if (font.pointSizeF() > 0.0
+        && font.pointSizeF() < UiMetrics::minimumBodyPointSize) {
+        font.setPointSizeF(UiMetrics::minimumBodyPointSize);
+        application.setFont(font);
+    } else if (font.pixelSize() > 0
+               && font.pixelSize() < UiMetrics::minimumBodyPixelSize) {
+        font.setPixelSize(UiMetrics::minimumBodyPixelSize);
+        application.setFont(font);
+    }
 }
 
 void applyPaletteStyle(QApplication& application,
@@ -161,6 +175,15 @@ QString workbenchStyleSheet(const QPalette& palette) {
         << UiMetrics::spacing4 << "px;"
         << "}\n";
 
+    out << "QMainWindow::separator {"
+        << " background-color: " << outline << ";"
+        << " width: 1px; height: 1px;"
+        << " margin: " << UiMetrics::spacing4 / 2 << "px;"
+        << "}\n"
+        << "QMainWindow::separator:hover {"
+        << " background-color: " << accent << ";"
+        << "}\n";
+
     out << "QDockWidget { color: " << text << "; }\n"
         << "QDockWidget::title {"
         << " background-color: " << raised << ";"
@@ -168,14 +191,29 @@ QString workbenchStyleSheet(const QPalette& palette) {
         << " padding: " << UiMetrics::spacing8 << "px "
         << UiMetrics::spacing12 << "px;"
         << " font-weight: 600;"
+        << "}\n";
+
+    out << "QWidget[finepaperRole=\"dockTitleBar\"] {"
+        << " background-color: " << raised << ";"
+        << " border-bottom: 1px solid " << outline << ";"
         << "}\n"
-        << "QDockWidget::close-button, QDockWidget::float-button {"
-        << " background: transparent; border: 0;"
+        << "QWidget[finepaperRole=\"dockTitleBar\"] QLabel {"
+        << " color: " << text << "; font-weight: 600;"
+        << "}\n"
+        << "QWidget[finepaperRole=\"dockTitleBar\"] QToolButton {"
+        << " background: transparent; color: " << text << ";"
+        << " border: 1px solid transparent;"
         << " border-radius: " << UiMetrics::radiusSmall << "px;"
-        << " padding: " << UiMetrics::spacing4 << "px;"
+        << " min-height: " << UiMetrics::controlCompactHeight << "px;"
+        << " padding: 0 " << UiMetrics::spacing8 << "px;"
         << "}\n"
-        << "QDockWidget::close-button:hover, QDockWidget::float-button:hover {"
+        << "QWidget[finepaperRole=\"dockTitleBar\"] QToolButton:hover {"
         << " background-color: " << accentSubtle << ";"
+        << " border-color: " << outlineStrong << ";"
+        << "}\n"
+        << "QWidget[finepaperRole=\"dockTitleBar\"] QToolButton:pressed {"
+        << " background-color: " << sunken << ";"
+        << " border-color: " << accent << ";"
         << "}\n";
 
     out << "QTabWidget::pane {"
@@ -482,6 +520,7 @@ QString workbenchStyleSheet(const QPalette& palette) {
 }
 
 void applyWorkbenchStyle(QApplication& application) {
+    ensureReadableApplicationFont(application);
     applyPaletteStyle(application, application.palette(), true);
     if (application.property(kStyleObserverProperty).value<QObject*>()) {
         return;

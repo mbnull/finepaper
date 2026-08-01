@@ -11,8 +11,9 @@ namespace finepaper::ui {
 // Widgets. Body typography remains controlled by QApplication / the platform.
 [[nodiscard]] QString workbenchStyleSheet(const QPalette& palette);
 
-// Applies the stylesheet and keeps it synchronized with application palette
-// changes. The connection is owned by QApplication and is installed once.
+// Raises unusually small platform defaults to the readable body token, then
+// applies the stylesheet and keeps it synchronized with palette changes. User
+// and accessibility fonts above that minimum remain unchanged.
 void applyWorkbenchStyle(QApplication& application);
 
 } // namespace finepaper::ui

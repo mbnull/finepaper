@@ -13,7 +13,6 @@
 #include <QSet>
 #include <QVector>
 
-#include <memory>
 #include <optional>
 
 class QAction;
@@ -25,6 +24,7 @@ class QLabel;
 class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
+class QMenu;
 class QPlainTextEdit;
 class QProgressBar;
 class QPushButton;
@@ -34,6 +34,8 @@ class QStackedLayout;
 class QTabWidget;
 class QTableWidget;
 class QTimer;
+class QToolBar;
+class QToolButton;
 class QWidget;
 
 namespace finepaper {
@@ -50,6 +52,8 @@ class EmptyState;
 class InspectorDesignSettings;
 class InspectorSummaryPanel;
 class WorkbenchLayoutController;
+enum class WorkbenchPanelRole;
+enum class WorkbenchWidthMode;
 }
 
 class FinepaperMainWindow final : public QMainWindow {
@@ -179,8 +183,15 @@ private:
     void showWorkspaceStatusMessage();
     void showResultsDock();
     void showWorkbenchPanel(QDockWidget* dock);
+    [[nodiscard]] std::optional<ui::WorkbenchPanelRole>
+        panelRole(QDockWidget* dock) const;
     void setCanvasFocusMode(bool enabled);
     void updateCanvasFocusActionPresentation(bool enabled);
+    void updateResponsiveWorkbenchPresentation(
+        ui::WorkbenchWidthMode mode);
+    void updateWorkspaceNavigationPresentation();
+    void updateCanvasControlsPresentation();
+    void rebuildCompactDomainLayerMenu();
     void focusCanvasWorkspace();
     void focusCurrentCenterView();
     void selectCenterView(const QString& id);
@@ -246,8 +257,21 @@ private:
     QAction* m_domainLayerSeparator = nullptr;
     QAction* m_domainLayerLabelAction = nullptr;
     QAction* m_domainLayerSelectorAction = nullptr;
+    QAction* m_wideCanvasSeparatorAction = nullptr;
+    QAction* m_wideCanvasControlsAction = nullptr;
+    QAction* m_compactCanvasControlsAction = nullptr;
+    QAction* m_packagePanelAction = nullptr;
+    QAction* m_inspectorPanelAction = nullptr;
+    QAction* m_domainManagerPanelAction = nullptr;
     QLabel* m_domainLayerLabel = nullptr;
     QComboBox* m_domainLayerSelector = nullptr;
+    QMenu* m_compactDomainLayerMenu = nullptr;
+    QToolBar* m_mainToolbar = nullptr;
+    QToolBar* m_workspaceToolbar = nullptr;
+    QToolButton* m_canvasControlsButton = nullptr;
+    QComboBox* m_workspaceSelector = nullptr;
+    QLabel* m_workspaceLabel = nullptr;
+    bool m_compactWorkbenchPresentation = false;
 
     QFutureWatcher<ValidationResult>* m_validationWatcher = nullptr;
     QFutureWatcher<GenerationResult>* m_generationWatcher = nullptr;
@@ -304,8 +328,7 @@ private:
     DomainManagerPanel* m_domainManager = nullptr;
 
     QDockWidget* m_resultsDock = nullptr;
-    std::unique_ptr<ui::WorkbenchLayoutController>
-        m_workbenchLayoutController;
+    ui::WorkbenchLayoutController* m_workbenchLayoutController = nullptr;
     QString m_canvasFocusRestoreCenterViewId;
     QTabWidget* m_resultTabs = nullptr;
     QWidget* m_generationControls = nullptr;

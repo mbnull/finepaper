@@ -16,6 +16,8 @@ inline const QString endpointTypeMime = QStringLiteral("application/x-finepaper-
 inline const QString packageRootsSetting = QStringLiteral("runtime/installedPackageRoots");
 inline const QString geometrySetting = QStringLiteral("workbench/geometry");
 inline const QString windowStateSetting = QStringLiteral("workbench/windowState");
+inline const QString panelVisibilitySetting =
+    QStringLiteral("workbench/panelVisibilityV1");
 inline const QString centerViewSetting = QStringLiteral("workbench/centerView");
 inline const QString resultTabSetting = QStringLiteral("workbench/resultTab");
 inline const QString domainLayerSelectionsSetting =
@@ -23,12 +25,29 @@ inline const QString domainLayerSelectionsSetting =
 inline const QString reducedMotionSetting =
     QStringLiteral("accessibility/reducedMotion");
 
+inline constexpr auto workbenchWidthModeProperty =
+    "finepaper.workbenchWidthMode";
+inline constexpr auto workbenchAllPanelsWidthProperty =
+    "finepaper.workbenchAllPanelsWidth";
+inline constexpr auto workbenchOnePanelWidthProperty =
+    "finepaper.workbenchOnePanelWidth";
+
 inline const QString packageDockName = QStringLiteral("finepaper.packageDock");
 inline const QString inspectorDockName = QStringLiteral("finepaper.inspectorDock");
 inline const QString domainManagerDockName =
     QStringLiteral("finepaper.domainManagerDock");
 inline const QString resultsDockName = QStringLiteral("finepaper.resultsDock");
 inline const QString mainToolbarName = QStringLiteral("finepaper.mainToolbar");
+inline const QString workspaceToolbarName =
+    QStringLiteral("finepaper.workspaceToolbar");
+inline const QString workspaceSelectorName =
+    QStringLiteral("finepaper.workspaceSelector");
+inline const QString canvasControlsButtonName =
+    QStringLiteral("finepaper.canvasControlsButton");
+inline const QString canvasControlsMenuName =
+    QStringLiteral("finepaper.canvasControlsMenu");
+inline const QString compactDomainLayerMenuName =
+    QStringLiteral("finepaper.compactDomainLayerMenu");
 inline const QString panelNavigationButtonName =
     QStringLiteral("finepaper.panelNavigationButton");
 inline const QString packageNavigationActionName =

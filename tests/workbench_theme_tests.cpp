@@ -1,13 +1,19 @@
 #include "ui/components/empty_state.h"
 #include "ui/theme/ui_tokens.h"
 #include "ui/theme/workbench_style.h"
+#include "ui/workbench/widgets/workbench_dock_title_bar.h"
 
 #include <QApplication>
+#include <QDockWidget>
+#include <QFont>
 #include <QLabel>
+#include <QMainWindow>
 #include <QPalette>
 #include <QPushButton>
 #include <QString>
 #include <QTextStream>
+#include <QToolButton>
+#include <QWidget>
 
 #include <cmath>
 
@@ -66,6 +72,8 @@ void verifySemanticPalette(const QPalette& palette, bool expectedDark) {
     check(sheet.contains(QStringLiteral("finepaperRole=\"primary\""))
               && sheet.contains(QStringLiteral("finepaperRole=\"danger\""))
               && sheet.contains(QStringLiteral("finepaperRole=\"canvasMode\""))
+              && sheet.contains(QStringLiteral("finepaperRole=\"dockTitleBar\""))
+              && sheet.contains(QStringLiteral("QMainWindow::separator"))
               && sheet.contains(QStringLiteral("QGraphicsView:focus")),
           QStringLiteral("workbench stylesheet exposes stable semantic component roles"));
     check(sheet.contains(token.surface.name(QColor::HexRgb))
@@ -172,6 +180,16 @@ int main(int argc, char** argv) {
 
     application.setPalette(light);
     finepaper::ui::applyWorkbenchStyle(application);
+    const QFont readableApplicationFont = application.font();
+    check((readableApplicationFont.pointSizeF() > 0.0
+              && readableApplicationFont.pointSizeF()
+                  >= finepaper::ui::UiMetrics::minimumBodyPointSize)
+              || (readableApplicationFont.pixelSize() > 0
+                  && readableApplicationFont.pixelSize()
+                      >= finepaper::ui::UiMetrics::minimumBodyPixelSize),
+          QStringLiteral(
+              "the workbench raises unusually small platform body fonts to "
+              "the readable token"));
     const QString lightSheet = application.styleSheet();
     application.setPalette(dark);
     application.processEvents();
@@ -182,6 +200,47 @@ int main(int argc, char** argv) {
     check(darkSheet.contains(
               finepaper::ui::colors(dark).surface.name(QColor::HexRgb)),
           QStringLiteral("refreshed stylesheet uses the new palette tokens"));
+
+    QMainWindow dockHost;
+    auto* dock = new QDockWidget(QStringLiteral("Inspector"), &dockHost);
+    dock->setWidget(new QWidget(dock));
+    finepaper::ui::installWorkbenchDockTitleBar(dock);
+    dockHost.addDockWidget(Qt::RightDockWidgetArea, dock);
+    dockHost.show();
+    application.processEvents();
+    auto* floatButton = dock->titleBarWidget()->findChild<QToolButton*>(
+        QStringLiteral("finepaper.dockTitleBar.floatButton"));
+    auto* closeButton = dock->titleBarWidget()->findChild<QToolButton*>(
+        QStringLiteral("finepaper.dockTitleBar.closeButton"));
+    check(floatButton && floatButton->text() == QStringLiteral("Float")
+              && floatButton->height()
+                  >= finepaper::ui::UiMetrics::controlCompactHeight
+              && !floatButton->accessibleName().isEmpty()
+              && closeButton
+              && closeButton->text() == QStringLiteral("Close")
+              && closeButton->height()
+                  >= finepaper::ui::UiMetrics::controlCompactHeight,
+          QStringLiteral(
+              "Dock title controls are readable text targets instead of "
+              "ambiguous glyphs"));
+    if (floatButton) {
+        floatButton->click();
+        application.processEvents();
+    }
+    check(dock->isFloating()
+              && floatButton
+              && floatButton->text() == QStringLiteral("Dock"),
+          QStringLiteral("the Float command becomes an explicit Dock command"));
+    if (floatButton) {
+        floatButton->click();
+        application.processEvents();
+    }
+    if (closeButton) {
+        closeButton->click();
+        application.processEvents();
+    }
+    check(!dock->isFloating() && !dock->isVisible(),
+          QStringLiteral("text Dock controls preserve native float and close behavior"));
 
     return failures == 0 ? 0 : 1;
 }

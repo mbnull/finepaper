@@ -43,12 +43,15 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
+#include <QMetaObject>
 #include <QMimeData>
 #include <QPlainTextEdit>
 #include <QPalette>
 #include <QPixmap>
 #include <QPointer>
+#include <QPoint>
 #include <QPushButton>
+#include <QRect>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSettings>
@@ -66,6 +69,7 @@
 #include <QTimer>
 #include <QUndoStack>
 #include <QVariantAnimation>
+#include <QWidget>
 
 #include <QtTest/QTest>
 
@@ -1357,6 +1361,15 @@ int main(int argc, char** argv) {
         qEnvironmentVariable("FINEPAPER_GUI_SMOKE_THEME")
             .trimmed()
             .toLower();
+    const QString requestedScope =
+        qEnvironmentVariable("FINEPAPER_GUI_SMOKE_SCOPE")
+            .trimmed()
+            .toLower();
+    check(requestedScope.isEmpty()
+              || requestedScope == QStringLiteral("full")
+              || requestedScope == QStringLiteral("workbench"),
+          QStringLiteral(
+              "FINEPAPER_GUI_SMOKE_SCOPE must be full or workbench."));
     QTemporaryDir configRoot(QStringLiteral("/tmp/finepaper-gui-config-XXXXXX"));
     QTemporaryDir outputRoot(QStringLiteral("/tmp/finepaper-gui-output-XXXXXX"));
     check(configRoot.isValid(), QStringLiteral("temporary GUI settings root is available"));
@@ -1538,6 +1551,31 @@ int main(int argc, char** argv) {
                   == QStringLiteral("Diagnostics and Output"),
           QStringLiteral(
               "the Results dock renders its complete text title and exposes a spoken name"));
+    const auto hasTextDockControls = [](QDockWidget* dock) {
+        if (!dock || !dock->titleBarWidget()) {
+            return false;
+        }
+        const auto* floatButton = dock->titleBarWidget()
+            ->findChild<QToolButton*>(
+                QStringLiteral("finepaper.dockTitleBar.floatButton"));
+        const auto* closeButton = dock->titleBarWidget()
+            ->findChild<QToolButton*>(
+                QStringLiteral("finepaper.dockTitleBar.closeButton"));
+        return floatButton
+            && (floatButton->text() == QStringLiteral("Float")
+                || floatButton->text() == QStringLiteral("Dock"))
+            && !floatButton->accessibleName().isEmpty()
+            && closeButton
+            && closeButton->text() == QStringLiteral("Close")
+            && !closeButton->accessibleName().isEmpty();
+    };
+    const QList<QDockWidget*> workbenchDocks = {
+        packageDock, inspectorDock, domainDock, resultsDock};
+    check(std::all_of(
+              workbenchDocks.cbegin(), workbenchDocks.cend(),
+              hasTextDockControls),
+          QStringLiteral(
+              "all workbench Docks expose readable Float and Close text controls"));
     check(inspectorDock && inspectorScroll
               && inspectorDock->widget() == inspectorScroll
               && inspectorScroll->widgetResizable()
@@ -1554,6 +1592,14 @@ int main(int argc, char** argv) {
 
     auto* mainToolbar = window.findChild<QToolBar*>(
         finepaper::workbench::mainToolbarName);
+    auto* workspaceToolbar = window.findChild<QToolBar*>(
+        finepaper::workbench::workspaceToolbarName);
+    auto* workspaceSelector = window.findChild<QComboBox*>(
+        finepaper::workbench::workspaceSelectorName);
+    auto* canvasControlsButton = window.findChild<QToolButton*>(
+        finepaper::workbench::canvasControlsButtonName);
+    auto* wideCanvasControls = window.findChild<QWidget*>(
+        QStringLiteral("finepaper.wideCanvasControls"));
     auto* panelNavigationButton = window.findChild<QToolButton*>(
         finepaper::workbench::panelNavigationButtonName);
     QAction* packagePanelAction = window.findChild<QAction*>(
@@ -1578,6 +1624,68 @@ int main(int argc, char** argv) {
               && panelNavigationButton->menu(),
           QStringLiteral(
               "the main toolbar and Panels menu use visible text instead of icon-only navigation"));
+    const QString responsiveMode = window.property(
+        finepaper::workbench::workbenchWidthModeProperty).toString();
+    const bool compactPresentation = responsiveMode != QStringLiteral("wide");
+    const bool workspaceTitlesComplete = workspaceSelector
+        && workspaceSelector->count() == 5
+        && workspaceSelector->itemText(0)
+            == QStringLiteral("NoC Editor")
+        && workspaceSelector->itemText(1)
+            == QStringLiteral("Domain Configuration")
+        && workspaceSelector->itemText(2)
+            == QStringLiteral("Design Extensions")
+        && workspaceSelector->itemText(3)
+            == QStringLiteral("Performance Analysis")
+        && workspaceSelector->itemText(4)
+            == QStringLiteral("Problem Report");
+    const QList<QAction*> mainToolbarActions = mainToolbar
+        ? mainToolbar->actions() : QList<QAction*>{};
+    const bool visibleToolbarWidgetsFit = mainToolbar
+        && std::all_of(
+            mainToolbarActions.cbegin(),
+            mainToolbarActions.cend(),
+            [mainToolbar](QAction* action) {
+                if (!action || !action->isVisible()
+                    || action->isSeparator()) {
+                    return true;
+                }
+                QWidget* widget = mainToolbar->widgetForAction(action);
+                if (!widget || !widget->isVisibleTo(mainToolbar)) {
+                    return false;
+                }
+                const QRect widgetRect(
+                    widget->mapTo(mainToolbar, QPoint(0, 0)),
+                    widget->size());
+                return mainToolbar->contentsRect().contains(widgetRect);
+            });
+    const bool compactCanvasMenuComplete = canvasControlsButton
+        && canvasControlsButton->menu()
+        && canvasControlsButton->menu()->actions().contains(
+            window.findChild<QAction*>(
+                finepaper::workbench::selectCanvasActionName))
+        && canvasControlsButton->menu()->actions().contains(
+            window.findChild<QAction*>(
+                finepaper::workbench::panCanvasActionName))
+        && canvasControlsButton->menu()->actions().contains(canvasFocusAction);
+    check(workspaceToolbar && workspaceSelector && workspaceTitlesComplete
+              && centerViews
+              && centerViews->tabBar()->isVisible() == !compactPresentation
+              && workspaceToolbar->isVisible() == compactPresentation
+              && canvasControlsButton
+              && canvasControlsButton->isVisible() == compactPresentation
+              && wideCanvasControls
+              && wideCanvasControls->isVisible() == !compactPresentation
+              && (!compactPresentation || compactCanvasMenuComplete)
+              && visibleToolbarWidgetsFit,
+          QStringLiteral(
+              "responsive chrome uses complete text navigation without Qt's icon overflow "
+              "(mode=%1, tabs=%2, workspace=%3, canvas=%4, widgetsFit=%5)")
+              .arg(responsiveMode)
+              .arg(centerViews && centerViews->tabBar()->isVisible())
+              .arg(workspaceToolbar && workspaceToolbar->isVisible())
+              .arg(canvasControlsButton && canvasControlsButton->isVisible())
+              .arg(visibleToolbarWidgetsFit));
     check(packagePanelAction && packagePanelAction->shortcut() == QKeySequence(QStringLiteral("Ctrl+B")),
           QStringLiteral("left Package panel has the VS Code style Ctrl+B shortcut"));
     check(inspectorPanelAction
@@ -1722,16 +1830,31 @@ int main(int argc, char** argv) {
     if (resetWorkbenchLayoutAction) {
         resetWorkbenchLayoutAction->trigger();
         application.processEvents();
+        application.processEvents();
     }
-    check(resetWorkbenchLayoutAction && packageDock && packageDock->isVisible()
-              && inspectorDock && inspectorDock->isVisible()
+    const QString resetResponsiveMode = window.property(
+        finepaper::workbench::workbenchWidthModeProperty).toString();
+    const bool resetSideVisibilityMatchesMode =
+        resetResponsiveMode == QStringLiteral("wide")
+            ? packageDock && packageDock->isVisible()
+                && inspectorDock && inspectorDock->isVisible()
+            : resetResponsiveMode == QStringLiteral("compact")
+                ? packageDock && packageDock->isVisible()
+                    && inspectorDock && !inspectorDock->isVisible()
+                : packageDock && !packageDock->isVisible()
+                    && inspectorDock && !inspectorDock->isVisible();
+    check(resetWorkbenchLayoutAction && resetSideVisibilityMatchesMode
+              && packagePanelAction && packagePanelAction->isChecked()
+              && inspectorPanelAction && inspectorPanelAction->isChecked()
               && resultsDock && !resultsDock->isVisible()
               && window.dockWidgetArea(packageDock) == Qt::LeftDockWidgetArea
               && window.dockWidgetArea(inspectorDock) == Qt::RightDockWidgetArea
               && window.dockWidgetArea(resultsDock) == Qt::BottomDockWidgetArea
               && centerViews && centerViews->currentIndex() == 0,
           QStringLiteral(
-              "Reset Workbench Layout restores primary docks, the editor, and a hidden Results panel"));
+              "Reset Workbench Layout restores panel intent, applies %1 responsiveness, "
+              "selects the editor, and hides Results")
+              .arg(resetResponsiveMode));
 
     auto* initialCanvasView = window.findChild<QGraphicsView*>(
         QStringLiteral("finepaper.canvasView"));
@@ -1806,6 +1929,9 @@ int main(int argc, char** argv) {
     check(canvasFocusAction && canvasFocusAction->isChecked()
               && canvasFocusAction->text()
                   == QStringLiteral("Exit Canvas Focus")
+              && canvasControlsButton
+              && canvasControlsButton->text()
+                  == QStringLiteral("Canvas Focus: Pan")
               && packageDock && !packageDock->isVisible()
               && inspectorDock && !inspectorDock->isVisible()
               && domainDock && !domainDock->isVisible()
@@ -1886,10 +2012,13 @@ int main(int argc, char** argv) {
               && restoredInspectorDomainTabified
                   == customInspectorDomainTabified
               && centerViews && centerViews->currentIndex() == 2
-              && qAbs(centerViews->width()
-                      - centerWidthBeforeFocus) <= 1,
+              && (responsiveMode == QStringLiteral("wide")
+                      ? qAbs(centerViews->width()
+                             - centerWidthBeforeFocus) <= 1
+                      : centerViews->width()
+                            >= centerWidthBeforeFocus),
           QStringLiteral(
-              "leaving Canvas Focus restores the exact customized panel layout "
+              "leaving Canvas Focus restores customized panel intent and reapplies responsive sizing "
               "(checked %1; text %2; visibility %3; areas %4; floating %5; "
               "tabs %6; width %7/%8)")
               .arg(canvasFocusAction && canvasFocusAction->isChecked())
@@ -2088,6 +2217,58 @@ int main(int argc, char** argv) {
               "the no-design canvas offers Create and Open CTAs when a runnable NoC IP is installed"));
     restoreRequestedClientSize();
     captureSmokeScreenshot(window, QStringLiteral("no-design"), requestedTheme);
+    if (requestedScope == QStringLiteral("workbench")) {
+        if (compactPresentation && workspaceSelector && centerViews) {
+            if (canvasFocusAction && !canvasFocusAction->isChecked()) {
+                canvasFocusAction->trigger();
+                application.processEvents();
+            }
+            workspaceSelector->setFocus(Qt::ShortcutFocusReason);
+            QTest::keyClick(workspaceSelector, Qt::Key_Down);
+            application.processEvents();
+            check(centerViews->currentIndex() == 1
+                      && workspaceSelector->currentText()
+                          == QStringLiteral("Domain Configuration")
+                      && canvasFocusAction
+                      && !canvasFocusAction->isChecked(),
+                  QStringLiteral(
+                      "the Compact Workspace selector switches views by keyboard using complete text and exits Canvas Focus"));
+        }
+        if (centerViews) {
+            centerViews->setCurrentIndex(0);
+        }
+        createDesignThroughDialog(
+            window,
+            QStringLiteral("finepaper.noc@1.0.0"),
+            QStringLiteral("responsive_shell"));
+        restoreRequestedClientSize();
+        application.processEvents();
+        application.processEvents();
+        const QString designResponsiveMode = window.property(
+            finepaper::workbench::workbenchWidthModeProperty).toString();
+        const bool designPanelsMatchPriority =
+            designResponsiveMode == QStringLiteral("wide")
+                ? packageDock && packageDock->isVisible()
+                    && inspectorDock && inspectorDock->isVisible()
+                : designResponsiveMode == QStringLiteral("compact")
+                    ? packageDock && !packageDock->isVisible()
+                        && inspectorDock && inspectorDock->isVisible()
+                    : packageDock && !packageDock->isVisible()
+                        && inspectorDock && !inspectorDock->isVisible();
+        check(designPanelsMatchPriority
+                  && packagePanelAction && packagePanelAction->isChecked()
+                  && inspectorPanelAction && inspectorPanelAction->isChecked(),
+              QStringLiteral(
+                  "after design creation, %1 responsiveness prioritizes Inspector without erasing Package intent")
+                  .arg(designResponsiveMode));
+        closeDiscarding(window);
+        application.processEvents();
+        QTextStream(stdout)
+            << (failures == 0 ? "finepaper-gui-smoke passed"
+                              : "finepaper-gui-smoke failed")
+            << Qt::endl;
+        return failures == 0 ? 0 : 1;
+    }
     const QString provenanceDesignName =
         QStringLiteral("NoC %2-%3-%4-%5");
     createDesignThroughDialog(
@@ -5591,7 +5772,34 @@ int main(int argc, char** argv) {
 
     auto* domainSelector = domainWindow.findChild<QComboBox*>(
         finepaper::workbench::domainLayerSelectorName);
-    check(domainSelector && domainSelector->isVisible()
+    auto* compactDomainMenu = domainWindow.findChild<QMenu*>(
+        finepaper::workbench::compactDomainLayerMenuName);
+    const bool domainCompact = domainWindow.property(
+        finepaper::workbench::workbenchWidthModeProperty).toString()
+        != QStringLiteral("wide");
+    if (domainCompact && compactDomainMenu) {
+        QMetaObject::invokeMethod(
+            compactDomainMenu, "aboutToShow", Qt::DirectConnection);
+    }
+    const auto compactDomainContains = [compactDomainMenu](
+        const QString& typeId) {
+        if (!compactDomainMenu) {
+            return false;
+        }
+        const QList<QAction*> actions = compactDomainMenu->actions();
+        return std::any_of(
+            actions.cbegin(), actions.cend(),
+            [&typeId](const QAction* action) {
+                return action && action->data().toString() == typeId;
+            });
+    };
+    const bool domainLayerControlReachable = domainCompact
+        ? compactDomainMenu
+            && compactDomainMenu->actions().size() == 3
+            && compactDomainContains(QStringLiteral("security-zone"))
+            && compactDomainContains(QStringLiteral("fabric-tier"))
+        : domainSelector && domainSelector->isVisible();
+    check(domainSelector && domainLayerControlReachable
               && domainSelector->isEnabled()
               && domainSelector->count() == 3
               && domainSelector->itemText(0) == QStringLiteral("None")
@@ -6613,7 +6821,22 @@ int main(int argc, char** argv) {
     check(zeroPackageNavigation && zeroPackageInstall
               && focusIsWithin(zeroPackageInstall),
           QStringLiteral(
-              "Package navigation focuses Install when no runnable Package can be selected"));
+              "Package navigation focuses Install when no runnable Package can be selected "
+              "(mode=%1, dockVisible=%2, installEnabled=%3, installVisible=%4, "
+              "focus=%5, localFocus=%6)")
+              .arg(zeroPackageWindow.property(
+                       finepaper::workbench::workbenchWidthModeProperty)
+                       .toString())
+              .arg(zeroPackageInstall
+                       && zeroPackageInstall->isVisibleTo(&zeroPackageWindow))
+              .arg(zeroPackageInstall && zeroPackageInstall->isEnabled())
+              .arg(zeroPackageInstall && zeroPackageInstall->isVisible())
+              .arg(QApplication::focusWidget()
+                       ? QApplication::focusWidget()->objectName()
+                       : QStringLiteral("none"))
+              .arg(zeroPackageWindow.focusWidget()
+                       ? zeroPackageWindow.focusWidget()->objectName()
+                       : QStringLiteral("none")));
     closeDiscarding(zeroPackageWindow);
 
     finepaper::RuntimeLocations missingLocations{

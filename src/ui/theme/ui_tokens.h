@@ -7,6 +7,12 @@
 namespace finepaper::ui {
 
 struct UiMetrics final {
+    // 12 pt is approximately 16 CSS pixels at the desktop reference density.
+    // The application only raises smaller platform defaults; larger user or
+    // accessibility fonts remain untouched.
+    static constexpr double minimumBodyPointSize = 12.0;
+    static constexpr int minimumBodyPixelSize = 16;
+
     static constexpr int spacing4 = 4;
     static constexpr int spacing8 = 8;
     static constexpr int spacing12 = 12;

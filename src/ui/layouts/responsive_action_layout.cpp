@@ -1,8 +1,43 @@
 #include "ui/layouts/responsive_action_layout.h"
 
+#include <QStyle>
+#include <QWidget>
+
 #include <algorithm>
 
 namespace finepaper::ui {
+namespace {
+
+int effectiveSpacing(const QLayout* layout, Qt::Orientation orientation) {
+    if (!layout) {
+        return 0;
+    }
+    if (layout->spacing() >= 0) {
+        return layout->spacing();
+    }
+    const QWidget* parent = layout->parentWidget();
+    if (!parent) {
+        return 0;
+    }
+    return parent->style()->pixelMetric(
+        orientation == Qt::Horizontal
+            ? QStyle::PM_LayoutHorizontalSpacing
+            : QStyle::PM_LayoutVerticalSpacing,
+        nullptr,
+        parent);
+}
+
+int itemHeightForWidth(QLayoutItem* item, int width) {
+    if (!item) {
+        return 0;
+    }
+    return item->hasHeightForWidth()
+        ? item->heightForWidth((std::max)(0, width))
+        : (std::max)(item->minimumSize().height(),
+                     item->sizeHint().height());
+}
+
+} // namespace
 
 ResponsiveActionLayout::ResponsiveActionLayout(QWidget* parent)
     : QLayout(parent) {}
@@ -76,14 +111,17 @@ int ResponsiveActionLayout::heightForWidth(int width) const {
         if (!item || item->isEmpty()) {
             continue;
         }
-        const int itemHeight = (std::max)(
-            item->minimumSize().height(), item->sizeHint().height());
+        const int itemHeight = stacked
+            ? itemHeightForWidth(item, availableWidth)
+            : (std::max)(item->minimumSize().height(),
+                         item->sizeHint().height());
         result = stacked ? result + itemHeight
                          : (std::max)(result, itemHeight);
         ++activeItems;
     }
     if (stacked && activeItems > 1) {
-        result += (activeItems - 1) * spacing();
+        result += (activeItems - 1)
+            * effectiveSpacing(this, Qt::Vertical);
     }
     return result + margins.top() + margins.bottom();
 }
@@ -97,49 +135,75 @@ void ResponsiveActionLayout::setGeometry(const QRect& rect) {
 
     if (shouldStack(area.width())) {
         int y = area.top();
+        const int verticalSpacing = effectiveSpacing(
+            this, Qt::Vertical);
         for (QLayoutItem* item : m_items) {
             if (!item || item->isEmpty()) {
                 continue;
             }
-            const int itemHeight = (std::max)(
-                item->minimumSize().height(), item->sizeHint().height());
+            const int itemHeight = itemHeightForWidth(item, area.width());
             item->setGeometry(
                 QRect(area.left(), y, area.width(), itemHeight));
-            y += itemHeight + spacing();
+            y += itemHeight + verticalSpacing;
         }
         return;
     }
 
     int totalWidth = 0;
     int activeItems = 0;
+    int expandingItems = 0;
     for (QLayoutItem* item : m_items) {
         if (!item || item->isEmpty()) {
             continue;
         }
         totalWidth += (std::max)(
             item->minimumSize().width(), item->sizeHint().width());
+        if (item->expandingDirections().testFlag(Qt::Horizontal)) {
+            ++expandingItems;
+        }
         ++activeItems;
     }
     if (activeItems == 0) {
         return;
     }
-    totalWidth += (activeItems - 1) * spacing();
+    const int horizontalSpacing = effectiveSpacing(
+        this, Qt::Horizontal);
+    totalWidth += (activeItems - 1) * horizontalSpacing;
 
-    int x = area.right() - totalWidth + 1;
+    const int extraWidth = expandingItems > 0
+        ? (std::max)(0, area.width() - totalWidth)
+        : 0;
+    int remainingExtra = extraWidth;
+    int remainingExpanding = expandingItems;
+    int x = expandingItems > 0
+        ? area.left() : area.right() - totalWidth + 1;
     for (QLayoutItem* item : m_items) {
         if (!item || item->isEmpty()) {
             continue;
         }
         const QSize itemSize = item->sizeHint().expandedTo(
             item->minimumSize());
+        int itemWidth = itemSize.width();
+        if (item->expandingDirections().testFlag(Qt::Horizontal)
+            && remainingExpanding > 0) {
+            const int share = remainingExtra / remainingExpanding;
+            itemWidth += share;
+            remainingExtra -= share;
+            --remainingExpanding;
+        }
         const int itemHeight = (std::min)(
-            area.height(), itemSize.height());
-        item->setGeometry(QRect(
+            area.height(), itemHeightForWidth(item, itemWidth));
+        const QRect logicalRect(
             x,
             area.top() + (area.height() - itemHeight) / 2,
-            itemSize.width(),
-            itemHeight));
-        x += itemSize.width() + spacing();
+            itemWidth,
+            itemHeight);
+        const QWidget* parent = parentWidget();
+        item->setGeometry(parent
+            ? QStyle::visualRect(
+                  parent->layoutDirection(), area, logicalRect)
+            : logicalRect);
+        x += itemWidth + horizontalSpacing;
     }
 }
 
@@ -158,7 +222,8 @@ QSize ResponsiveActionLayout::horizontalSize() const {
         ++activeItems;
     }
     if (activeItems > 1) {
-        result.rwidth() += (activeItems - 1) * spacing();
+        result.rwidth() += (activeItems - 1)
+            * effectiveSpacing(this, Qt::Horizontal);
     }
     if (activeItems > 0) {
         const QMargins margins = contentsMargins();

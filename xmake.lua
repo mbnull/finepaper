@@ -54,6 +54,10 @@ target("finepaper-gui")
     add_files("src/ui/layouts/*.cpp")
     add_files("src/ui/theme/*.cpp")
     add_files("src/ui/workbench/*.cpp")
+    add_files("src/ui/workbench/layout/*.cpp")
+    add_files("src/ui/workbench/layout/workbench_layout_controller.h")
+    add_files("src/ui/workbench/widgets/*.cpp")
+    add_files("src/ui/workbench/widgets/workbench_dock_title_bar.h")
     add_includedirs("src")
 
 target("finepaper-tests")
@@ -450,6 +454,10 @@ target("finepaper-gui-smoke")
     add_files("src/ui/layouts/*.cpp")
     add_files("src/ui/theme/*.cpp")
     add_files("src/ui/workbench/*.cpp")
+    add_files("src/ui/workbench/layout/*.cpp")
+    add_files("src/ui/workbench/layout/workbench_layout_controller.h")
+    add_files("src/ui/workbench/widgets/*.cpp")
+    add_files("src/ui/workbench/widgets/workbench_dock_title_bar.h")
     add_files("src/gui/workbench_view_registry.cpp")
     add_includedirs("src")
     add_defines('FINEPAPER_SOURCE_DIR="' .. path.unix(os.projectdir()) .. '"')
@@ -462,7 +470,8 @@ target("finepaper-gui-smoke")
         runenvs = {
             QT_QPA_PLATFORM = "offscreen",
             FINEPAPER_GUI_SMOKE_SIZE = "1280x720",
-            FINEPAPER_GUI_SMOKE_THEME = "light"
+            FINEPAPER_GUI_SMOKE_THEME = "light",
+            FINEPAPER_GUI_SMOKE_SCOPE = "workbench"
         }
     })
     add_tests("narrow-light", {
@@ -470,7 +479,17 @@ target("finepaper-gui-smoke")
         runenvs = {
             QT_QPA_PLATFORM = "offscreen",
             FINEPAPER_GUI_SMOKE_SIZE = "1024x720",
-            FINEPAPER_GUI_SMOKE_THEME = "light"
+            FINEPAPER_GUI_SMOKE_THEME = "light",
+            FINEPAPER_GUI_SMOKE_SCOPE = "workbench"
+        }
+    })
+    add_tests("minimum-light", {
+        trim_output = true,
+        runenvs = {
+            QT_QPA_PLATFORM = "offscreen",
+            FINEPAPER_GUI_SMOKE_SIZE = "800x600",
+            FINEPAPER_GUI_SMOKE_THEME = "light",
+            FINEPAPER_GUI_SMOKE_SCOPE = "workbench"
         }
     })
     add_tests("compact-dark-scaled", {
@@ -479,7 +498,8 @@ target("finepaper-gui-smoke")
             QT_QPA_PLATFORM = "offscreen",
             QT_SCALE_FACTOR = "1.5",
             FINEPAPER_GUI_SMOKE_SIZE = "1280x720",
-            FINEPAPER_GUI_SMOKE_THEME = "dark"
+            FINEPAPER_GUI_SMOKE_THEME = "dark",
+            FINEPAPER_GUI_SMOKE_SCOPE = "workbench"
         }
     })
     add_tests("compact-large-font", {
@@ -488,7 +508,8 @@ target("finepaper-gui-smoke")
             QT_QPA_PLATFORM = "offscreen",
             FINEPAPER_GUI_SMOKE_SIZE = "1280x720",
             FINEPAPER_GUI_SMOKE_THEME = "light",
-            FINEPAPER_GUI_SMOKE_FONT_SCALE = "1.5"
+            FINEPAPER_GUI_SMOKE_FONT_SCALE = "1.5",
+            FINEPAPER_GUI_SMOKE_SCOPE = "workbench"
         }
     })
     add_tests("compact-maximum-font", {
@@ -497,7 +518,8 @@ target("finepaper-gui-smoke")
             QT_QPA_PLATFORM = "offscreen",
             FINEPAPER_GUI_SMOKE_SIZE = "1280x720",
             FINEPAPER_GUI_SMOKE_THEME = "light",
-            FINEPAPER_GUI_SMOKE_FONT_SCALE = "2.0"
+            FINEPAPER_GUI_SMOKE_FONT_SCALE = "2.0",
+            FINEPAPER_GUI_SMOKE_SCOPE = "workbench"
         }
     })
 
@@ -511,6 +533,24 @@ target("finepaper-workbench-theme-tests")
     add_files("src/ui/layouts/responsive_action_layout.cpp")
     add_files("src/ui/theme/ui_tokens.cpp")
     add_files("src/ui/theme/workbench_style.cpp")
+    add_files("src/ui/workbench/widgets/workbench_dock_title_bar.cpp")
+    add_files("src/ui/workbench/widgets/workbench_dock_title_bar.h")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+
+target("finepaper-workbench-responsive-tests")
+    add_rules("qt.widgetapp")
+    add_frameworks("QtTest")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_files("tests/workbench_responsive_layout_tests.cpp")
+    add_files("src/ui/layouts/responsive_action_layout.cpp")
+    add_files("src/ui/workbench/layout/workbench_layout_controller.cpp")
+    add_files("src/ui/workbench/layout/workbench_layout_controller.h")
     add_includedirs("src")
     add_tests("default", {
         trim_output = true,

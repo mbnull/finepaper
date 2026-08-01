@@ -18,12 +18,14 @@
 #include "ui/workbench/inspector_design_settings.h"
 #include "ui/workbench/inspector_summary_panel.h"
 #include "ui/workbench/workbench_config.h"
-#include "ui/workbench/workbench_layout_controller.h"
+#include "ui/workbench/layout/workbench_layout_controller.h"
+#include "ui/workbench/widgets/workbench_dock_title_bar.h"
 #include "storage/json.h"
 
 #include <QAbstractItemView>
 #include <QAction>
 #include <QActionGroup>
+#include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QDateTime>
@@ -44,6 +46,7 @@
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLayout>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
@@ -681,6 +684,10 @@ void FinepaperMainWindow::resetWorkbenchLayout() {
     if (m_centerViews) {
         selectCenterView(workbench::editorViewId);
     }
+    if (m_workbenchLayoutController) {
+        m_workbenchLayoutController
+            ->captureUserPanelVisibilityFromLayout();
+    }
 }
 
 void FinepaperMainWindow::createCentralViews() {
@@ -690,10 +697,14 @@ void FinepaperMainWindow::createCentralViews() {
     m_centerViews->setDocumentMode(true);
     m_centerViews->setMovable(true);
     m_centerViews->setTabsClosable(false);
-    m_centerViews->setElideMode(Qt::ElideRight);
+    m_centerViews->setElideMode(Qt::ElideNone);
+    // The responsive controller owns the readable-width policy. Ignoring the
+    // aggregate minimum of all five pages lets the current Workspace shrink
+    // while inactive pages keep their own scroll/reflow behavior.
+    m_centerViews->setMinimumWidth(0);
     m_centerViews->setMinimumHeight(0);
     m_centerViews->setSizePolicy(
-        QSizePolicy::Expanding, QSizePolicy::Ignored);
+        QSizePolicy::Ignored, QSizePolicy::Ignored);
     setCentralWidget(m_centerViews);
     m_viewRegistry.emplace(m_centerViews);
 
@@ -1004,6 +1015,7 @@ void FinepaperMainWindow::createPackageDock() {
     m_packageDock = new QDockWidget(QStringLiteral("NoC Library"), this);
     m_packageDock->setObjectName(workbench::packageDockName);
     m_packageDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    ui::installWorkbenchDockTitleBar(m_packageDock);
 
     auto* content = new QWidget;
     content->setObjectName(QStringLiteral("finepaper.packageLibraryContent"));
@@ -1290,6 +1302,7 @@ void FinepaperMainWindow::createInspectorDock() {
     m_inspectorDock = new QDockWidget(QStringLiteral("Inspector"), this);
     m_inspectorDock->setObjectName(workbench::inspectorDockName);
     m_inspectorDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    ui::installWorkbenchDockTitleBar(m_inspectorDock);
 
     m_inspectorScroll = new QScrollArea(m_inspectorDock);
     m_inspectorScroll->setObjectName(
@@ -1565,6 +1578,7 @@ void FinepaperMainWindow::createDomainDock() {
     m_domainDock->setObjectName(workbench::domainManagerDockName);
     m_domainDock->setAllowedAreas(
         Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    ui::installWorkbenchDockTitleBar(m_domainDock);
 
     auto* domainScroll = new QScrollArea(m_domainDock);
     domainScroll->setObjectName(
@@ -1700,6 +1714,7 @@ void FinepaperMainWindow::createResultsDock() {
     m_resultsDock = new QDockWidget(
         QStringLiteral("Diagnostics and Output"), this);
     m_resultsDock->setObjectName(workbench::resultsDockName);
+    ui::installWorkbenchDockTitleBar(m_resultsDock);
     m_resultsDock->setAccessibleName(
         QStringLiteral("Diagnostics and Output"));
     m_resultsDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
@@ -1778,10 +1793,15 @@ void FinepaperMainWindow::createResultsDock() {
     m_generationControls = new QWidget(outputPage);
     m_generationControls->setObjectName(
         QStringLiteral("finepaper.generationControls"));
-    auto* outputControls = new QHBoxLayout(m_generationControls);
+    auto* outputControls = new ui::ResponsiveActionLayout(
+        m_generationControls);
     outputControls->setContentsMargins(0, 0, 0, 0);
+    outputControls->setSpacing(ui::UiMetrics::spacing8);
     m_outputRoot = new QLineEdit(m_locations.defaultOutputRoot);
     m_outputRoot->setObjectName(QStringLiteral("finepaper.outputRoot"));
+    m_outputRoot->setAccessibleName(QStringLiteral("Output root directory"));
+    m_outputRoot->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_browseOutputButton = new QPushButton(QStringLiteral("Browse…"));
     m_browseOutputButton->setObjectName(
         QStringLiteral("finepaper.browseOutputRoot"));
@@ -1792,7 +1812,7 @@ void FinepaperMainWindow::createResultsDock() {
     auto* outputRootLabel = new QLabel(QStringLiteral("Output root"));
     outputRootLabel->setBuddy(m_outputRoot);
     outputControls->addWidget(outputRootLabel);
-    outputControls->addWidget(m_outputRoot, 1);
+    outputControls->addWidget(m_outputRoot);
     outputControls->addWidget(m_browseOutputButton);
     outputControls->addWidget(m_generateButton);
     outputLayout->addWidget(m_generationControls);
@@ -1854,11 +1874,6 @@ void FinepaperMainWindow::createResultsDock() {
 }
 
 void FinepaperMainWindow::createActions() {
-    m_workbenchLayoutController =
-        std::make_unique<ui::WorkbenchLayoutController>(
-            this,
-            QList<QDockWidget*>{
-                m_packageDock, m_inspectorDock, m_domainDock, m_resultsDock});
     m_newAction = new QAction(QStringLiteral("New NoC Design…"), this);
     m_newAction->setIconText(QStringLiteral("New Design"));
     m_newAction->setShortcut(QKeySequence::New);
@@ -1872,9 +1887,13 @@ void FinepaperMainWindow::createActions() {
     m_installAction = new QAction(QStringLiteral("Install Package Directory…"), this);
     m_reloadAction = new QAction(QStringLiteral("Reload Packages"), this);
     m_validateAction = new QAction(QStringLiteral("Validate / DRC"), this);
+    m_validateAction->setObjectName(
+        QStringLiteral("finepaper.validateAction"));
     m_validateAction->setIconText(QStringLiteral("Validate"));
     m_validateAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+V")));
     m_generateAction = new QAction(QStringLiteral("Generate RTL"), this);
+    m_generateAction->setObjectName(
+        QStringLiteral("finepaper.generateAction"));
     m_generateAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+G")));
     m_resizeMeshAction = new QAction(QStringLiteral("Resize Mesh…"), this);
     m_resizeMeshAction->setObjectName(
@@ -1888,6 +1907,8 @@ void FinepaperMainWindow::createActions() {
     m_regularizeAction->setStatusTip(
         QStringLiteral("Restore Router and Endpoint positions to the topology layout"));
     m_fitAction = new QAction(QStringLiteral("Fit NoC in View"), this);
+    m_fitAction->setObjectName(
+        QStringLiteral("finepaper.fitCanvasAction"));
     m_fitAction->setIconText(QStringLiteral("Fit View"));
     m_fitAction->setShortcut(QKeySequence(QStringLiteral("F")));
     m_fitAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
@@ -1998,12 +2019,14 @@ void FinepaperMainWindow::createActions() {
     connect(m_fitAction, &QAction::triggered, m_nodeEditor, &NocNodeEditor::zoomToFit);
     connect(m_selectCanvasAction, &QAction::triggered, this, [this] {
         m_nodeEditor->setCanvasInteractionMode(NocCanvasInteractionMode::Select);
+        updateCanvasControlsPresentation();
         statusBar()->showMessage(
             QStringLiteral("Select mode: drag empty canvas to box-select; Ctrl adds or toggles."),
             5000);
     });
     connect(m_panCanvasAction, &QAction::triggered, this, [this] {
         m_nodeEditor->setCanvasInteractionMode(NocCanvasInteractionMode::Pan);
+        updateCanvasControlsPresentation();
         statusBar()->showMessage(
             QStringLiteral(
                 "Pan mode: drag to move the view; hold Shift and drag to box-select."),
@@ -2034,12 +2057,16 @@ void FinepaperMainWindow::createActions() {
                     4000);
             });
 
-    QAction* packagePanelAction = m_packageDock->toggleViewAction();
-    packagePanelAction->setObjectName(workbench::packageToggleActionName);
-    packagePanelAction->setText(QStringLiteral("NoC IP && Endpoint Library"));
-    packagePanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+B")));
-    packagePanelAction->setStatusTip(QStringLiteral("Show or hide the NoC IP and Endpoint panel"));
-    connect(packagePanelAction, &QAction::triggered,
+    m_packagePanelAction = new QAction(
+        QStringLiteral("NoC IP && Endpoint Library"), this);
+    m_packagePanelAction->setObjectName(workbench::packageToggleActionName);
+    m_packagePanelAction->setCheckable(true);
+    m_packagePanelAction->setChecked(true);
+    m_packagePanelAction->setShortcut(
+        QKeySequence(QStringLiteral("Ctrl+B")));
+    m_packagePanelAction->setStatusTip(
+        QStringLiteral("Keep the NoC IP and Endpoint panel available"));
+    connect(m_packagePanelAction, &QAction::triggered,
             this, [this](bool visible) {
                 if (!visible) {
                     return;
@@ -2057,27 +2084,33 @@ void FinepaperMainWindow::createActions() {
                 });
             });
 
-    QAction* inspectorPanelAction = m_inspectorDock->toggleViewAction();
-    inspectorPanelAction->setObjectName(workbench::inspectorToggleActionName);
-    inspectorPanelAction->setText(QStringLiteral("Inspector"));
-    inspectorPanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+B")));
-    inspectorPanelAction->setStatusTip(QStringLiteral("Show or hide the right Inspector panel"));
-    connect(inspectorPanelAction, &QAction::triggered,
+    m_inspectorPanelAction = new QAction(QStringLiteral("Inspector"), this);
+    m_inspectorPanelAction->setObjectName(
+        workbench::inspectorToggleActionName);
+    m_inspectorPanelAction->setCheckable(true);
+    m_inspectorPanelAction->setChecked(true);
+    m_inspectorPanelAction->setShortcut(
+        QKeySequence(QStringLiteral("Ctrl+Shift+B")));
+    m_inspectorPanelAction->setStatusTip(
+        QStringLiteral("Keep the right Inspector panel available"));
+    connect(m_inspectorPanelAction, &QAction::triggered,
             this, [this](bool visible) {
                 if (visible) {
                     showWorkbenchPanel(m_inspectorDock);
                 }
             });
 
-    QAction* domainManagerPanelAction = m_domainDock->toggleViewAction();
-    domainManagerPanelAction->setObjectName(
+    m_domainManagerPanelAction = new QAction(
+        QStringLiteral("Domain Manager"), this);
+    m_domainManagerPanelAction->setObjectName(
         workbench::domainManagerToggleActionName);
-    domainManagerPanelAction->setText(QStringLiteral("Domain Manager"));
-    domainManagerPanelAction->setShortcut(
+    m_domainManagerPanelAction->setCheckable(true);
+    m_domainManagerPanelAction->setChecked(true);
+    m_domainManagerPanelAction->setShortcut(
         QKeySequence(QStringLiteral("Ctrl+Shift+D")));
-    domainManagerPanelAction->setStatusTip(
-        QStringLiteral("Show or hide the Package-driven Domain Manager"));
-    connect(domainManagerPanelAction, &QAction::triggered,
+    m_domainManagerPanelAction->setStatusTip(
+        QStringLiteral("Keep the Package-driven Domain Manager available"));
+    connect(m_domainManagerPanelAction, &QAction::triggered,
             this, [this](bool visible) {
                 if (visible) {
                     showWorkbenchPanel(m_domainDock);
@@ -2128,9 +2161,9 @@ void FinepaperMainWindow::createActions() {
     }
     viewMenu->addSeparator();
     auto* panelsMenu = viewMenu->addMenu(QStringLiteral("Panels"));
-    panelsMenu->addAction(packagePanelAction);
-    panelsMenu->addAction(inspectorPanelAction);
-    panelsMenu->addAction(domainManagerPanelAction);
+    panelsMenu->addAction(m_packagePanelAction);
+    panelsMenu->addAction(m_inspectorPanelAction);
+    panelsMenu->addAction(m_domainManagerPanelAction);
     panelsMenu->addAction(resultsPanelAction);
     viewMenu->addSeparator();
     viewMenu->addAction(m_canvasFocusAction);
@@ -2142,47 +2175,103 @@ void FinepaperMainWindow::createActions() {
     viewMenu->addSeparator();
     viewMenu->addAction(m_reduceMotionAction);
     viewMenu->addAction(m_resetWorkbenchLayoutAction);
-    connect(m_centerViews, &QTabWidget::currentChanged, this, [this, viewGroup](int index) {
-        Q_UNUSED(index);
+    connect(m_centerViews, &QTabWidget::currentChanged, this, [this, viewGroup](int) {
         const QString id = m_viewRegistry->currentViewId();
         for (QAction* action : viewGroup->actions()) {
             action->setChecked(action->data().toString() == id);
         }
+        updateWorkspaceNavigationPresentation();
     });
 
-    QToolBar* toolbar = addToolBar(QStringLiteral("NoC Workbench"));
-    toolbar->setObjectName(workbench::mainToolbarName);
-    toolbar->setAccessibleName(QStringLiteral("Design and canvas actions"));
-    toolbar->setMovable(false);
-    toolbar->setFloatable(false);
-    toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    toolbar->addAction(m_validateAction);
-    toolbar->addAction(m_generateAction);
-    toolbar->addSeparator();
-    toolbar->addAction(m_selectCanvasAction);
-    toolbar->addAction(m_panCanvasAction);
-    toolbar->addAction(m_fitAction);
-    toolbar->addAction(m_canvasFocusAction);
+    m_mainToolbar = addToolBar(QStringLiteral("NoC Workbench"));
+    m_mainToolbar->setObjectName(workbench::mainToolbarName);
+    m_mainToolbar->setAccessibleName(
+        QStringLiteral("Design and canvas actions"));
+    m_mainToolbar->setMovable(false);
+    m_mainToolbar->setFloatable(false);
+    m_mainToolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_mainToolbar->addAction(m_validateAction);
+    m_mainToolbar->addAction(m_generateAction);
+    m_wideCanvasSeparatorAction = m_mainToolbar->addSeparator();
+    auto* wideCanvasControls = new QWidget(m_mainToolbar);
+    wideCanvasControls->setObjectName(
+        QStringLiteral("finepaper.wideCanvasControls"));
+    auto* wideCanvasLayout = new QHBoxLayout(wideCanvasControls);
+    wideCanvasLayout->setContentsMargins(0, 0, 0, 0);
+    wideCanvasLayout->setSpacing(ui::UiMetrics::spacing4);
+    const auto addWideCanvasAction = [wideCanvasControls,
+                                      wideCanvasLayout](
+        QAction* action,
+        const QString& objectName,
+        const QString& role = {}) {
+        auto* button = new QToolButton(wideCanvasControls);
+        button->setObjectName(objectName);
+        button->setDefaultAction(action);
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        if (!role.isEmpty()) {
+            button->setProperty("finepaperRole", role);
+        }
+        wideCanvasLayout->addWidget(button);
+    };
+    addWideCanvasAction(
+        m_selectCanvasAction,
+        QStringLiteral("finepaper.wideSelectCanvas"),
+        QStringLiteral("canvasMode"));
+    addWideCanvasAction(
+        m_panCanvasAction,
+        QStringLiteral("finepaper.widePanCanvas"),
+        QStringLiteral("canvasMode"));
+    addWideCanvasAction(
+        m_fitAction,
+        QStringLiteral("finepaper.wideFitCanvas"));
+    addWideCanvasAction(
+        m_canvasFocusAction,
+        QStringLiteral("finepaper.wideCanvasFocus"));
+    m_wideCanvasControlsAction =
+        m_mainToolbar->addWidget(wideCanvasControls);
     if (auto* button = qobject_cast<QToolButton*>(
-            toolbar->widgetForAction(m_generateAction))) {
+            m_mainToolbar->widgetForAction(m_generateAction))) {
         button->setProperty("finepaperRole", QStringLiteral("primary"));
     }
-    if (auto* button = qobject_cast<QToolButton*>(
-            toolbar->widgetForAction(m_selectCanvasAction))) {
-        button->setProperty("finepaperRole", QStringLiteral("canvasMode"));
-    }
-    if (auto* button = qobject_cast<QToolButton*>(
-            toolbar->widgetForAction(m_panCanvasAction))) {
-        button->setProperty("finepaperRole", QStringLiteral("canvasMode"));
-    }
-    m_domainLayerSeparator = toolbar->addSeparator();
-    m_domainLayerLabel = new QLabel(QStringLiteral("Domain layer"), toolbar);
+
+    m_canvasControlsButton = new QToolButton(m_mainToolbar);
+    m_canvasControlsButton->setObjectName(
+        workbench::canvasControlsButtonName);
+    m_canvasControlsButton->setAccessibleName(
+        QStringLiteral("Canvas controls"));
+    m_canvasControlsButton->setPopupMode(QToolButton::InstantPopup);
+    m_canvasControlsButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_canvasControlsButton->setFocusPolicy(Qt::StrongFocus);
+    auto* canvasControlsMenu = new QMenu(
+        QStringLiteral("Canvas Controls"), m_canvasControlsButton);
+    canvasControlsMenu->setObjectName(
+        workbench::canvasControlsMenuName);
+    canvasControlsMenu->addAction(m_selectCanvasAction);
+    canvasControlsMenu->addAction(m_panCanvasAction);
+    canvasControlsMenu->addSeparator();
+    canvasControlsMenu->addAction(m_fitAction);
+    canvasControlsMenu->addAction(m_canvasFocusAction);
+    canvasControlsMenu->addSeparator();
+    m_compactDomainLayerMenu = canvasControlsMenu->addMenu(
+        QStringLiteral("Domain Layer"));
+    m_compactDomainLayerMenu->setObjectName(
+        workbench::compactDomainLayerMenuName);
+    connect(m_compactDomainLayerMenu, &QMenu::aboutToShow,
+            this, &FinepaperMainWindow::rebuildCompactDomainLayerMenu);
+    m_canvasControlsButton->setMenu(canvasControlsMenu);
+    m_compactCanvasControlsAction =
+        m_mainToolbar->addWidget(m_canvasControlsButton);
+    m_compactCanvasControlsAction->setVisible(false);
+
+    m_domainLayerSeparator = m_mainToolbar->addSeparator();
+    m_domainLayerLabel = new QLabel(
+        QStringLiteral("Domain layer"), m_mainToolbar);
     m_domainLayerLabel->setObjectName(
         QStringLiteral("finepaper.domainLayerLabel"));
     m_domainLayerLabel->setProperty(
         "finepaperRole", QStringLiteral("muted"));
-    m_domainLayerLabelAction = toolbar->addWidget(m_domainLayerLabel);
-    m_domainLayerSelector = new QComboBox(toolbar);
+    m_domainLayerLabelAction = m_mainToolbar->addWidget(m_domainLayerLabel);
+    m_domainLayerSelector = new QComboBox(m_mainToolbar);
     m_domainLayerSelector->setObjectName(workbench::domainLayerSelectorName);
     m_domainLayerSelector->setMinimumContentsLength(12);
     m_domainLayerSelector->setMaximumWidth(240);
@@ -2190,7 +2279,8 @@ void FinepaperMainWindow::createActions() {
     m_domainLayerSelector->setEnabled(false);
     m_domainLayerSelector->setAccessibleName(QStringLiteral("Canvas Domain layer"));
     m_domainLayerLabel->setBuddy(m_domainLayerSelector);
-    m_domainLayerSelectorAction = toolbar->addWidget(m_domainLayerSelector);
+    m_domainLayerSelectorAction =
+        m_mainToolbar->addWidget(m_domainLayerSelector);
     connect(m_domainLayerSelector, &QComboBox::currentIndexChanged, this, [this] {
         const QString domainType = m_domainLayerSelector->currentData().toString();
         if (m_design) {
@@ -2206,7 +2296,7 @@ void FinepaperMainWindow::createActions() {
         updateInspector(m_editorSelection);
     });
 
-    auto* panelNavigationButton = new QToolButton(toolbar);
+    auto* panelNavigationButton = new QToolButton(m_mainToolbar);
     panelNavigationButton->setObjectName(workbench::panelNavigationButtonName);
     panelNavigationButton->setText(QStringLiteral("Panels"));
     panelNavigationButton->setAccessibleName(
@@ -2315,8 +2405,63 @@ void FinepaperMainWindow::createActions() {
                 m_resultsDock,
                 {pageTarget, pageFallback, m_resultTabs->tabBar()});
         });
-    toolbar->addSeparator();
-    toolbar->addWidget(panelNavigationButton);
+    m_mainToolbar->addSeparator();
+    m_mainToolbar->addWidget(panelNavigationButton);
+
+    m_workspaceToolbar = new QToolBar(
+        QStringLiteral("Workspace Navigation"), this);
+    m_workspaceToolbar->setObjectName(workbench::workspaceToolbarName);
+    m_workspaceToolbar->setAccessibleName(
+        QStringLiteral("Current workspace view"));
+    m_workspaceToolbar->setMovable(false);
+    m_workspaceToolbar->setFloatable(false);
+    m_workspaceToolbar->setAllowedAreas(Qt::TopToolBarArea);
+    m_workspaceToolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_workspaceLabel = new QLabel(
+        QStringLiteral("&Workspace"), m_workspaceToolbar);
+    m_workspaceLabel->setProperty("finepaperRole", QStringLiteral("muted"));
+    m_workspaceSelector = new QComboBox(m_workspaceToolbar);
+    m_workspaceSelector->setObjectName(workbench::workspaceSelectorName);
+    m_workspaceSelector->setAccessibleName(QStringLiteral("Workspace view"));
+    m_workspaceSelector->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_workspaceSelector->setMinimumWidth(0);
+    for (const WorkbenchViewDefinition& view : m_viewRegistry->views()) {
+        m_workspaceSelector->addItem(view.title, view.id);
+    }
+    m_workspaceLabel->setBuddy(m_workspaceSelector);
+    m_workspaceToolbar->addWidget(m_workspaceLabel);
+    m_workspaceToolbar->addWidget(m_workspaceSelector);
+    addToolBar(Qt::TopToolBarArea, m_workspaceToolbar);
+    insertToolBarBreak(m_workspaceToolbar);
+    m_workspaceToolbar->hide();
+    connect(m_workspaceSelector, &QComboBox::activated,
+            this, [this](int index) {
+                selectCenterView(
+                    m_workspaceSelector->itemData(index).toString());
+            });
+
+    m_workbenchLayoutController =
+        new ui::WorkbenchLayoutController(
+            this,
+            m_centerViews,
+            QList<ui::WorkbenchPanelBinding>{
+                {ui::WorkbenchPanelRole::Package,
+                 m_packageDock, m_packagePanelAction},
+                {ui::WorkbenchPanelRole::Inspector,
+                 m_inspectorDock, m_inspectorPanelAction},
+                {ui::WorkbenchPanelRole::Domain,
+                 m_domainDock, m_domainManagerPanelAction},
+            },
+            QList<QDockWidget*>{
+                m_packageDock, m_inspectorDock,
+                m_domainDock, m_resultsDock},
+            [this](ui::WorkbenchWidthMode mode) {
+                updateResponsiveWorkbenchPresentation(mode);
+            },
+            m_workspaceToolbar);
+    updateWorkspaceNavigationPresentation();
+    updateCanvasControlsPresentation();
 }
 
 void FinepaperMainWindow::restoreWorkbenchState() {
@@ -2341,6 +2486,11 @@ void FinepaperMainWindow::restoreWorkbenchState() {
         settings.value(workbench::resultTabSetting, 0).toInt(),
         0,
         (std::max)(0, m_resultTabs->count() - 1)));
+    if (m_workbenchLayoutController) {
+        m_workbenchLayoutController->restoreUserPanelVisibility(
+            settings.value(workbench::panelVisibilitySetting).toMap());
+        m_workbenchLayoutController->start();
+    }
 }
 
 void FinepaperMainWindow::closeEvent(QCloseEvent* event) {
@@ -2373,6 +2523,13 @@ void FinepaperMainWindow::closeEvent(QCloseEvent* event) {
                           ? m_canvasFocusRestoreCenterViewId
                           : m_viewRegistry->currentViewId());
     settings.setValue(workbench::resultTabSetting, m_resultTabs->currentIndex());
+    if (m_workbenchLayoutController) {
+        settings.setValue(
+            workbench::panelVisibilitySetting,
+            m_workbenchLayoutController
+                ->persistentUserPanelVisibility());
+        m_workbenchLayoutController->beginShutdown();
+    }
     QMainWindow::closeEvent(event);
 }
 
@@ -2902,18 +3059,20 @@ void FinepaperMainWindow::updateDomainLayerControls() {
 
     const bool hasDomainLayers = m_design && package && !package->domainTypes.isEmpty();
     m_domainLayerSelector->setEnabled(hasDomainLayers);
-    m_domainLayerSelector->setVisible(hasDomainLayers);
+    const bool showWideDomainControls =
+        hasDomainLayers && !m_compactWorkbenchPresentation;
+    m_domainLayerSelector->setVisible(showWideDomainControls);
     if (m_domainLayerLabel) {
-        m_domainLayerLabel->setVisible(hasDomainLayers);
+        m_domainLayerLabel->setVisible(showWideDomainControls);
     }
     if (m_domainLayerSeparator) {
-        m_domainLayerSeparator->setVisible(hasDomainLayers);
+        m_domainLayerSeparator->setVisible(showWideDomainControls);
     }
     if (m_domainLayerLabelAction) {
-        m_domainLayerLabelAction->setVisible(hasDomainLayers);
+        m_domainLayerLabelAction->setVisible(showWideDomainControls);
     }
     if (m_domainLayerSelectorAction) {
-        m_domainLayerSelectorAction->setVisible(hasDomainLayers);
+        m_domainLayerSelectorAction->setVisible(showWideDomainControls);
     }
     if (!m_design) {
         m_domainLayerSelector->setToolTip(
@@ -2930,6 +3089,9 @@ void FinepaperMainWindow::updateDomainLayerControls() {
     }
 
     applyDomainLayer(m_domainLayerSelector->currentData().toString());
+    if (m_workbenchLayoutController) {
+        m_workbenchLayoutController->reevaluateNow();
+    }
 }
 
 void FinepaperMainWindow::applyDomainLayer(const QString& domainType) {
@@ -3226,6 +3388,12 @@ void FinepaperMainWindow::updateUiState() {
     }
     if (m_elementConfigurationPanel) {
         m_elementConfigurationPanel->setBusy(m_operationBusy);
+    }
+    if (m_workbenchLayoutController) {
+        m_workbenchLayoutController->setCompactPreferredPanel(
+            hasDesign
+                ? ui::WorkbenchPanelRole::Inspector
+                : ui::WorkbenchPanelRole::Package);
     }
 }
 
@@ -4981,8 +5149,27 @@ void FinepaperMainWindow::showWorkbenchPanel(QDockWidget* dock) {
         && m_workbenchLayoutController->canvasFocusActive()) {
         setCanvasFocusMode(false);
     }
-    dock->show();
+    const std::optional<ui::WorkbenchPanelRole> role = panelRole(dock);
+    if (role && m_workbenchLayoutController) {
+        m_workbenchLayoutController->revealPanel(*role);
+    } else {
+        dock->show();
+    }
     dock->raise();
+}
+
+std::optional<ui::WorkbenchPanelRole>
+FinepaperMainWindow::panelRole(QDockWidget* dock) const {
+    if (dock == m_packageDock) {
+        return ui::WorkbenchPanelRole::Package;
+    }
+    if (dock == m_inspectorDock) {
+        return ui::WorkbenchPanelRole::Inspector;
+    }
+    if (dock == m_domainDock) {
+        return ui::WorkbenchPanelRole::Domain;
+    }
+    return std::nullopt;
 }
 
 void FinepaperMainWindow::setCanvasFocusMode(bool enabled) {
@@ -5053,6 +5240,123 @@ void FinepaperMainWindow::updateCanvasFocusActionPresentation(bool enabled) {
                   "Return to the view and panel layout from before Canvas Focus")
             : QStringLiteral(
                   "Hide secondary panels and maximize the topology canvas"));
+    updateCanvasControlsPresentation();
+}
+
+void FinepaperMainWindow::updateResponsiveWorkbenchPresentation(
+    ui::WorkbenchWidthMode mode) {
+    const bool compact = mode != ui::WorkbenchWidthMode::Wide;
+    QWidget* focusedWidget = QApplication::focusWidget();
+    const bool focusWasInTabs = compact && m_centerViews
+        && focusedWidget
+        && (focusedWidget == m_centerViews->tabBar()
+            || m_centerViews->tabBar()->isAncestorOf(focusedWidget));
+    m_compactWorkbenchPresentation = compact;
+
+    if (m_wideCanvasControlsAction) {
+        m_wideCanvasControlsAction->setVisible(!compact);
+    }
+    if (m_wideCanvasSeparatorAction) {
+        m_wideCanvasSeparatorAction->setVisible(!compact);
+    }
+    if (m_compactCanvasControlsAction) {
+        m_compactCanvasControlsAction->setVisible(compact);
+    }
+    if (m_centerViews) {
+        m_centerViews->tabBar()->setVisible(!compact);
+    }
+    if (m_workspaceToolbar) {
+        m_workspaceToolbar->setVisible(compact);
+    }
+
+    const bool hasDomainLayers = m_domainLayerSelector
+        && m_domainLayerSelector->isEnabled()
+        && m_domainLayerSelector->count() > 1;
+    const bool showWideDomainControls = hasDomainLayers && !compact;
+    if (m_domainLayerSeparator) {
+        m_domainLayerSeparator->setVisible(showWideDomainControls);
+    }
+    if (m_domainLayerLabelAction) {
+        m_domainLayerLabelAction->setVisible(showWideDomainControls);
+    }
+    if (m_domainLayerSelectorAction) {
+        m_domainLayerSelectorAction->setVisible(showWideDomainControls);
+    }
+    if (m_domainLayerLabel) {
+        m_domainLayerLabel->setVisible(showWideDomainControls);
+    }
+    if (m_domainLayerSelector) {
+        m_domainLayerSelector->setVisible(showWideDomainControls);
+    }
+
+    updateWorkspaceNavigationPresentation();
+    updateCanvasControlsPresentation();
+    requestResultsDockReadabilityUpdate();
+    if (focusWasInTabs && m_workspaceSelector) {
+        m_workspaceSelector->setFocus(Qt::OtherFocusReason);
+    }
+}
+
+void FinepaperMainWindow::updateWorkspaceNavigationPresentation() {
+    if (!m_workspaceSelector || !m_viewRegistry) {
+        return;
+    }
+    const int index = m_workspaceSelector->findData(
+        m_viewRegistry->currentViewId());
+    if (index >= 0 && index != m_workspaceSelector->currentIndex()) {
+        const QSignalBlocker blocker(m_workspaceSelector);
+        m_workspaceSelector->setCurrentIndex(index);
+    }
+    const QString title = index >= 0
+        ? m_workspaceSelector->itemText(index)
+        : workbench::editorViewTitle;
+    m_workspaceSelector->setToolTip(
+        QStringLiteral("Current workspace: %1").arg(title));
+}
+
+void FinepaperMainWindow::updateCanvasControlsPresentation() {
+    if (!m_canvasControlsButton) {
+        return;
+    }
+    const QString mode = m_selectCanvasAction
+            && m_selectCanvasAction->isChecked()
+        ? tr("Select")
+        : tr("Pan");
+    const bool focusActive = m_canvasFocusAction
+        && m_canvasFocusAction->isChecked();
+    m_canvasControlsButton->setText(
+        focusActive
+            ? tr("Canvas Focus: %1").arg(mode)
+            : tr("Canvas: %1").arg(mode));
+    m_canvasControlsButton->setAccessibleDescription(
+        focusActive
+            ? tr("%1 mode. Canvas Focus is active.").arg(mode)
+            : tr("%1 mode.").arg(mode));
+}
+
+void FinepaperMainWindow::rebuildCompactDomainLayerMenu() {
+    if (!m_compactDomainLayerMenu) {
+        return;
+    }
+    m_compactDomainLayerMenu->clear();
+    if (!m_domainLayerSelector || !m_domainLayerSelector->isEnabled()
+        || m_domainLayerSelector->count() <= 1) {
+        QAction* unavailable = m_compactDomainLayerMenu->addAction(
+            QStringLiteral("No Domain layers available"));
+        unavailable->setEnabled(false);
+        return;
+    }
+
+    for (int index = 0; index < m_domainLayerSelector->count(); ++index) {
+        QAction* action = m_compactDomainLayerMenu->addAction(
+            m_domainLayerSelector->itemText(index));
+        action->setCheckable(true);
+        action->setChecked(index == m_domainLayerSelector->currentIndex());
+        action->setData(m_domainLayerSelector->itemData(index));
+        connect(action, &QAction::triggered, this, [this, index] {
+            m_domainLayerSelector->setCurrentIndex(index);
+        });
+    }
 }
 
 void FinepaperMainWindow::focusCanvasWorkspace() {
@@ -5121,10 +5425,16 @@ int FinepaperMainWindow::preferredResultsDockHeight() const {
     const int diagnosticsHeight = pageMargins + ui::UiMetrics::spacing8
         + labelHeight(m_diagnosticsStatus)
         + readableTableHeight(m_drcTable, readableHeaderHeight);
+    const QLayout* generationControlsLayout =
+        m_generationControls->layout();
+    const int generationControlsHeight = generationControlsLayout
+            && generationControlsLayout->hasHeightForWidth()
+        ? generationControlsLayout->heightForWidth(pageWidth)
+        : m_generationControls->sizeHint().height();
     const int generationHeight = pageMargins
         + 2 * ui::UiMetrics::spacing8
         + labelHeight(m_generationStatus)
-        + m_generationControls->sizeHint().height()
+        + generationControlsHeight
         + m_outputSplitter->handleWidth()
         + readableTableHeight(m_artifactTable, readableHeaderHeight);
     const int tabChrome = m_resultTabs->tabBar()->sizeHint().height()
@@ -5195,6 +5505,11 @@ void FinepaperMainWindow::ensureResultsDockReadable() {
 }
 
 void FinepaperMainWindow::selectCenterView(const QString& id) {
+    if (id != workbench::editorViewId
+        && m_workbenchLayoutController
+        && m_workbenchLayoutController->canvasFocusActive()) {
+        setCanvasFocusMode(false);
+    }
     if (!m_viewRegistry->select(id)) {
         m_viewRegistry->select(workbench::editorViewId);
     }
