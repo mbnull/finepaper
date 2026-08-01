@@ -11,6 +11,7 @@ namespace finepaper {
 struct WorkbenchViewDefinition {
     QString id;
     QString title;
+    QString tabTitle;
 };
 
 class WorkbenchViewRegistry {

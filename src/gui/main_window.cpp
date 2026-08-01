@@ -264,6 +264,23 @@ QString designRevisionText(const operations::DesignStamp& stamp) {
         + QString::number(stamp.revision);
 }
 
+bool packageDisplayLess(const PackageDefinition& lhs,
+                        const PackageDefinition& rhs) {
+    if (lhs.id != rhs.id) {
+        return lhs.id < rhs.id;
+    }
+    const QVersionNumber lhsVersion = QVersionNumber::fromString(lhs.version);
+    const QVersionNumber rhsVersion = QVersionNumber::fromString(rhs.version);
+    const int versionOrder = QVersionNumber::compare(lhsVersion, rhsVersion);
+    if (versionOrder != 0) {
+        return versionOrder > 0;
+    }
+    if (lhs.version != rhs.version) {
+        return lhs.version > rhs.version;
+    }
+    return lhs.name < rhs.name;
+}
+
 QWidget* placeholderPage(const QString& title, const QString& description, QLabel** summary) {
     auto* page = new QWidget;
     auto* layout = new QVBoxLayout(page);
@@ -388,6 +405,11 @@ public:
                 {QStringLiteral("rows"), m_rows->value()},
                 {QStringLiteral("columns"), m_columns->value()}}}
         };
+    }
+
+    QString selectedPackageKey() const {
+        const PackageDefinition* package = selectedPackage();
+        return package ? package->key() : QString();
     }
 
 private:
@@ -665,13 +687,17 @@ void FinepaperMainWindow::createCentralViews() {
     connect(m_emptyInstallButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::installPackage);
     m_viewRegistry->addView(
-        {workbench::editorViewId, workbench::editorViewTitle}, m_editorPage);
+        {workbench::editorViewId,
+         workbench::editorViewTitle,
+         workbench::editorViewTabTitle},
+        m_editorPage);
 
     m_domainConfigurationWorkspace = new DomainConfigurationWorkspace(
         m_centerViews);
     m_viewRegistry->addView(
         {workbench::domainConfigurationViewId,
-         workbench::domainConfigurationViewTitle},
+         workbench::domainConfigurationViewTitle,
+         workbench::domainConfigurationViewTabTitle},
         m_domainConfigurationWorkspace);
     m_domainConfigurationWorkspace->applyRequested = [this](
         const DesignResult& result) {
@@ -706,7 +732,8 @@ void FinepaperMainWindow::createCentralViews() {
     m_designExtensionsWorkspace = new DesignExtensionsWorkspace(m_centerViews);
     m_viewRegistry->addView(
         {workbench::designExtensionsViewId,
-         workbench::designExtensionsViewTitle},
+         workbench::designExtensionsViewTitle,
+         workbench::designExtensionsViewTabTitle},
         m_designExtensionsWorkspace);
     m_designExtensionsWorkspace->applyRequested = [this](
         QString extensionId, QJsonValue value) {
@@ -754,7 +781,10 @@ void FinepaperMainWindow::createCentralViews() {
                        "NoC design model."),
         &m_performanceSummary);
     m_viewRegistry->addView(
-        {workbench::performanceViewId, workbench::performanceViewTitle}, performance);
+        {workbench::performanceViewId,
+         workbench::performanceViewTitle,
+         workbench::performanceViewTabTitle},
+        performance);
 
     auto* problemPage = new QWidget;
     auto* problemLayout = new QVBoxLayout(problemPage);
@@ -783,7 +813,10 @@ void FinepaperMainWindow::createCentralViews() {
     problemLayout->addWidget(m_problemReportStatus);
     problemLayout->addWidget(m_problemReport, 1);
     m_viewRegistry->addView(
-        {workbench::problemReportViewId, workbench::problemReportViewTitle}, problemPage);
+        {workbench::problemReportViewId,
+         workbench::problemReportViewTitle,
+         workbench::problemReportViewTabTitle},
+        problemPage);
 
     m_nodeEditor->endpointTypeDropped = [this](const QString& endpointType,
                                                 NocAttachmentTarget target) {
@@ -919,8 +952,12 @@ void FinepaperMainWindow::createPackageDock() {
         ui::UiMetrics::spacing12, ui::UiMetrics::spacing12,
         ui::UiMetrics::spacing12, ui::UiMetrics::spacing12);
 
-    auto* currentDesignGroup = new QGroupBox(QStringLiteral("Current Design"));
-    auto* currentDesignLayout = new QVBoxLayout(currentDesignGroup);
+    m_currentDesignGroup = new QGroupBox(QStringLiteral("Current Design"));
+    m_currentDesignGroup->setObjectName(
+        QStringLiteral("finepaper.currentDesignSection"));
+    m_currentDesignGroup->setSizePolicy(
+        QSizePolicy::Preferred, QSizePolicy::Maximum);
+    auto* currentDesignLayout = new QVBoxLayout(m_currentDesignGroup);
     m_activePackageLabel = new QLabel(QStringLiteral("No design is open."));
     m_activePackageLabel->setObjectName(QStringLiteral("finepaper.activePackage"));
     m_activePackageLabel->setWordWrap(true);
@@ -929,14 +966,12 @@ void FinepaperMainWindow::createPackageDock() {
     m_activePackageLabel->setProperty(
         "finepaperRole", QStringLiteral("subtitle"));
     currentDesignLayout->addWidget(m_activePackageLabel);
-    m_createDesignButton = new QPushButton(QStringLiteral("New NoC Design…"));
-    m_createDesignButton->setObjectName(QStringLiteral("finepaper.createDesign"));
-    m_createDesignButton->setProperty(
-        "finepaperRole", QStringLiteral("primary"));
-    currentDesignLayout->addWidget(m_createDesignButton);
-    layout->addWidget(currentDesignGroup);
+    layout->addWidget(m_currentDesignGroup);
+    layout->setAlignment(m_currentDesignGroup, Qt::AlignTop);
 
     auto* packageGroup = new QGroupBox(QStringLiteral("NoC IP Packages"));
+    packageGroup->setSizePolicy(
+        QSizePolicy::Preferred, QSizePolicy::Maximum);
     auto* packageLayout = new QVBoxLayout(packageGroup);
     m_availablePackagesLabel = new QLabel;
     m_availablePackagesLabel->setObjectName(
@@ -947,27 +982,54 @@ void FinepaperMainWindow::createPackageDock() {
     m_availablePackagesLabel->setProperty(
         "finepaperRole", QStringLiteral("muted"));
     packageLayout->addWidget(m_availablePackagesLabel);
+
+    auto* creationPackageLabel = new QLabel(
+        QStringLiteral("Package for new design"), packageGroup);
+    m_creationPackageSelector = new QComboBox(packageGroup);
+    m_creationPackageSelector->setObjectName(
+        QStringLiteral("finepaper.packageSelector"));
+    m_creationPackageSelector->setAccessibleName(
+        QStringLiteral("Package for new design"));
+    m_creationPackageSelector->setAccessibleDescription(QStringLiteral(
+        "Sets the initial Package in the New NoC Design dialog. It does not "
+        "change the Package bound to the open design."));
+    m_creationPackageSelector->setMinimumContentsLength(18);
+    m_creationPackageSelector->setSizeAdjustPolicy(
+        QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_creationPackageSelector->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Fixed);
+    creationPackageLabel->setBuddy(m_creationPackageSelector);
+    packageLayout->addWidget(creationPackageLabel);
+    packageLayout->addWidget(m_creationPackageSelector);
+
+    m_createDesignButton = new QPushButton(
+        QStringLiteral("Create Another Design…"), packageGroup);
+    m_createDesignButton->setObjectName(QStringLiteral("finepaper.createDesign"));
+    m_createDesignButton->setProperty(
+        "finepaperRole", QStringLiteral("quiet"));
+    packageLayout->addWidget(m_createDesignButton);
+
     auto* packageButtons = new QHBoxLayout;
-    m_installPackageButton = new QPushButton(QStringLiteral("Install…"));
-    m_reloadPackagesButton = new QPushButton(QStringLiteral("Reload"));
+    m_installPackageButton = new QPushButton(QStringLiteral("Install Package…"));
+    m_reloadPackagesButton = new QPushButton(QStringLiteral("Reload Packages"));
     m_reloadPackagesButton->setProperty(
         "finepaperRole", QStringLiteral("quiet"));
     packageButtons->addWidget(m_installPackageButton);
     packageButtons->addWidget(m_reloadPackagesButton);
     packageLayout->addLayout(packageButtons);
     layout->addWidget(packageGroup);
+    layout->setAlignment(packageGroup, Qt::AlignTop);
 
-    auto* paletteHeading = new QLabel(QStringLiteral("Endpoint Types"));
-    QFont paletteFont = paletteHeading->font();
-    paletteFont.setBold(true);
-    paletteHeading->setFont(paletteFont);
-    layout->addWidget(paletteHeading);
+    m_endpointLibraryGroup = new QGroupBox(QStringLiteral("Endpoint Types"));
+    m_endpointLibraryGroup->setObjectName(
+        QStringLiteral("finepaper.endpointLibrarySection"));
+    auto* endpointLayout = new QVBoxLayout(m_endpointLibraryGroup);
     auto* paletteHelp = new QLabel(
         QStringLiteral("Drag onto the canvas, or select a Router and activate "
                        "an Endpoint type with Enter."));
     paletteHelp->setWordWrap(true);
     paletteHelp->setProperty("finepaperRole", QStringLiteral("muted"));
-    layout->addWidget(paletteHelp);
+    endpointLayout->addWidget(paletteHelp);
     m_endpointFilter = new QLineEdit;
     m_endpointFilter->setObjectName(
         QStringLiteral("finepaper.endpointPaletteFilter"));
@@ -976,7 +1038,7 @@ void FinepaperMainWindow::createPackageDock() {
     m_endpointFilter->setClearButtonEnabled(true);
     m_endpointFilter->setAccessibleName(
         QStringLiteral("Filter Endpoint types"));
-    layout->addWidget(m_endpointFilter);
+    endpointLayout->addWidget(m_endpointFilter);
     m_endpointPalette = new EndpointPaletteList;
     m_endpointPalette->setObjectName(QStringLiteral("finepaper.endpointPalette"));
     m_endpointPalette->setAccessibleName(
@@ -989,8 +1051,7 @@ void FinepaperMainWindow::createPackageDock() {
     m_endpointPalette->setDefaultDropAction(Qt::CopyAction);
     m_endpointPalette->setSelectionMode(QAbstractItemView::SingleSelection);
     m_endpointPalette->setAlternatingRowColors(true);
-    layout->addWidget(m_endpointPalette, 1);
-    paletteHeading->setBuddy(m_endpointPalette);
+    endpointLayout->addWidget(m_endpointPalette, 1);
 
     m_endpointPaletteHint = new QLabel;
     m_endpointPaletteHint->setObjectName(
@@ -999,14 +1060,15 @@ void FinepaperMainWindow::createPackageDock() {
     m_endpointPaletteHint->setTextFormat(Qt::PlainText);
     m_endpointPaletteHint->setProperty(
         "finepaperRole", QStringLiteral("muted"));
-    layout->addWidget(m_endpointPaletteHint);
+    endpointLayout->addWidget(m_endpointPaletteHint);
     m_addEndpointButton = new QPushButton(
         QStringLiteral("Add to selected Router"));
     m_addEndpointButton->setObjectName(
         QStringLiteral("finepaper.addEndpointToRouter"));
     m_addEndpointButton->setProperty(
         "finepaperRole", QStringLiteral("primary"));
-    layout->addWidget(m_addEndpointButton);
+    endpointLayout->addWidget(m_addEndpointButton);
+    layout->addWidget(m_endpointLibraryGroup, 1);
 
     auto* packageScroll = new QScrollArea(m_packageDock);
     packageScroll->setObjectName(
@@ -1027,6 +1089,8 @@ void FinepaperMainWindow::createPackageDock() {
             this, &FinepaperMainWindow::reloadPackages);
     connect(m_createDesignButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::createDesign);
+    connect(m_creationPackageSelector, &QComboBox::currentIndexChanged,
+            this, [this] { updateEditorEmptyState(); });
     connect(m_endpointPalette, &QListWidget::itemActivated,
             this, [this](QListWidgetItem* item) {
                 addEndpointFromPalette(item);
@@ -1149,12 +1213,36 @@ void FinepaperMainWindow::createInspectorDock() {
     m_designOverview = new QLabel(QStringLiteral("No design is open."));
     m_designOverview->setObjectName(
         QStringLiteral("finepaper.designOverview"));
-    m_designOverview->setTextFormat(Qt::RichText);
+    m_designOverview->setTextFormat(Qt::PlainText);
     m_designOverview->setWordWrap(true);
     m_designOverview->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_designOverview->setProperty(
         "finepaperRole", QStringLiteral("subtitle"));
+    m_designOverview->setFont(
+        ui::fontForRole(ui::UiFontRole::Subtitle, m_designOverview->font()));
     layout->addWidget(m_designOverview);
+
+    m_designMetadata = new QLabel(
+        QStringLiteral("Create or open a design to inspect it."), content);
+    m_designMetadata->setObjectName(
+        QStringLiteral("finepaper.designMetadata"));
+    m_designMetadata->setTextFormat(Qt::PlainText);
+    m_designMetadata->setWordWrap(true);
+    m_designMetadata->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_designMetadata->setProperty(
+        "finepaperRole", QStringLiteral("muted"));
+    layout->addWidget(m_designMetadata);
+
+    m_designAvailability = new QLabel(content);
+    m_designAvailability->setObjectName(
+        QStringLiteral("finepaper.designAvailability"));
+    m_designAvailability->setTextFormat(Qt::PlainText);
+    m_designAvailability->setWordWrap(true);
+    m_designAvailability->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_designAvailability->setProperty(
+        "finepaperRole", QStringLiteral("warning"));
+    m_designAvailability->hide();
+    layout->addWidget(m_designAvailability);
 
     m_topologyGroup = new QGroupBox(QStringLiteral("Mesh Topology"));
     m_topologyGroup->setObjectName(
@@ -1920,14 +2008,10 @@ void FinepaperMainWindow::createActions() {
 
     QToolBar* toolbar = addToolBar(QStringLiteral("NoC Workbench"));
     toolbar->setObjectName(workbench::mainToolbarName);
-    toolbar->setAccessibleName(QStringLiteral("NoC workbench actions"));
+    toolbar->setAccessibleName(QStringLiteral("Design and canvas actions"));
     toolbar->setMovable(false);
     toolbar->setFloatable(false);
     toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    toolbar->addAction(m_newAction);
-    toolbar->addAction(m_openAction);
-    toolbar->addAction(m_saveAction);
-    toolbar->addSeparator();
     toolbar->addAction(m_validateAction);
     toolbar->addAction(m_generateAction);
     toolbar->addSeparator();
@@ -1946,18 +2030,22 @@ void FinepaperMainWindow::createActions() {
             toolbar->widgetForAction(m_panCanvasAction))) {
         button->setProperty("finepaperRole", QStringLiteral("canvasMode"));
     }
-    toolbar->addSeparator();
-    auto* domainLayerLabel = new QLabel(QStringLiteral("Domain layer"), toolbar);
-    domainLayerLabel->setProperty("finepaperRole", QStringLiteral("muted"));
-    toolbar->addWidget(domainLayerLabel);
+    m_domainLayerSeparator = toolbar->addSeparator();
+    m_domainLayerLabel = new QLabel(QStringLiteral("Domain layer"), toolbar);
+    m_domainLayerLabel->setObjectName(
+        QStringLiteral("finepaper.domainLayerLabel"));
+    m_domainLayerLabel->setProperty(
+        "finepaperRole", QStringLiteral("muted"));
+    m_domainLayerLabelAction = toolbar->addWidget(m_domainLayerLabel);
     m_domainLayerSelector = new QComboBox(toolbar);
     m_domainLayerSelector->setObjectName(workbench::domainLayerSelectorName);
-    m_domainLayerSelector->setMinimumContentsLength(16);
+    m_domainLayerSelector->setMinimumContentsLength(12);
+    m_domainLayerSelector->setMaximumWidth(240);
     m_domainLayerSelector->addItem(QStringLiteral("None"), QString());
     m_domainLayerSelector->setEnabled(false);
     m_domainLayerSelector->setAccessibleName(QStringLiteral("Canvas Domain layer"));
-    domainLayerLabel->setBuddy(m_domainLayerSelector);
-    toolbar->addWidget(m_domainLayerSelector);
+    m_domainLayerLabel->setBuddy(m_domainLayerSelector);
+    m_domainLayerSelectorAction = toolbar->addWidget(m_domainLayerSelector);
     connect(m_domainLayerSelector, &QComboBox::currentIndexChanged, this, [this] {
         const QString domainType = m_domainLayerSelector->currentData().toString();
         if (m_design) {
@@ -2008,7 +2096,7 @@ void FinepaperMainWindow::createActions() {
     addPanelNavigation(
         workbench::packageNavigationActionName,
         QStringLiteral("Package Library"), m_packageDock,
-        m_endpointFilter, m_packageDock->widget());
+        m_creationPackageSelector, m_packageDock->widget());
     addPanelNavigation(
         workbench::inspectorNavigationActionName,
         QStringLiteral("Inspector"), m_inspectorDock,
@@ -2337,8 +2425,12 @@ bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
 }
 
 void FinepaperMainWindow::updatePackageControls() {
+    const QString previouslySelectedPackage = m_creationPackageSelector
+        ? m_creationPackageSelector->currentData().toString()
+        : QString();
     m_runtimeAvailablePackageKeys.clear();
-    QStringList availablePackages;
+    QVector<const PackageDefinition*> runnablePackages;
+    runnablePackages.reserve(m_application.packages().size());
     for (const PackageDefinition& package : m_application.packages()) {
         const PackageLoadResult loaded = loadPackage(package.rootPath);
         if (!loaded.success || !loaded.package
@@ -2348,8 +2440,24 @@ void FinepaperMainWindow::updatePackageControls() {
             continue;
         }
         m_runtimeAvailablePackageKeys.insert(package.key());
+        runnablePackages.append(&package);
+    }
+    const auto packagePointerDisplayLess = [](
+        const PackageDefinition* lhs,
+        const PackageDefinition* rhs) {
+        return packageDisplayLess(*lhs, *rhs);
+    };
+    std::sort(
+        runnablePackages.begin(), runnablePackages.end(),
+        packagePointerDisplayLess);
+
+    QStringList availablePackages;
+    availablePackages.reserve(runnablePackages.size());
+    for (const PackageDefinition* package : runnablePackages) {
         availablePackages.append(
-            QStringLiteral("%1 — %2").arg(package.name, package.key()));
+            QStringLiteral("%1 — %2")
+                .arg(package->name)
+                .arg(package->key()));
     }
     if (availablePackages.isEmpty()) {
         m_availablePackagesLabel->setText(
@@ -2359,10 +2467,53 @@ void FinepaperMainWindow::updatePackageControls() {
     } else {
         m_availablePackagesLabel->setText(
             availablePackages.size() == 1
-                ? QStringLiteral("1 NoC IP Package available. Choose it when creating a design.")
-                : QStringLiteral("%1 NoC IP Packages available. Choose one when creating a design.")
+                ? QStringLiteral("1 NoC IP Package available.")
+                : QStringLiteral("%1 NoC IP Packages available.")
                       .arg(availablePackages.size()));
         m_availablePackagesLabel->setToolTip(availablePackages.join(QLatin1Char('\n')));
+    }
+
+    if (m_creationPackageSelector) {
+        const PackageDefinition* activeRuntimePackage = runtimePackageForDesign();
+        QString preferredPackage = previouslySelectedPackage;
+        if (!m_runtimeAvailablePackageKeys.contains(preferredPackage)) {
+            preferredPackage = activeRuntimePackage
+                ? activeRuntimePackage->key()
+                : QString();
+        }
+        const QSignalBlocker blocker(m_creationPackageSelector);
+        m_creationPackageSelector->clear();
+        for (const PackageDefinition* package : runnablePackages) {
+            m_creationPackageSelector->addItem(
+                QStringLiteral("%1 — %2")
+                    .arg(package->key())
+                    .arg(package->name),
+                package->key());
+            m_creationPackageSelector->setItemData(
+                m_creationPackageSelector->count() - 1,
+                QStringLiteral("%1 — %2")
+                    .arg(package->name)
+                    .arg(package->key()),
+                Qt::ToolTipRole);
+        }
+        if (m_creationPackageSelector->count() == 0) {
+            m_creationPackageSelector->addItem(
+                QStringLiteral("No runnable Package"), QString());
+        } else {
+            const int preferredIndex =
+                m_creationPackageSelector->findData(preferredPackage);
+            m_creationPackageSelector->setCurrentIndex(
+                preferredIndex >= 0 ? preferredIndex : 0);
+        }
+        m_creationPackageSelector->setEnabled(
+            !m_runtimeAvailablePackageKeys.isEmpty() && !m_operationBusy);
+        m_creationPackageSelector->setToolTip(
+            m_runtimeAvailablePackageKeys.isEmpty()
+                ? QStringLiteral(
+                    "Install or repair a runnable Package before creating a design.")
+                : QStringLiteral(
+                    "Sets the initial choice in New NoC Design. The open design "
+                    "keeps its own bound Package."));
     }
 
     if (!m_design) {
@@ -2432,10 +2583,16 @@ void FinepaperMainWindow::updateEditorEmptyState() {
     }
     if (hasRunnablePackages) {
         m_editorEmptyState->setTitle(QStringLiteral("Start a NoC design"));
-        m_editorEmptyState->setDescription(QStringLiteral(
-            "Choose an installed NoC IP Package to create a topology, or open "
-            "an existing design. Package rules remain the source of truth for "
-            "the Mesh, Endpoint types, parameters, and Domains."));
+        const QString selectedPackage = m_creationPackageSelector
+            ? m_creationPackageSelector->currentData().toString()
+            : QString();
+        m_editorEmptyState->setDescription(
+            QStringLiteral(
+                "New designs will start with %1. Confirm the Package and Mesh "
+                "in the creation dialog, or open an existing design. Package "
+                "rules remain the source of truth for Endpoint types, "
+                "parameters, and Domains.")
+                .arg(selectedPackage));
     } else {
         m_editorEmptyState->setTitle(
             QStringLiteral("Install a NoC IP Package first"));
@@ -2491,6 +2648,19 @@ void FinepaperMainWindow::updateDomainLayerControls() {
 
     const bool hasDomainLayers = m_design && package && !package->domainTypes.isEmpty();
     m_domainLayerSelector->setEnabled(hasDomainLayers);
+    m_domainLayerSelector->setVisible(hasDomainLayers);
+    if (m_domainLayerLabel) {
+        m_domainLayerLabel->setVisible(hasDomainLayers);
+    }
+    if (m_domainLayerSeparator) {
+        m_domainLayerSeparator->setVisible(hasDomainLayers);
+    }
+    if (m_domainLayerLabelAction) {
+        m_domainLayerLabelAction->setVisible(hasDomainLayers);
+    }
+    if (m_domainLayerSelectorAction) {
+        m_domainLayerSelectorAction->setVisible(hasDomainLayers);
+    }
     if (!m_design) {
         m_domainLayerSelector->setToolTip(
             QStringLiteral("Create or open a design before selecting a Domain layer."));
@@ -2649,13 +2819,38 @@ void FinepaperMainWindow::updateUiState() {
     if (m_fitAction) {
         m_fitAction->setEnabled(hasDesign);
     }
+    if (m_selectCanvasAction) {
+        m_selectCanvasAction->setEnabled(hasDesign && !m_operationBusy);
+    }
+    if (m_panCanvasAction) {
+        m_panCanvasAction->setEnabled(hasDesign && !m_operationBusy);
+    }
+    if (!hasDesign && m_selectCanvasAction && m_panCanvasAction) {
+        m_selectCanvasAction->setChecked(false);
+        m_panCanvasAction->setChecked(false);
+    } else if (hasDesign && m_selectCanvasAction && m_panCanvasAction
+               && !m_selectCanvasAction->isChecked()
+               && !m_panCanvasAction->isChecked()) {
+        m_panCanvasAction->setChecked(true);
+    }
     if (m_createDesignButton) {
         m_createDesignButton->setEnabled(hasRunnablePackages && !m_operationBusy);
+        m_createDesignButton->setVisible(hasDesign);
         m_createDesignButton->setToolTip(
             hasRunnablePackages
                 ? QStringLiteral("Choose a NoC IP and create a new design.")
                 : QStringLiteral("Install or repair a runnable NoC IP Package before "
                                  "creating a design."));
+    }
+    if (m_currentDesignGroup) {
+        m_currentDesignGroup->setVisible(hasDesign);
+    }
+    if (m_creationPackageSelector) {
+        m_creationPackageSelector->setEnabled(
+            hasRunnablePackages && !m_operationBusy);
+    }
+    if (m_endpointLibraryGroup) {
+        m_endpointLibraryGroup->setVisible(hasDesignMetadata);
     }
     if (m_designExtensionsWorkspace) {
         m_designExtensionsWorkspace->setBusy(m_operationBusy);
@@ -3118,24 +3313,7 @@ QVector<PackageDefinition> FinepaperMainWindow::runtimePackages() const {
     }
     std::sort(
         packages.begin(), packages.end(),
-        [](const PackageDefinition& lhs, const PackageDefinition& rhs) {
-            if (lhs.id != rhs.id) {
-                return lhs.id < rhs.id;
-            }
-            const QVersionNumber lhsVersion =
-                QVersionNumber::fromString(lhs.version);
-            const QVersionNumber rhsVersion =
-                QVersionNumber::fromString(rhs.version);
-            const int versionOrder = QVersionNumber::compare(
-                lhsVersion, rhsVersion);
-            if (versionOrder != 0) {
-                return versionOrder > 0;
-            }
-            if (lhs.version != rhs.version) {
-                return lhs.version > rhs.version;
-            }
-            return lhs.name < rhs.name;
-        });
+        packageDisplayLess);
     return packages;
 }
 
@@ -3152,10 +3330,15 @@ void FinepaperMainWindow::createDesign() {
         return;
     }
 
-    const PackageDefinition* activeRuntimePackage = runtimePackageForDesign();
-    const QString preferredPackageKey = activeRuntimePackage
-        ? activeRuntimePackage->key()
+    QString preferredPackageKey = m_creationPackageSelector
+        ? m_creationPackageSelector->currentData().toString()
         : QString();
+    if (!m_runtimeAvailablePackageKeys.contains(preferredPackageKey)) {
+        const PackageDefinition* activeRuntimePackage = runtimePackageForDesign();
+        preferredPackageKey = activeRuntimePackage
+            ? activeRuntimePackage->key()
+            : QString();
+    }
     const QString suggestedName = m_design
         ? m_design->name
         : QStringLiteral("my_noc");
@@ -3163,6 +3346,14 @@ void FinepaperMainWindow::createDesign() {
         std::move(availablePackages), preferredPackageKey, suggestedName, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
+    }
+    const QString selectedPackageKey = dialog.selectedPackageKey();
+    if (m_creationPackageSelector) {
+        const int selectedIndex =
+            m_creationPackageSelector->findData(selectedPackageKey);
+        if (selectedIndex >= 0) {
+            m_creationPackageSelector->setCurrentIndex(selectedIndex);
+        }
     }
     const QJsonObject request = dialog.createRequest();
     if (!maybeSave()) {
@@ -4075,7 +4266,11 @@ void FinepaperMainWindow::refreshDesignViews() {
         m_resolvedDesign.reset();
         setWindowTitle(QStringLiteral("Finepaper — NoC Workbench[*]"));
         m_nodeEditor->setDesign(nullptr);
-        m_designOverview->setText(QStringLiteral("No design is open."));
+        m_designOverview->setText(QStringLiteral("No design open"));
+        m_designMetadata->setText(
+            QStringLiteral("Create or open a design to inspect it."));
+        m_designAvailability->clear();
+        m_designAvailability->hide();
         rebuildParameterEditors();
         updateInspector({});
         updatePackageControls();
@@ -4098,25 +4293,24 @@ void FinepaperMainWindow::refreshDesignViews() {
     QString availabilityNote;
     if (!packageMetadataAvailable) {
         availabilityNote = QStringLiteral(
-            "<p><b>Read-only</b><br>The design Package is not loaded. Endpoint and "
-            "parameter editing, validation, and generation are disabled.</p>");
+            "Read-only — the design Package is not loaded. Endpoint and "
+            "parameter editing, validation, and generation are disabled.");
     } else if (!packageRuntimeAvailable) {
         availabilityNote = QStringLiteral(
-            "<p><b>Runtime unavailable</b><br>Retained Package metadata keeps Endpoint "
+            "Runtime unavailable — retained Package metadata keeps Endpoint "
             "and parameter editing available. Reload or reinstall this exact Package "
-            "before validation or generation.</p>");
+            "before validation or generation.");
     }
-    m_designOverview->setText(
-        QStringLiteral("<h3>%1</h3><p><b>Package</b><br>%2@%3</p>"
-                       "<p><b>Topology</b><br>%4 × %5 Mesh</p>"
-                       "<p><b>Endpoints</b><br>%6</p>%7")
-            .arg(m_design->name.toHtmlEscaped(),
-                 m_design->package.id.toHtmlEscaped(),
-                 m_design->package.version.toHtmlEscaped(),
+    m_designOverview->setText(m_design->name);
+    m_designMetadata->setText(
+        QStringLiteral("%1@%2 · %3 × %4 Mesh · %5 Endpoint(s)")
+            .arg(m_design->package.id,
+                 m_design->package.version,
                  QString::number(m_design->topology.rows),
                  QString::number(m_design->topology.columns),
-                 QString::number(m_design->endpoints.size()),
-                 availabilityNote));
+                 QString::number(m_design->endpoints.size())));
+    m_designAvailability->setText(availabilityNote);
+    m_designAvailability->setVisible(!availabilityNote.isEmpty());
     m_performanceSummary->setText(
         QStringLiteral("NoC %1 currently contains a %2 × %3 Mesh and %4 Endpoint(s). "
                        "This view is reserved for Package or IP Engine performance results; "

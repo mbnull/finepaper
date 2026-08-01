@@ -1,5 +1,6 @@
 #include "gui/workbench_view_registry.h"
 
+#include <QTabBar>
 #include <QTabWidget>
 #include <QWidget>
 
@@ -18,8 +19,14 @@ bool WorkbenchViewRegistry::addView(WorkbenchViewDefinition definition, QWidget*
         }
     }
     widget->setProperty("finepaper.viewId", definition.id);
-    const int tabIndex = m_tabs->addTab(widget, definition.title);
+    if (widget->accessibleName().isEmpty()) {
+        widget->setAccessibleName(definition.title);
+    }
+    const QString visibleTitle = definition.tabTitle.isEmpty()
+        ? definition.title : definition.tabTitle;
+    const int tabIndex = m_tabs->addTab(widget, visibleTitle);
     m_tabs->setTabToolTip(tabIndex, definition.title);
+    m_tabs->tabBar()->setAccessibleTabName(tabIndex, definition.title);
     m_views.append(std::move(definition));
     return true;
 }

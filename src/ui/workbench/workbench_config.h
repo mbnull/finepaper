@@ -83,6 +83,12 @@ inline const QString designExtensionsViewTitle =
 inline const QString performanceViewTitle = QStringLiteral("Performance Analysis");
 inline const QString problemReportViewTitle = QStringLiteral("Problem Report");
 
+inline const QString editorViewTabTitle = QStringLiteral("Editor");
+inline const QString domainConfigurationViewTabTitle = QStringLiteral("Domains");
+inline const QString designExtensionsViewTabTitle = QStringLiteral("Extensions");
+inline const QString performanceViewTabTitle = QStringLiteral("Performance");
+inline const QString problemReportViewTabTitle = QStringLiteral("Problems");
+
 inline const QString drcTabTitle = QStringLiteral("DRC Problems");
 inline const QString activityTabTitle = QStringLiteral("Activity Log");
 inline const QString generationTabTitle = QStringLiteral("Generation Outputs");

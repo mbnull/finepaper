@@ -1356,32 +1356,41 @@ int main(int argc, char** argv) {
                   && !centerViews->accessibleName().trimmed().isEmpty(),
               QStringLiteral(
                   "central workbench tabs expose a stable automation id and accessible name"));
-        check(centerViews->tabText(0) == QStringLiteral("NoC Editor"),
-              QStringLiteral("NoC Editor is the default central view"));
-        check(centerViews->tabText(1) == QStringLiteral("Domain Configuration")
+        check(centerViews->tabText(0) == QStringLiteral("Editor"),
+              QStringLiteral("Editor is the concise default central view"));
+        check(centerViews->tabText(1) == QStringLiteral("Domains")
                   && centerViews->widget(1)->objectName()
                       == QStringLiteral(
                           "finepaper.domainConfigurationWorkspace"),
               QStringLiteral(
                   "complete Domain configuration is a first-class persistent central Workspace"));
-        check(centerViews->tabText(2) == QStringLiteral("Design Extensions")
+        check(centerViews->tabText(2) == QStringLiteral("Extensions")
                   && centerViews->widget(2)->objectName()
                       == QStringLiteral("finepaper.designExtensionsWorkspace"),
               QStringLiteral(
                   "Package-driven Design Extensions are a first-class central Workspace"));
-        check(centerViews->tabText(3) == QStringLiteral("Performance Analysis"),
+        check(centerViews->tabText(3) == QStringLiteral("Performance"),
               QStringLiteral("performance analysis is a central view"));
-        check(centerViews->tabText(4) == QStringLiteral("Problem Report"),
+        check(centerViews->tabText(4) == QStringLiteral("Problems"),
               QStringLiteral("problem report is a central view"));
-        bool completeTabToolTips = true;
-        for (int index = 0; index < centerViews->count(); ++index) {
-            completeTabToolTips = completeTabToolTips
-                && centerViews->tabToolTip(index)
-                    == centerViews->tabText(index);
+        const QStringList completeTitles = {
+            QStringLiteral("NoC Editor"),
+            QStringLiteral("Domain Configuration"),
+            QStringLiteral("Design Extensions"),
+            QStringLiteral("Performance Analysis"),
+            QStringLiteral("Problem Report")};
+        bool completeTabToolTips =
+            centerViews->count() == completeTitles.size();
+        if (completeTabToolTips) {
+            for (int index = 0; index < centerViews->count(); ++index) {
+                completeTabToolTips = completeTabToolTips
+                    && centerViews->tabToolTip(index)
+                        == completeTitles.at(index);
+            }
         }
         check(completeTabToolTips,
               QStringLiteral(
-                  "elided central tabs expose their complete title as a tooltip"));
+                  "concise central tabs expose their complete title as a tooltip"));
     }
     QAction* designExtensionsViewAction = actionWithText(
         window, QStringLiteral("Design Extensions"));
@@ -1503,8 +1512,8 @@ int main(int argc, char** argv) {
         finepaper::workbench::domainNavigationActionName);
     QAction* resultsNavigation = window.findChild<QAction*>(
         finepaper::workbench::resultsNavigationActionName);
-    auto* endpointFilter = window.findChild<QLineEdit*>(
-        QStringLiteral("finepaper.endpointPaletteFilter"));
+    auto* creationPackageSelector = window.findChild<QComboBox*>(
+        QStringLiteral("finepaper.packageSelector"));
     auto* domainFocusTarget = window.findChild<QWidget*>(
         QStringLiteral("finepaper.domainManager"));
     auto* resultTabsForNavigation = window.findChild<QTabWidget*>(
@@ -1517,9 +1526,10 @@ int main(int argc, char** argv) {
         packageDock->hide();
         packageNavigation->trigger();
         application.processEvents();
-        check(packageDock->isVisible() && focusIsWithin(endpointFilter),
+        check(packageDock->isVisible()
+                  && focusIsWithin(creationPackageSelector),
               QStringLiteral(
-                  "Package navigation shows the dock and focuses its filter"));
+                  "Package navigation shows the dock and focuses the new-design Package selector"));
     }
     if (inspectorNavigation && inspectorDock) {
         inspectorDock->hide();
@@ -1593,11 +1603,22 @@ int main(int argc, char** argv) {
     auto* availablePackages = window.findChild<QLabel*>(
         QStringLiteral("finepaper.availablePackages"));
     auto* endpointPalette = window.findChild<QListWidget*>(QStringLiteral("finepaper.endpointPalette"));
+    auto* currentDesignSection = window.findChild<QGroupBox*>(
+        QStringLiteral("finepaper.currentDesignSection"));
+    auto* endpointLibrarySection = window.findChild<QGroupBox*>(
+        QStringLiteral("finepaper.endpointLibrarySection"));
     auto* initialDomainSelector = window.findChild<QComboBox*>(
         finepaper::workbench::domainLayerSelectorName);
     check(availablePackages
               && availablePackages->text().startsWith(QStringLiteral("1 NoC IP Package")),
           QStringLiteral("runtime NoC IP availability is summarized in the workbench"));
+    check(creationPackageSelector
+              && creationPackageSelector->count() == 1
+              && creationPackageSelector->currentData().toString()
+                  == QStringLiteral("finepaper.noc@1.0.0")
+              && !creationPackageSelector->accessibleName().isEmpty(),
+          QStringLiteral(
+              "the Package for a new design is visible before opening the dialog"));
     check(activePackage
               && activePackage->text().contains(QStringLiteral("No design is open")),
           QStringLiteral("the workbench does not imply an active IP before design creation"));
@@ -1605,13 +1626,18 @@ int main(int argc, char** argv) {
           QStringLiteral("Endpoint types are shown only for the active design Package"));
     check(initialDomainSelector && initialDomainSelector->count() == 1
               && initialDomainSelector->itemData(0).toString().isEmpty()
-              && !initialDomainSelector->isEnabled(),
+              && !initialDomainSelector->isEnabled()
+              && !initialDomainSelector->isVisible(),
           QStringLiteral("a Package without Domain schema exposes only a disabled None layer"));
     QAction* initialSaveAction = actionWithText(window, QStringLiteral("Save"));
     QAction* saveAsAction = actionWithText(window, QStringLiteral("Save As…"));
     QAction* initialValidateAction = actionWithText(
         window, QStringLiteral("Validate / DRC"));
     QAction* initialGenerateAction = actionWithText(window, QStringLiteral("Generate RTL"));
+    QAction* initialSelectCanvasAction = window.findChild<QAction*>(
+        finepaper::workbench::selectCanvasActionName);
+    QAction* initialPanCanvasAction = window.findChild<QAction*>(
+        finepaper::workbench::panCanvasActionName);
     auto* applyParameters = window.findChild<QPushButton*>(
         QStringLiteral("finepaper.applyParameters"));
     auto* resizeMeshButton = window.findChild<QPushButton*>(
@@ -1632,6 +1658,12 @@ int main(int argc, char** argv) {
     check(initialValidateAction && !initialValidateAction->isEnabled()
               && initialGenerateAction && !initialGenerateAction->isEnabled(),
           QStringLiteral("validation and generation are disabled without a design"));
+    check(initialSelectCanvasAction && !initialSelectCanvasAction->isEnabled()
+              && !initialSelectCanvasAction->isChecked()
+              && initialPanCanvasAction && !initialPanCanvasAction->isEnabled()
+              && !initialPanCanvasAction->isChecked(),
+          QStringLiteral(
+              "canvas interaction modes are disabled while the canvas has no design"));
     check(applyParameters && !applyParameters->isEnabled(),
           QStringLiteral("parameter application is disabled without a design"));
     check(resizeMeshButton && !resizeMeshButton->isEnabled()
@@ -1645,8 +1677,12 @@ int main(int argc, char** argv) {
               "the no-design Inspector hides topology, selection, and parameter editors"));
 
     auto* createButton = window.findChild<QPushButton*>(QStringLiteral("finepaper.createDesign"));
-    check(createButton && createButton->isEnabled(),
-          QStringLiteral("stale or overlapping installed roots do not block NoC IP selection"));
+    check(createButton && createButton->isEnabled()
+              && !createButton->isVisible()
+              && currentDesignSection && !currentDesignSection->isVisible()
+              && endpointLibrarySection && !endpointLibrarySection->isVisible(),
+          QStringLiteral(
+              "the no-design library prioritizes Package selection without duplicate creation or Endpoint controls"));
     auto* canvasEmptyState = window.findChild<QWidget*>(
         QStringLiteral("finepaper.canvasEmptyState"));
     auto* emptyStateCreate = window.findChild<QPushButton*>(
@@ -1680,6 +1716,9 @@ int main(int argc, char** argv) {
               && activePackage->text().contains(QStringLiteral("finepaper.noc@1.0.0"))
               && endpointPalette && endpointPalette->count() == 2
               && endpointPalette->isEnabled()
+              && currentDesignSection && currentDesignSection->isVisible()
+              && endpointLibrarySection && endpointLibrarySection->isVisible()
+              && createButton && createButton->isVisible()
               && initialSaveAction && initialSaveAction->isEnabled()
               && saveAsAction && saveAsAction->isEnabled()
               && initialValidateAction && initialValidateAction->isEnabled()
@@ -1698,12 +1737,21 @@ int main(int argc, char** argv) {
           QStringLiteral("Mesh resize entry points follow active Package metadata"));
     auto* designOverview = window.findChild<QLabel*>(
         QStringLiteral("finepaper.designOverview"));
+    auto* designMetadata = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.designMetadata"));
+    auto* designAvailability = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.designAvailability"));
     check(designOverview
-              && designOverview->text().contains(provenanceDesignName)
+              && designOverview->text() == provenanceDesignName
               && !designOverview->text().contains(QStringLiteral("%6"))
-              && !designOverview->text().contains(QStringLiteral("%7")),
+              && !designOverview->text().contains(QStringLiteral("%7"))
+              && designMetadata
+              && designMetadata->text().contains(
+                  QStringLiteral("finepaper.noc@1.0.0"))
+              && designMetadata->text().contains(QStringLiteral("Mesh"))
+              && designAvailability && !designAvailability->isVisible(),
           QStringLiteral(
-              "Inspector overview formats arbitrary design names without reinterpreting placeholder text"));
+              "Inspector uses a compact plain-text design summary without reinterpreting placeholder text"));
     const QString overviewBeforeCancelledResize = designOverview
         ? designOverview->text() : QString();
     const bool modifiedBeforeCancelledResize = window.isWindowModified();
@@ -4329,15 +4377,20 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.activePackage"));
     auto* multiCreate = multiPackageWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.createDesign"));
+    auto* multiPackageSelector = multiPackageWindow.findChild<QComboBox*>(
+        QStringLiteral("finepaper.packageSelector"));
     check(multiAvailablePackages
               && multiAvailablePackages->text().startsWith(
                   QStringLiteral("2 NoC IP Package"))
-              && multiPackageWindow.findChild<QComboBox*>(
-                     QStringLiteral("finepaper.packageSelector")) == nullptr,
-          QStringLiteral("workbench separates Package availability from active design state"));
+              && multiPackageSelector && multiPackageSelector->count() == 2
+              && chooseComboData(
+                  multiPackageSelector,
+                  QStringLiteral("test.number-parameter@1.0.0")),
+          QStringLiteral(
+              "multiple runnable Packages are selectable with visible text before creation"));
     createDesignThroughDialog(
         multiPackageWindow,
-        QStringLiteral("test.number-parameter@1.0.0"),
+        {},
         QStringLiteral("number_design"),
         3,
         4);
@@ -4713,7 +4766,8 @@ int main(int argc, char** argv) {
 
     auto* domainSelector = domainWindow.findChild<QComboBox*>(
         finepaper::workbench::domainLayerSelectorName);
-    check(domainSelector && domainSelector->isEnabled()
+    check(domainSelector && domainSelector->isVisible()
+              && domainSelector->isEnabled()
               && domainSelector->count() == 3
               && domainSelector->itemText(0) == QStringLiteral("None")
               && domainSelector->itemData(0).toString().isEmpty()

@@ -222,6 +222,10 @@ private:
     QAction* m_resetWorkbenchLayoutAction = nullptr;
     QAction* m_installAction = nullptr;
     QAction* m_reloadAction = nullptr;
+    QAction* m_domainLayerSeparator = nullptr;
+    QAction* m_domainLayerLabelAction = nullptr;
+    QAction* m_domainLayerSelectorAction = nullptr;
+    QLabel* m_domainLayerLabel = nullptr;
     QComboBox* m_domainLayerSelector = nullptr;
 
     QFutureWatcher<ValidationResult>* m_validationWatcher = nullptr;
@@ -244,11 +248,14 @@ private:
     QPlainTextEdit* m_problemReport = nullptr;
 
     QDockWidget* m_packageDock = nullptr;
+    QGroupBox* m_currentDesignGroup = nullptr;
     QLabel* m_activePackageLabel = nullptr;
     QLabel* m_availablePackagesLabel = nullptr;
+    QComboBox* m_creationPackageSelector = nullptr;
     QPushButton* m_createDesignButton = nullptr;
     QPushButton* m_installPackageButton = nullptr;
     QPushButton* m_reloadPackagesButton = nullptr;
+    QGroupBox* m_endpointLibraryGroup = nullptr;
     QLineEdit* m_endpointFilter = nullptr;
     QLabel* m_endpointPaletteHint = nullptr;
     QPushButton* m_addEndpointButton = nullptr;
@@ -256,6 +263,8 @@ private:
 
     QDockWidget* m_inspectorDock = nullptr;
     QLabel* m_designOverview = nullptr;
+    QLabel* m_designMetadata = nullptr;
+    QLabel* m_designAvailability = nullptr;
     QGroupBox* m_topologyGroup = nullptr;
     QPushButton* m_resizeMeshButton = nullptr;
     QGroupBox* m_selectionGroup = nullptr;

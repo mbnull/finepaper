@@ -3,9 +3,9 @@
 #include <QFrame>
 #include <QString>
 
-class QHBoxLayout;
 class QEvent;
 class QLabel;
+class QLayout;
 class QPushButton;
 
 namespace finepaper::ui {
@@ -20,6 +20,10 @@ public:
     QPushButton* addActionButton(const QString& text,
                                  const QString& role = QString());
 
+    [[nodiscard]] QSize sizeHint() const override;
+    [[nodiscard]] bool hasHeightForWidth() const override;
+    [[nodiscard]] int heightForWidth(int width) const override;
+
 protected:
     void changeEvent(QEvent* event) override;
 
@@ -29,7 +33,7 @@ private:
     QLabel* m_eyebrow = nullptr;
     QLabel* m_title = nullptr;
     QLabel* m_description = nullptr;
-    QHBoxLayout* m_actions = nullptr;
+    QLayout* m_actions = nullptr;
 };
 
 } // namespace finepaper::ui

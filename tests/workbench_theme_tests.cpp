@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QLabel>
 #include <QPalette>
+#include <QPushButton>
 #include <QString>
 #include <QTextStream>
 
@@ -114,6 +115,60 @@ int main(int argc, char** argv) {
                          enlargedFont).pointSizeF(),
           QStringLiteral(
               "Empty State role fonts follow runtime application font changes"));
+
+    const QString emptyDescription = QStringLiteral(
+        "Choose an installed NoC IP Package to create a topology, or open an "
+        "existing design. Package rules remain the source of truth for the "
+        "Mesh, Endpoint types, parameters, and Domains.");
+    emptyState.setEyebrow(QStringLiteral("NO DESIGN OPEN"));
+    emptyState.setTitle(QStringLiteral("Start a NoC design"));
+    emptyState.setDescription(emptyDescription);
+    auto* createButton = emptyState.addActionButton(
+        QStringLiteral("Create NoC Design"), QStringLiteral("primary"));
+    auto* openButton = emptyState.addActionButton(
+        QStringLiteral("Open Design…"), QStringLiteral("quiet"));
+    auto* installButton = emptyState.addActionButton(
+        QStringLiteral("Install NoC IP…"), QStringLiteral("primary"));
+
+    QLabel* emptyDescriptionLabel = nullptr;
+    for (QLabel* label : emptyState.findChildren<QLabel*>()) {
+        if (label->text() == emptyDescription) {
+            emptyDescriptionLabel = label;
+            break;
+        }
+    }
+
+    constexpr int wideCardWidth = 520;
+    const int wideCardHeight = emptyState.heightForWidth(wideCardWidth);
+    emptyState.resize(wideCardWidth, wideCardHeight);
+    emptyState.show();
+    application.processEvents();
+    check(wideCardHeight > 0
+              && createButton->geometry().top()
+                  == openButton->geometry().top()
+              && openButton->geometry().top()
+                  == installButton->geometry().top(),
+          QStringLiteral(
+              "Empty State actions stay on one row when full labels fit"));
+
+    constexpr int narrowCardWidth = 280;
+    const int narrowCardHeight = emptyState.heightForWidth(narrowCardWidth);
+    emptyState.resize(narrowCardWidth, narrowCardHeight);
+    application.processEvents();
+    check(narrowCardHeight > wideCardHeight
+              && createButton->geometry().top()
+                  < openButton->geometry().top()
+              && openButton->geometry().top()
+                  < installButton->geometry().top(),
+          QStringLiteral(
+              "Empty State actions stack vertically before labels clip"));
+    check(emptyDescriptionLabel
+              && emptyDescriptionLabel->geometry().bottom()
+                  < createButton->geometry().top()
+              && installButton->geometry().bottom()
+                  <= emptyState.contentsRect().bottom(),
+          QStringLiteral(
+              "Empty State height-for-width keeps large-font content visible"));
 
     application.setPalette(light);
     finepaper::ui::applyWorkbenchStyle(application);
