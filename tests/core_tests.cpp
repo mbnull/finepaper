@@ -1139,6 +1139,27 @@ int main(int argc, char** argv) {
     check(created.design.endpoints.at(0).parameters.value(QStringLiteral("bufferDepth")).toInt() == 16,
           QStringLiteral("endpoint defaults are materialized at creation"));
 
+    const DesignCreationRequest interactiveRequest{
+        QStringLiteral("  Typed Interactive NoC  "),
+        PackageReference{QStringLiteral("finepaper.noc"),
+                         QStringLiteral("1.0.0")},
+        TopologySpec{QStringLiteral("mesh"), 3, 4},
+        std::nullopt};
+    const DesignResult interactiveCreated = finepaper.createDesign(
+        interactiveRequest);
+    check(interactiveCreated.success
+              && interactiveCreated.design.name
+                     == QStringLiteral("Typed Interactive NoC")
+              && interactiveCreated.design.package == interactiveRequest.package
+              && interactiveCreated.design.package.key()
+                     == QStringLiteral("finepaper.noc@1.0.0")
+              && interactiveCreated.design.topology.rows == 3
+              && interactiveCreated.design.topology.columns == 4
+              && interactiveCreated.design.parameters.value(
+                     QStringLiteral("dataWidth")).toInt() == 64,
+          QStringLiteral(
+              "typed interactive creation crosses the Application boundary and preserves normal defaults and validation"));
+
     QJsonObject numericNameRequest = request();
     numericNameRequest.insert(QStringLiteral("name"), QStringLiteral("123 Demo-NoC"));
     numericNameRequest.remove(QStringLiteral("id"));

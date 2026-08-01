@@ -2,6 +2,7 @@
 
 #include "application/domain_assignment.h"
 #include "application/domain_configuration.h"
+#include "application/design_creation.h"
 #include "application/element_configuration.h"
 #include "application/endpoint_configuration.h"
 #include "application/mesh_resize_plan.h"
@@ -70,6 +71,7 @@ public:
     PackageCatalogReloadResult reloadPackages(const QStringList& roots);
     const QVector<PackageDefinition>& packages() const;
 
+    DesignResult createDesign(const DesignCreationRequest& request) const;
     DesignResult createDesign(const QJsonObject& request) const;
     DesignResult loadDesignFile(const QString& path) const;
     bool saveDesignFile(const QString& path,

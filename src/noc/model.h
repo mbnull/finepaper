@@ -44,6 +44,12 @@ bool hasErrors(const QVector<Diagnostic>& diagnostics);
 struct PackageReference {
     QString id;
     QString version;
+
+    [[nodiscard]] QString key() const {
+        return id + QLatin1Char('@') + version;
+    }
+
+    bool operator==(const PackageReference&) const = default;
 };
 
 struct RouterPosition {

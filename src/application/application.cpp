@@ -444,6 +444,24 @@ const QVector<PackageDefinition>& FinepaperApplication::packages() const {
     return m_catalog.packages();
 }
 
+DesignResult FinepaperApplication::createDesign(
+    const DesignCreationRequest& request) const {
+    QJsonObject serialized = {
+        {QStringLiteral("name"), request.name},
+        {QStringLiteral("package"), packageReferenceToJson(request.package)},
+        {QStringLiteral("topology"), QJsonObject{
+            {QStringLiteral("type"), request.topology.type},
+            {QStringLiteral("rows"), request.topology.rows},
+            {QStringLiteral("columns"), request.topology.columns}}}
+    };
+    if (request.domainConfiguration) {
+        serialized.insert(
+            QStringLiteral("domainConfiguration"),
+            domain_configuration::toJson(*request.domainConfiguration));
+    }
+    return createDesign(serialized);
+}
+
 DesignResult FinepaperApplication::createDesign(const QJsonObject& request) const {
     DesignResult result;
     const QJsonValue packageValue = request.value(QStringLiteral("package"));

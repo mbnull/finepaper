@@ -43,6 +43,8 @@ target("finepaper-gui")
     add_packages("nodeeditor")
     add_files("src/gui/*.cpp")
     add_files("src/features/attachment/*.cpp")
+    add_files("src/features/design_creation/*.cpp")
+    add_files("src/features/design_creation/new_design_dialog.h")
     add_files("src/features/design_extensions/*.cpp")
     add_files("src/features/domain/*.cpp")
     add_files("src/features/domain/presentation/*.cpp")
@@ -430,6 +432,30 @@ target("finepaper-design-extensions-ui-tests")
         runenvs = {QT_QPA_PLATFORM = "offscreen"}
     })
 
+target("finepaper-new-design-dialog-tests")
+    add_rules("qt.widgetapp")
+    add_frameworks("QtTest")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/new_design_dialog_tests.cpp")
+    add_files("src/features/design_creation/new_design_dialog.cpp")
+    add_files("src/features/design_creation/new_design_dialog.h")
+    add_files("src/ui/theme/ui_tokens.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+    add_tests("large-font", {
+        trim_output = true,
+        runenvs = {
+            QT_QPA_PLATFORM = "offscreen",
+            FINEPAPER_NEW_DESIGN_FONT_SCALE = "2.0"
+        }
+    })
+
 target("finepaper-gui-smoke")
     add_rules("qt.widgetapp")
     add_frameworks("QtConcurrent")
@@ -442,6 +468,8 @@ target("finepaper-gui-smoke")
     add_files("tests/gui_smoke_test.cpp")
     add_files("src/gui/main_window.cpp")
     add_files("src/features/attachment/endpoint_attachment_rules.cpp")
+    add_files("src/features/design_creation/new_design_dialog.cpp")
+    add_files("src/features/design_creation/new_design_dialog.h")
     add_files("src/features/design_extensions/design_extension_editor_dialog.cpp")
     add_files("src/features/design_extensions/design_extensions_workspace.cpp")
     add_files("src/features/topology/animated_graphics_view.cpp")

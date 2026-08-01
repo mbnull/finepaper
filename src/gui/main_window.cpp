@@ -2,6 +2,7 @@
 
 #include "features/domain/domain_configuration_dialog.h"
 #include "features/domain/domain_configuration_workspace.h"
+#include "features/design_creation/new_design_dialog.h"
 #include "features/design_extensions/design_extensions_workspace.h"
 #include "features/domain/domain_manager_panel.h"
 #include "features/domain/presentation/domain_text.h"
@@ -41,7 +42,6 @@
 #include <QDrag>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QFormLayout>
 #include <QFrame>
 #include <QFutureWatcher>
 #include <QGroupBox>
@@ -68,7 +68,6 @@
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSizePolicy>
-#include <QSpinBox>
 #include <QSplitter>
 #include <QStackedLayout>
 #include <QStatusBar>
@@ -360,150 +359,6 @@ bool hasOnlyDomainConfigurationErrors(
     }
     return hasError;
 }
-
-class NewDesignDialog final : public QDialog {
-public:
-    NewDesignDialog(QVector<PackageDefinition> packages,
-                    const QString& preferredPackageKey,
-                    const QString& suggestedName,
-                    QWidget* parent)
-        : QDialog(parent),
-          m_packages(std::move(packages)) {
-        setObjectName(QStringLiteral("finepaper.newDesignDialog"));
-        setWindowTitle(QStringLiteral("New NoC Design"));
-        setModal(true);
-        setMinimumWidth(480);
-
-        auto* layout = new QVBoxLayout(this);
-        auto* introduction = new QLabel(
-            QStringLiteral("Choose the NoC IP first, then configure the initial Mesh. "
-                           "The created design remains bound to this Package version."));
-        introduction->setWordWrap(true);
-        layout->addWidget(introduction);
-
-        auto* form = new QFormLayout;
-        m_packageSelector = new QComboBox;
-        m_packageSelector->setObjectName(
-            QStringLiteral("finepaper.newDesignPackageSelector"));
-        for (const PackageDefinition& package : m_packages) {
-            m_packageSelector->addItem(
-                QStringLiteral("%1 — %2 (%3)")
-                    .arg(package.name, package.version, package.id),
-                package.key());
-        }
-        const int preferredIndex = m_packageSelector->findData(preferredPackageKey);
-        if (preferredIndex >= 0) {
-            m_packageSelector->setCurrentIndex(preferredIndex);
-        }
-        form->addRow(QStringLiteral("NoC IP"), m_packageSelector);
-
-        m_designName = new QLineEdit(
-            suggestedName.trimmed().isEmpty() ? QStringLiteral("my_noc") : suggestedName);
-        m_designName->setObjectName(QStringLiteral("finepaper.newDesignName"));
-        form->addRow(QStringLiteral("Design name"), m_designName);
-
-        m_rows = new QSpinBox;
-        m_rows->setObjectName(QStringLiteral("finepaper.newDesignRows"));
-        m_columns = new QSpinBox;
-        m_columns->setObjectName(QStringLiteral("finepaper.newDesignColumns"));
-        form->addRow(QStringLiteral("Mesh rows"), m_rows);
-        form->addRow(QStringLiteral("Mesh columns"), m_columns);
-        layout->addLayout(form);
-
-        m_packageDetails = new QLabel;
-        m_packageDetails->setTextFormat(Qt::RichText);
-        m_packageDetails->setObjectName(QStringLiteral("finepaper.newDesignPackageDetails"));
-        m_packageDetails->setWordWrap(true);
-        m_packageDetails->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        layout->addWidget(m_packageDetails);
-
-        auto* buttons = new QDialogButtonBox(
-            QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-        m_createButton = buttons->button(QDialogButtonBox::Ok);
-        m_createButton->setText(QStringLiteral("Create Design"));
-        connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-        connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-        connect(m_packageSelector, &QComboBox::currentIndexChanged,
-                this, [this] { updatePackageSelection(); });
-        connect(m_designName, &QLineEdit::textChanged,
-                this, [this] { updateAcceptState(); });
-        layout->addWidget(buttons);
-
-        updatePackageSelection();
-    }
-
-    QJsonObject createRequest() const {
-        const PackageDefinition* package = selectedPackage();
-        if (!package) {
-            return {};
-        }
-        return QJsonObject{
-            {QStringLiteral("name"), m_designName->text().trimmed()},
-            {QStringLiteral("package"), QJsonObject{
-                {QStringLiteral("id"), package->id},
-                {QStringLiteral("version"), package->version}}},
-            {QStringLiteral("topology"), QJsonObject{
-                {QStringLiteral("type"), QStringLiteral("mesh")},
-                {QStringLiteral("rows"), m_rows->value()},
-                {QStringLiteral("columns"), m_columns->value()}}}
-        };
-    }
-
-    QString selectedPackageKey() const {
-        const PackageDefinition* package = selectedPackage();
-        return package ? package->key() : QString();
-    }
-
-private:
-    const PackageDefinition* selectedPackage() const {
-        const QString key = m_packageSelector->currentData().toString();
-        const auto it = std::find_if(
-            m_packages.cbegin(), m_packages.cend(), [&](const PackageDefinition& package) {
-                return package.key() == key;
-            });
-        return it == m_packages.cend() ? nullptr : &*it;
-    }
-
-    void updatePackageSelection() {
-        const PackageDefinition* package = selectedPackage();
-        if (!package) {
-            m_rows->setRange(1, 1);
-            m_columns->setRange(1, 1);
-            m_packageDetails->setText(
-                QStringLiteral("No valid NoC IP Package is available."));
-            updateAcceptState();
-            return;
-        }
-
-        m_rows->setRange(package->mesh.minimumRows, package->mesh.maximumRows);
-        m_columns->setRange(package->mesh.minimumColumns, package->mesh.maximumColumns);
-        m_rows->setValue(package->mesh.defaultRows);
-        m_columns->setValue(package->mesh.defaultColumns);
-        m_packageDetails->setText(
-            QStringLiteral("<b>%1</b><br>%2@%3<br>Mesh: %4–%5 rows × %6–%7 columns")
-                .arg(package->name.toHtmlEscaped(),
-                     package->id.toHtmlEscaped(),
-                     package->version.toHtmlEscaped(),
-                     QString::number(package->mesh.minimumRows),
-                     QString::number(package->mesh.maximumRows),
-                     QString::number(package->mesh.minimumColumns),
-                     QString::number(package->mesh.maximumColumns)));
-        updateAcceptState();
-    }
-
-    void updateAcceptState() {
-        m_createButton->setEnabled(
-            selectedPackage() && !m_designName->text().trimmed().isEmpty());
-    }
-
-    QVector<PackageDefinition> m_packages;
-    QComboBox* m_packageSelector = nullptr;
-    QLineEdit* m_designName = nullptr;
-    QSpinBox* m_rows = nullptr;
-    QSpinBox* m_columns = nullptr;
-    QLabel* m_packageDetails = nullptr;
-    QPushButton* m_createButton = nullptr;
-};
 
 } // namespace
 
@@ -4264,8 +4119,7 @@ const PackageDefinition* FinepaperMainWindow::packageForDesign() const {
     if (!m_design) {
         return nullptr;
     }
-    return packageByKey(
-        QStringLiteral("%1@%2").arg(m_design->package.id, m_design->package.version));
+    return packageByKey(m_design->package.key());
 }
 
 const PackageDefinition* FinepaperMainWindow::runtimePackageByKey(
@@ -4277,8 +4131,7 @@ const PackageDefinition* FinepaperMainWindow::runtimePackageForDesign() const {
     if (!m_design) {
         return nullptr;
     }
-    return runtimePackageByKey(
-        QStringLiteral("%1@%2").arg(m_design->package.id, m_design->package.version));
+    return runtimePackageByKey(m_design->package.key());
 }
 
 QVector<PackageDefinition> FinepaperMainWindow::runtimePackages() const {
@@ -4320,7 +4173,10 @@ void FinepaperMainWindow::createDesign() {
         ? m_design->name
         : QStringLiteral("my_noc");
     NewDesignDialog dialog(
-        std::move(availablePackages), preferredPackageKey, suggestedName, this);
+        designCreationPackageOptions(availablePackages),
+        preferredPackageKey,
+        suggestedName,
+        this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
@@ -4332,7 +4188,7 @@ void FinepaperMainWindow::createDesign() {
             m_creationPackageSelector->setCurrentIndex(selectedIndex);
         }
     }
-    const QJsonObject request = dialog.createRequest();
+    const DesignCreationRequest request = dialog.draft();
     if (!maybeSave()) {
         return;
     }
@@ -4342,18 +4198,15 @@ void FinepaperMainWindow::createDesign() {
         && formatVersionSupportsDomains(result.design.formatVersion)
         && hasOnlyDomainConfigurationErrors(result.diagnostics)) {
         const PackageDefinition* package = packageByKey(
-            QStringLiteral("%1@%2")
-                .arg(result.design.package.id, result.design.package.version));
+            result.design.package.key());
         if (package && formatVersionSupportsDomains(package->formatVersion)) {
             DomainConfigurationDialog configurationDialog(
                 result.design,
                 *package,
                 domain_configuration::fromDesign(result.design),
                 [this, request](const DomainConfiguration& configuration) {
-                    QJsonObject configuredRequest = request;
-                    configuredRequest.insert(
-                        QStringLiteral("domainConfiguration"),
-                        domain_configuration::toJson(configuration));
+                    DesignCreationRequest configuredRequest = request;
+                    configuredRequest.domainConfiguration = configuration;
                     return m_application.createDesign(configuredRequest);
                 },
                 this);

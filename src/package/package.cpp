@@ -2365,7 +2365,7 @@ QVector<AttachmentSlotDefinition> effectiveExplicitAttachmentSlots(
 }
 
 QString PackageDefinition::key() const {
-    return id + QLatin1Char('@') + version;
+    return PackageReference{id, version}.key();
 }
 
 const ParameterDefinition* PackageDefinition::parameter(const QString& id) const {
