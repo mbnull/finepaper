@@ -7,6 +7,9 @@
 #include <QLabel>
 #include <QLayout>
 #include <QPushButton>
+#include <QResizeEvent>
+#include <QShowEvent>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -57,17 +60,20 @@ void EmptyState::setEyebrow(const QString& text) {
     m_eyebrow->setText(text);
     m_eyebrow->setVisible(!text.isEmpty());
     updateGeometry();
+    requestReflow();
 }
 
 void EmptyState::setTitle(const QString& text) {
     m_title->setText(text);
     updateGeometry();
+    requestReflow();
 }
 
 void EmptyState::setDescription(const QString& text) {
     m_description->setText(text);
     setAccessibleDescription(text);
     updateGeometry();
+    requestReflow();
 }
 
 QPushButton* EmptyState::addActionButton(
@@ -79,6 +85,7 @@ QPushButton* EmptyState::addActionButton(
     }
     m_actions->addWidget(button);
     updateGeometry();
+    requestReflow();
     return button;
 }
 
@@ -100,7 +107,39 @@ int EmptyState::heightForWidth(int width) const {
     if (!layout()) {
         return QFrame::sizeHint().height();
     }
-    return layout()->totalHeightForWidth((std::max)(0, width));
+
+    const QMargins margins = layout()->contentsMargins();
+    const int frameExtent = 2 * frameWidth();
+    const int contentWidth = (std::max)(
+        0, width - frameExtent - margins.left() - margins.right());
+    int height = frameExtent + margins.top() + margins.bottom();
+    int visibleItems = 0;
+    const auto addLabelHeight = [&](const QLabel* label) {
+        if (!label || label->isHidden()) {
+            return;
+        }
+        const int labelHeight = label->hasHeightForWidth()
+            ? label->heightForWidth(contentWidth)
+            : label->sizeHint().height();
+        height += (std::max)(
+            label->minimumSizeHint().height(), labelHeight);
+        ++visibleItems;
+    };
+    addLabelHeight(m_eyebrow);
+    addLabelHeight(m_title);
+    addLabelHeight(m_description);
+    if (m_actions && !m_actions->isEmpty()) {
+        const int actionsHeight = m_actions->hasHeightForWidth()
+            ? m_actions->heightForWidth(contentWidth)
+            : m_actions->sizeHint().height();
+        height += (std::max)(m_actions->minimumSize().height(),
+                             actionsHeight);
+        ++visibleItems;
+    }
+    if (visibleItems > 1) {
+        height += (visibleItems - 1) * layout()->spacing();
+    }
+    return height;
 }
 
 void EmptyState::changeEvent(QEvent* event) {
@@ -108,7 +147,47 @@ void EmptyState::changeEvent(QEvent* event) {
     if (event && event->type() == QEvent::FontChange) {
         applyRoleFonts();
         updateGeometry();
+        requestReflow();
     }
+}
+
+void EmptyState::resizeEvent(QResizeEvent* event) {
+    QFrame::resizeEvent(event);
+    if (!event || event->oldSize().width() == event->size().width()) {
+        return;
+    }
+    requestReflow();
+}
+
+void EmptyState::showEvent(QShowEvent* event) {
+    QFrame::showEvent(event);
+    requestReflow();
+}
+
+void EmptyState::requestReflow() {
+    if (m_reflowPending) {
+        return;
+    }
+    m_reflowPending = true;
+    QTimer::singleShot(0, this, [this] {
+        m_reflowPending = false;
+        if (width() <= 0) {
+            return;
+        }
+        if (layout()) {
+            layout()->invalidate();
+        }
+        const int requiredHeight = heightForWidth(width());
+        if (minimumHeight() != requiredHeight) {
+            setMinimumHeight(requiredHeight);
+        }
+        updateGeometry();
+        if (QWidget* container = parentWidget();
+            container && container->layout()) {
+            container->layout()->invalidate();
+            container->layout()->activate();
+        }
+    });
 }
 
 void EmptyState::applyRoleFonts() {

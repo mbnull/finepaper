@@ -160,6 +160,7 @@ public:
     bool routerCollapsed(const QString& routerId) const;
     [[nodiscard]] TopologyWorkspaceRegularizeResult regularizeLayout();
     void zoomToFit();
+    void focusCanvas(Qt::FocusReason reason = Qt::ShortcutFocusReason);
     void setDomainPresentation(DomainPresentationSnapshot presentation);
     [[nodiscard]] const DomainPresentationSnapshot& domainPresentation() const;
     [[nodiscard]] const EndpointCanvasDraftState&

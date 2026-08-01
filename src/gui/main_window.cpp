@@ -18,6 +18,7 @@
 #include "ui/workbench/inspector_design_settings.h"
 #include "ui/workbench/inspector_summary_panel.h"
 #include "ui/workbench/workbench_config.h"
+#include "ui/workbench/workbench_layout_controller.h"
 #include "storage/json.h"
 
 #include <QAbstractItemView>
@@ -649,6 +650,12 @@ void FinepaperMainWindow::resetWorkbenchLayout() {
     if (!m_packageDock || !m_inspectorDock || !m_domainDock
         || !m_resultsDock) {
         return;
+    }
+    if (m_workbenchLayoutController
+        && m_workbenchLayoutController->canvasFocusActive()) {
+        m_workbenchLayoutController->leaveCanvasFocus();
+        m_canvasFocusRestoreCenterViewId.clear();
+        updateCanvasFocusActionPresentation(false);
     }
     for (QDockWidget* dock : {
              m_packageDock, m_inspectorDock, m_domainDock, m_resultsDock}) {
@@ -1847,6 +1854,11 @@ void FinepaperMainWindow::createResultsDock() {
 }
 
 void FinepaperMainWindow::createActions() {
+    m_workbenchLayoutController =
+        std::make_unique<ui::WorkbenchLayoutController>(
+            this,
+            QList<QDockWidget*>{
+                m_packageDock, m_inspectorDock, m_domainDock, m_resultsDock});
     m_newAction = new QAction(QStringLiteral("New NoC Design…"), this);
     m_newAction->setIconText(QStringLiteral("New Design"));
     m_newAction->setShortcut(QKeySequence::New);
@@ -1896,6 +1908,16 @@ void FinepaperMainWindow::createActions() {
     m_panCanvasAction->setStatusTip(
         QStringLiteral(
             "Drag the canvas to pan; hold Shift and drag to box-select"));
+    m_canvasFocusAction = new QAction(
+        QStringLiteral("Focus Canvas"), this);
+    m_canvasFocusAction->setObjectName(
+        workbench::canvasFocusActionName);
+    m_canvasFocusAction->setCheckable(true);
+    m_canvasFocusAction->setShortcut(
+        QKeySequence(QStringLiteral("Ctrl+Shift+F")));
+    m_canvasFocusAction->setStatusTip(
+        QStringLiteral(
+            "Hide secondary panels and maximize the topology canvas"));
     auto* canvasModeGroup = new QActionGroup(this);
     canvasModeGroup->setExclusive(true);
     canvasModeGroup->addAction(m_selectCanvasAction);
@@ -1987,6 +2009,8 @@ void FinepaperMainWindow::createActions() {
                 "Pan mode: drag to move the view; hold Shift and drag to box-select."),
             5000);
     });
+    connect(m_canvasFocusAction, &QAction::triggered,
+            this, &FinepaperMainWindow::setCanvasFocusMode);
     connect(m_reduceMotionAction, &QAction::toggled,
             this, [this](bool reduced) {
                 QSettings().setValue(
@@ -2020,6 +2044,7 @@ void FinepaperMainWindow::createActions() {
                 if (!visible) {
                     return;
                 }
+                showWorkbenchPanel(m_packageDock);
                 QTimer::singleShot(0, m_packageDock, [this] {
                     QWidget* focusTarget = m_creationPackageSelector
                             && m_creationPackageSelector->isEnabled()
@@ -2037,6 +2062,12 @@ void FinepaperMainWindow::createActions() {
     inspectorPanelAction->setText(QStringLiteral("Inspector"));
     inspectorPanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+B")));
     inspectorPanelAction->setStatusTip(QStringLiteral("Show or hide the right Inspector panel"));
+    connect(inspectorPanelAction, &QAction::triggered,
+            this, [this](bool visible) {
+                if (visible) {
+                    showWorkbenchPanel(m_inspectorDock);
+                }
+            });
 
     QAction* domainManagerPanelAction = m_domainDock->toggleViewAction();
     domainManagerPanelAction->setObjectName(
@@ -2046,12 +2077,24 @@ void FinepaperMainWindow::createActions() {
         QKeySequence(QStringLiteral("Ctrl+Shift+D")));
     domainManagerPanelAction->setStatusTip(
         QStringLiteral("Show or hide the Package-driven Domain Manager"));
+    connect(domainManagerPanelAction, &QAction::triggered,
+            this, [this](bool visible) {
+                if (visible) {
+                    showWorkbenchPanel(m_domainDock);
+                }
+            });
 
     QAction* resultsPanelAction = m_resultsDock->toggleViewAction();
     resultsPanelAction->setObjectName(workbench::resultsToggleActionName);
     resultsPanelAction->setText(QStringLiteral("Diagnostics && Output"));
     resultsPanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+J")));
     resultsPanelAction->setStatusTip(QStringLiteral("Show or hide the bottom diagnostics panel"));
+    connect(resultsPanelAction, &QAction::triggered,
+            this, [this](bool visible) {
+                if (visible) {
+                    showResultsDock();
+                }
+            });
 
     QMenu* fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
     fileMenu->addAction(m_newAction);
@@ -2090,6 +2133,8 @@ void FinepaperMainWindow::createActions() {
     panelsMenu->addAction(domainManagerPanelAction);
     panelsMenu->addAction(resultsPanelAction);
     viewMenu->addSeparator();
+    viewMenu->addAction(m_canvasFocusAction);
+    viewMenu->addSeparator();
     viewMenu->addAction(m_selectCanvasAction);
     viewMenu->addAction(m_panCanvasAction);
     viewMenu->addSeparator();
@@ -2117,6 +2162,7 @@ void FinepaperMainWindow::createActions() {
     toolbar->addAction(m_selectCanvasAction);
     toolbar->addAction(m_panCanvasAction);
     toolbar->addAction(m_fitAction);
+    toolbar->addAction(m_canvasFocusAction);
     if (auto* button = qobject_cast<QToolButton*>(
             toolbar->widgetForAction(m_generateAction))) {
         button->setProperty("finepaperRole", QStringLiteral("primary"));
@@ -2168,9 +2214,13 @@ void FinepaperMainWindow::createActions() {
     panelNavigationButton->setPopupMode(QToolButton::InstantPopup);
     auto* panelNavigationMenu = new QMenu(
         QStringLiteral("Workbench Panels"), panelNavigationButton);
+    panelNavigationMenu->setObjectName(
+        QStringLiteral("finepaper.panelNavigationMenu"));
     panelNavigationButton->setMenu(panelNavigationMenu);
+    panelNavigationMenu->addAction(m_canvasFocusAction);
+    panelNavigationMenu->addSeparator();
     using PanelFocusResolver = std::function<QWidget*()>;
-    const auto addPanelNavigation = [panelNavigationMenu](
+    const auto addPanelNavigation = [this, panelNavigationMenu](
         const QString& objectName,
         const QString& text,
         QDockWidget* dock,
@@ -2179,10 +2229,9 @@ void FinepaperMainWindow::createActions() {
         action->setObjectName(objectName);
         panelNavigationMenu->addAction(action);
         QObject::connect(
-            action, &QAction::triggered, dock,
-            [dock, resolveFocusTarget] {
-                dock->show();
-                dock->raise();
+            action, &QAction::triggered, this,
+            [this, dock, resolveFocusTarget] {
+                showWorkbenchPanel(dock);
                 QTimer::singleShot(
                     0, dock,
                     [dock, resolveFocusTarget] {
@@ -2311,9 +2360,18 @@ void FinepaperMainWindow::closeEvent(QCloseEvent* event) {
     discardPendingInspectorDrafts();
     QSettings settings;
     settings.setValue(workbench::geometrySetting, saveGeometry());
-    settings.setValue(workbench::windowStateSetting, saveState());
+    settings.setValue(
+        workbench::windowStateSetting,
+        m_workbenchLayoutController
+            ? m_workbenchLayoutController->persistentWindowState()
+            : saveState());
     settings.setValue(workbench::centerViewSetting,
-                      m_viewRegistry->currentViewId());
+                      m_workbenchLayoutController
+                              && m_workbenchLayoutController
+                                     ->canvasFocusActive()
+                              && !m_canvasFocusRestoreCenterViewId.isEmpty()
+                          ? m_canvasFocusRestoreCenterViewId
+                          : m_viewRegistry->currentViewId());
     settings.setValue(workbench::resultTabSetting, m_resultTabs->currentIndex());
     QMainWindow::closeEvent(event);
 }
@@ -4915,12 +4973,120 @@ void FinepaperMainWindow::showWorkspaceStatusMessage() {
     }
 }
 
+void FinepaperMainWindow::showWorkbenchPanel(QDockWidget* dock) {
+    if (!dock) {
+        return;
+    }
+    if (m_workbenchLayoutController
+        && m_workbenchLayoutController->canvasFocusActive()) {
+        setCanvasFocusMode(false);
+    }
+    dock->show();
+    dock->raise();
+}
+
+void FinepaperMainWindow::setCanvasFocusMode(bool enabled) {
+    if (!m_workbenchLayoutController || !m_canvasFocusAction) {
+        return;
+    }
+
+    if (enabled) {
+        const bool focusWasActive =
+            m_workbenchLayoutController->canvasFocusActive();
+        const QString restoreCenterViewId = focusWasActive
+            ? m_canvasFocusRestoreCenterViewId
+            : m_viewRegistry->currentViewId();
+        if (!m_workbenchLayoutController->enterCanvasFocus()) {
+            if (!focusWasActive) {
+                m_canvasFocusRestoreCenterViewId.clear();
+            }
+            updateCanvasFocusActionPresentation(false);
+            statusBar()->showMessage(
+                QStringLiteral("Canvas Focus could not save the current panel layout."),
+                6000);
+            return;
+        }
+        if (!focusWasActive) {
+            m_canvasFocusRestoreCenterViewId = restoreCenterViewId;
+        }
+        selectCenterView(workbench::editorViewId);
+        updateCanvasFocusActionPresentation(true);
+        focusCanvasWorkspace();
+        statusBar()->showMessage(
+            QStringLiteral(
+                "Canvas Focus: secondary panels are hidden. Press Ctrl+Shift+F to restore them."));
+        return;
+    }
+
+    const QString restoreCenterViewId =
+        std::exchange(m_canvasFocusRestoreCenterViewId, QString{});
+    if (!m_workbenchLayoutController->leaveCanvasFocus()) {
+        updateCanvasFocusActionPresentation(false);
+        resetWorkbenchLayout();
+        statusBar()->showMessage(
+            QStringLiteral(
+                "The previous panel layout could not be restored, so the workbench was reset."),
+            6000);
+        return;
+    }
+    if (!restoreCenterViewId.isEmpty()) {
+        selectCenterView(restoreCenterViewId);
+    }
+    updateCanvasFocusActionPresentation(false);
+    focusCurrentCenterView();
+    statusBar()->showMessage(
+        QStringLiteral("Previous workbench view and panels restored."), 4000);
+}
+
+void FinepaperMainWindow::updateCanvasFocusActionPresentation(bool enabled) {
+    if (!m_canvasFocusAction) {
+        return;
+    }
+    const QSignalBlocker blocker(m_canvasFocusAction);
+    m_canvasFocusAction->setChecked(enabled);
+    m_canvasFocusAction->setText(
+        enabled ? QStringLiteral("Exit Canvas Focus")
+                : QStringLiteral("Focus Canvas"));
+    m_canvasFocusAction->setStatusTip(
+        enabled
+            ? QStringLiteral(
+                  "Return to the view and panel layout from before Canvas Focus")
+            : QStringLiteral(
+                  "Hide secondary panels and maximize the topology canvas"));
+}
+
+void FinepaperMainWindow::focusCanvasWorkspace() {
+    if (m_editorEmptyStateOverlay
+        && m_editorEmptyStateOverlay->isVisibleTo(this)) {
+        QWidget* focusTarget = firstPanelFocusTarget(
+            m_editorEmptyStateOverlay,
+            {m_emptyCreateButton, m_emptyOpenButton, m_emptyInstallButton});
+        if (focusTarget) {
+            focusTarget->setFocus(Qt::ShortcutFocusReason);
+            return;
+        }
+    }
+    if (m_nodeEditor) {
+        m_nodeEditor->focusCanvas();
+    }
+}
+
+void FinepaperMainWindow::focusCurrentCenterView() {
+    if (m_viewRegistry
+        && m_viewRegistry->currentViewId() == workbench::editorViewId) {
+        focusCanvasWorkspace();
+        return;
+    }
+    if (m_centerViews) {
+        m_centerViews->setFocus(Qt::ShortcutFocusReason);
+    }
+}
+
 void FinepaperMainWindow::showResultsDock() {
     if (!m_resultsDock) {
         return;
     }
-    m_resultsDock->show();
-    m_resultsDock->raise();
+    showWorkbenchPanel(m_resultsDock);
     requestResultsDockReadabilityUpdate();
 }
 

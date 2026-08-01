@@ -61,6 +61,8 @@ inline const QString selectCanvasActionName =
     QStringLiteral("finepaper.selectCanvasMode");
 inline const QString panCanvasActionName =
     QStringLiteral("finepaper.panCanvasMode");
+inline const QString canvasFocusActionName =
+    QStringLiteral("finepaper.canvasFocusMode");
 inline const QString reducedMotionActionName =
     QStringLiteral("finepaper.reduceMotion");
 inline const QString resetWorkbenchLayoutActionName =

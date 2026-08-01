@@ -465,6 +465,14 @@ target("finepaper-gui-smoke")
             FINEPAPER_GUI_SMOKE_THEME = "light"
         }
     })
+    add_tests("narrow-light", {
+        trim_output = true,
+        runenvs = {
+            QT_QPA_PLATFORM = "offscreen",
+            FINEPAPER_GUI_SMOKE_SIZE = "1024x720",
+            FINEPAPER_GUI_SMOKE_THEME = "light"
+        }
+    })
     add_tests("compact-dark-scaled", {
         trim_output = true,
         runenvs = {

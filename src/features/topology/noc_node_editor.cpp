@@ -1439,6 +1439,12 @@ void NocNodeEditor::selectElements(const QVector<ElementRef>& elements) {
     }
 }
 
+void NocNodeEditor::focusCanvas(Qt::FocusReason reason) {
+    if (m_view) {
+        m_view->setFocus(reason);
+    }
+}
+
 bool NocNodeEditor::setRouterVisualPosition(const QString& routerId, QPointF position) {
     if (!m_routerNodes.contains(routerId)
         || !std::isfinite(position.x())

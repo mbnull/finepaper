@@ -13,6 +13,7 @@
 #include <QSet>
 #include <QVector>
 
+#include <memory>
 #include <optional>
 
 class QAction;
@@ -48,6 +49,7 @@ namespace ui {
 class EmptyState;
 class InspectorDesignSettings;
 class InspectorSummaryPanel;
+class WorkbenchLayoutController;
 }
 
 class FinepaperMainWindow final : public QMainWindow {
@@ -176,6 +178,11 @@ private:
     void appendActivity(const QString& message);
     void showWorkspaceStatusMessage();
     void showResultsDock();
+    void showWorkbenchPanel(QDockWidget* dock);
+    void setCanvasFocusMode(bool enabled);
+    void updateCanvasFocusActionPresentation(bool enabled);
+    void focusCanvasWorkspace();
+    void focusCurrentCenterView();
     void selectCenterView(const QString& id);
     void beginDesignSession(const QString& designName);
     [[nodiscard]] operations::DesignStamp currentDesignStamp() const;
@@ -231,6 +238,7 @@ private:
     QAction* m_fitAction = nullptr;
     QAction* m_selectCanvasAction = nullptr;
     QAction* m_panCanvasAction = nullptr;
+    QAction* m_canvasFocusAction = nullptr;
     QAction* m_reduceMotionAction = nullptr;
     QAction* m_resetWorkbenchLayoutAction = nullptr;
     QAction* m_installAction = nullptr;
@@ -296,6 +304,9 @@ private:
     DomainManagerPanel* m_domainManager = nullptr;
 
     QDockWidget* m_resultsDock = nullptr;
+    std::unique_ptr<ui::WorkbenchLayoutController>
+        m_workbenchLayoutController;
+    QString m_canvasFocusRestoreCenterViewId;
     QTabWidget* m_resultTabs = nullptr;
     QWidget* m_generationControls = nullptr;
     QSplitter* m_outputSplitter = nullptr;
