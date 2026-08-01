@@ -4,6 +4,7 @@
 #include "features/domain/presentation/domain_text.h"
 #include "features/topology/animated_graphics_view.h"
 #include "features/topology/noc_editor_style.h"
+#include "ui/theme/ui_tokens.h"
 #include "ui/workbench/workbench_config.h"
 
 #include <QtNodes/AbstractConnectionPainter>
@@ -31,6 +32,7 @@
 #include <QGraphicsPathItem>
 #include <QHash>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
@@ -196,6 +198,14 @@ class NocNodeModel final : public QtNodes::NodeDelegateModel {
 public:
     QString name() const override { return QStringLiteral("FinepaperNoCNode"); }
     QString caption() const override { return m_caption; }
+
+    void setCaption(QString caption) {
+        if (caption == m_caption) {
+            return;
+        }
+        m_caption = std::move(caption);
+        Q_EMIT requestNodeUpdate();
+    }
 
     unsigned int nPorts(QtNodes::PortType type) const override {
         if (m_router) {
@@ -1070,6 +1080,19 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    m_endpointCanvasDraftNotice = new QLabel(this);
+    m_endpointCanvasDraftNotice->setObjectName(
+        QStringLiteral("finepaper.endpointCanvasDraftNotice"));
+    m_endpointCanvasDraftNotice->setAccessibleName(
+        QStringLiteral("Unresolved Endpoint drafts"));
+    m_endpointCanvasDraftNotice->setProperty(
+        "finepaperRole", QStringLiteral("warning"));
+    m_endpointCanvasDraftNotice->setTextFormat(Qt::PlainText);
+    m_endpointCanvasDraftNotice->setWordWrap(true);
+    m_endpointCanvasDraftNotice->setMargin(ui::UiMetrics::spacing8);
+    m_endpointCanvasDraftNotice->hide();
+    layout->addWidget(m_endpointCanvasDraftNotice);
     layout->addWidget(m_view);
 
     auto& graphModel = static_cast<NocGraphModel&>(*m_graphModel);
@@ -1116,6 +1139,7 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
 }
 
 NocNodeEditor::~NocNodeEditor() {
+    endpointCanvasDraftStateChanged = {};
     // QGraphicsScene emits selectionChanged while its selected items are
     // removed. Disconnect before destroying the scene so teardown cannot
     // re-enter selection/highlight code with half-destroyed graphics items.
@@ -1244,7 +1268,7 @@ void NocNodeEditor::applyDesign(
         m_workspaceIdentity = workspaceIdentity;
         m_workspaceReloadPending = false;
         loadWorkspaceState();
-        m_pendingEndpoints.clear();
+        clearEndpointCanvasDrafts();
         m_selectedItems.clear();
     }
     m_attachmentPolicy = std::move(policy);
@@ -1275,7 +1299,7 @@ void NocNodeEditor::beginDocumentSession(QString sessionToken) {
     if (m_view) {
         m_view->endEndpointDrag();
     }
-    m_pendingEndpoints.clear();
+    clearEndpointCanvasDrafts();
     m_pendingConnectionDetachments.clear();
     m_selectedItems.clear();
     m_nextPendingEndpoint = 0;
@@ -1291,7 +1315,14 @@ void NocNodeEditor::syncDesignState(const NocDesign& design) {
 }
 
 void NocNodeEditor::setEndpointTypes(QVector<NocEndpointTypeItem> endpointTypes) {
+    if (m_endpointTypes == endpointTypes) {
+        return;
+    }
     m_endpointTypes = std::move(endpointTypes);
+    if (!m_pendingEndpoints.isEmpty()) {
+        notifyEndpointCanvasDraftStateChanged();
+        refreshPendingEndpointPresentation();
+    }
 }
 
 void NocNodeEditor::setAttachmentPolicy(attachment::Policy policy) {
@@ -1539,16 +1570,26 @@ const DomainPresentationSnapshot& NocNodeEditor::domainPresentation() const {
     return m_domainPresentation;
 }
 
-QStringList NocNodeEditor::detachedEndpointDraftIds() const {
-    QStringList endpointIds;
+const EndpointCanvasDraftState& NocNodeEditor::endpointCanvasDraftState() const {
+    return m_endpointCanvasDraftState;
+}
+
+void NocNodeEditor::rebuildEndpointCanvasDraftState() {
+    QVector<EndpointCanvasDraftInfo> drafts;
+    drafts.reserve(m_pendingEndpoints.size());
     for (const PendingEndpoint& pending : m_pendingEndpoints) {
+        EndpointCanvasDraftInfo info;
+        info.id = EndpointCanvasDraftId{pending.id};
+        info.endpointType = pending.type;
+        info.endpointTypeLabel = endpointTypeLabel(pending.type);
         if (pending.detached) {
-            endpointIds.append(pending.detached->endpoint.id);
+            info.lifecycle = EndpointCanvasDraftLifecycle::Detached;
+            info.endpointId = pending.detached->endpoint.id;
+            info.previousAttachment = pending.detached->endpoint.attachment;
         }
+        drafts.append(std::move(info));
     }
-    std::sort(endpointIds.begin(), endpointIds.end());
-    endpointIds.removeDuplicates();
-    return endpointIds;
+    m_endpointCanvasDraftState = EndpointCanvasDraftState{std::move(drafts)};
 }
 
 void NocNodeEditor::rebuildGraph(bool zoomToContents) {
@@ -1562,6 +1603,7 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
     auto& graphModel = static_cast<NocGraphModel&>(*m_graphModel);
     graphModel.clearProjection();
     m_metadata.clear();
+    m_pendingEndpointNodes.clear();
     m_routerNodes.clear();
     m_elementNodes.clear();
     m_elementConnections.clear();
@@ -1710,23 +1752,13 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
     }
 
     for (const PendingEndpoint& pending : std::as_const(m_pendingEndpoints)) {
-        QString label = pending.type;
-        for (const NocEndpointTypeItem& type : std::as_const(m_endpointTypes)) {
-            if (type.id == pending.type) {
-                label = type.label;
-                break;
-            }
-        }
-        if (pending.detached) {
-            label += QStringLiteral("\n%1")
-                         .arg(pending.detached->endpoint.id);
-        }
         const QtNodes::NodeId nodeId = graphModel.addProjectedNode(
-            QStringLiteral("Unattached\n%1").arg(label),
+            pendingEndpointCaption(pending),
             pending.scenePosition,
             false,
             false,
             true);
+        m_pendingEndpointNodes.insert(pending.id, nodeId);
         m_metadata.insert(nodeId, NodeMetadata{
             NocEditorSelection::Kind::PendingEndpoint,
             pending.id,
@@ -1755,6 +1787,12 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
                         "Router %1. Click the top-right control to %2 "
                         "details, or select the Router and press Space.")
                         .arg(iterator->id, action));
+            } else if (iterator->kind
+                       == NocEditorSelection::Kind::PendingEndpoint) {
+                const auto pending = m_pendingEndpoints.constFind(iterator->id);
+                if (pending != m_pendingEndpoints.constEnd()) {
+                    node->setToolTip(pendingEndpointToolTip(*pending));
+                }
             }
         }
     }
@@ -2616,7 +2654,7 @@ bool NocNodeEditor::attachNodeToRouter(QtNodes::NodeId nodeId,
             m_workspaceState.endpointPositionOverrides.insert(
                 endpointId, visualPosition);
             saveWorkspaceState();
-            m_pendingEndpoints.remove(metadata.id);
+            removeEndpointCanvasDraft(metadata.id);
             m_selectedItems = {{NocEditorSelection::Kind::Endpoint, endpointId}};
             endSemanticMutation(true);
             return true;
@@ -2633,7 +2671,7 @@ bool NocNodeEditor::attachNodeToRouter(QtNodes::NodeId nodeId,
             endSemanticMutation(true);
             return false;
         }
-        m_pendingEndpoints.remove(metadata.id);
+        removeEndpointCanvasDraft(metadata.id);
         m_workspaceState.endpointPositionOverrides.insert(
             created.endpointId, visualPosition);
         saveWorkspaceState();
@@ -2772,7 +2810,7 @@ bool NocNodeEditor::detachEndpoint(QtNodes::NodeId nodeId,
     }
     const QString pendingId = QStringLiteral("pending-endpoint-%1")
                                   .arg(++m_nextPendingEndpoint);
-    m_pendingEndpoints.insert(pendingId, PendingEndpoint{
+    storeEndpointCanvasDraft(PendingEndpoint{
         pendingId,
         detached.type,
         scenePosition,
@@ -2807,23 +2845,24 @@ bool NocNodeEditor::deleteEndpointNode(QtNodes::NodeId nodeId) {
         const QString endpointLabel = detached
             ? pendingIterator->detached->endpoint.id : pendingIterator->type;
         QMessageBox confirmation(
-            QMessageBox::Warning,
+            QMessageBox::NoIcon,
             detached
                 ? QStringLiteral("Delete detached Endpoint?")
-                : QStringLiteral("Discard unattached Endpoint?"),
+                : QStringLiteral("Discard Endpoint draft?"),
             detached
                 ? QStringLiteral(
-                      "Permanently delete Endpoint %1 and discard the Domain, "
-                      "attachment, and configuration data held by this canvas draft?")
-                      .arg(endpointLabel.toHtmlEscaped())
+                      "Permanently delete Endpoint %1 and discard its preserved "
+                      "Domain assignments, attachment settings, and configuration?")
+                      .arg(endpointLabel)
                 : QStringLiteral(
-                      "Discard the unattached %1 Endpoint from the canvas?")
-                      .arg(endpointLabel.toHtmlEscaped()),
+                      "This %1 Endpoint has not been added to the design. "
+                      "Discard its canvas draft?")
+                      .arg(endpointLabel),
             QMessageBox::Yes | QMessageBox::Cancel,
             this);
         confirmation.setObjectName(
             QStringLiteral("finepaper.deletePendingEndpointConfirmation"));
-        confirmation.setTextFormat(Qt::RichText);
+        confirmation.setTextFormat(Qt::PlainText);
         confirmation.setDefaultButton(QMessageBox::Cancel);
         confirmation.setEscapeButton(QMessageBox::Cancel);
         if (QPushButton* deleteButton = qobject_cast<QPushButton*>(
@@ -2831,7 +2870,7 @@ bool NocNodeEditor::deleteEndpointNode(QtNodes::NodeId nodeId) {
             deleteButton->setText(
                 detached
                     ? QStringLiteral("Delete Endpoint")
-                    : QStringLiteral("Discard Endpoint"));
+                    : QStringLiteral("Discard Draft"));
             deleteButton->setProperty(
                 "finepaperRole", QStringLiteral("danger"));
         }
@@ -2859,7 +2898,7 @@ bool NocNodeEditor::deleteEndpointNode(QtNodes::NodeId nodeId) {
             return true;
         }
         const QString durableEndpointId = subject.endpointId;
-        m_pendingEndpoints.remove(metadata.id);
+        removeEndpointCanvasDraft(metadata.id);
         if (plan.command
                 == attachment::AttachmentCommandKind::DiscardDetachedDraft
             && !durableEndpointId.isEmpty()
@@ -3223,6 +3262,12 @@ void NocNodeEditor::showNodeContextMenu(QtNodes::NodeId nodeId,
         return;
     }
     menu->setObjectName(workbench::endpointContextMenuName);
+    const auto pendingDraft = pending
+        ? m_pendingEndpoints.constFind(metadata->id)
+        : m_pendingEndpoints.constEnd();
+    const bool detachedDraft = pending
+        && pendingDraft != m_pendingEndpoints.constEnd()
+        && pendingDraft->detached.has_value();
     const SelectionIdentity endpointSelection{metadata->kind, metadata->id};
     QMenu* connectMenu = menu->addMenu(QStringLiteral("Connect to Router"));
     connectMenu->setObjectName(workbench::connectRouterMenuName);
@@ -3265,8 +3310,9 @@ void NocNodeEditor::showNodeContextMenu(QtNodes::NodeId nodeId,
         });
     }
     QAction* remove = menu->addAction(
-        pending ? QStringLiteral("Delete Unattached Endpoint")
-                : QStringLiteral("Delete Endpoint"));
+        pending && !detachedDraft
+            ? QStringLiteral("Discard Endpoint Draft")
+            : QStringLiteral("Delete Endpoint"));
     remove->setObjectName(workbench::deleteEndpointActionName);
     connect(remove, &QAction::triggered, this, [this, endpointSelection] {
         if (const std::optional<QtNodes::NodeId> currentNode =
@@ -3469,11 +3515,55 @@ void NocNodeEditor::addPendingEndpoint(const QString& endpointType,
     }
     const QString id = QStringLiteral("pending-endpoint-%1")
                            .arg(++m_nextPendingEndpoint);
-    m_pendingEndpoints.insert(
-        id,
+    storeEndpointCanvasDraft(
         PendingEndpoint{id, endpointType, scenePosition, std::nullopt});
     m_selectedItems = {{NocEditorSelection::Kind::PendingEndpoint, id}};
     rebuildGraph(false);
+}
+
+void NocNodeEditor::storeEndpointCanvasDraft(PendingEndpoint draft) {
+    if (draft.id.isEmpty()) {
+        return;
+    }
+    const QString draftId = draft.id;
+    m_pendingEndpoints.insert(draftId, std::move(draft));
+    notifyEndpointCanvasDraftStateChanged();
+}
+
+bool NocNodeEditor::removeEndpointCanvasDraft(const QString& draftId) {
+    if (m_pendingEndpoints.remove(draftId) == 0) {
+        return false;
+    }
+    notifyEndpointCanvasDraftStateChanged();
+    return true;
+}
+
+void NocNodeEditor::clearEndpointCanvasDrafts() {
+    if (m_pendingEndpoints.isEmpty()) {
+        return;
+    }
+    m_pendingEndpoints.clear();
+    notifyEndpointCanvasDraftStateChanged();
+}
+
+void NocNodeEditor::notifyEndpointCanvasDraftStateChanged() {
+    rebuildEndpointCanvasDraftState();
+    updateEndpointCanvasDraftNotice();
+    updateCanvasAccessibleDescription();
+    if (endpointCanvasDraftStateChanged) {
+        endpointCanvasDraftStateChanged();
+    }
+}
+
+void NocNodeEditor::updateEndpointCanvasDraftNotice() {
+    if (!m_endpointCanvasDraftNotice) {
+        return;
+    }
+    const QString text = endpoint_canvas_draft_text::notice(
+        endpointCanvasDraftState());
+    m_endpointCanvasDraftNotice->setText(text);
+    m_endpointCanvasDraftNotice->setAccessibleDescription(text);
+    m_endpointCanvasDraftNotice->setVisible(!text.isEmpty());
 }
 
 std::optional<QtNodes::NodeId> NocNodeEditor::routerNodeAt(
@@ -3809,6 +3899,47 @@ bool NocNodeEditor::attachmentPortAvailable(
         .decision.allowed;
 }
 
+QString NocNodeEditor::pendingEndpointCaption(
+    const PendingEndpoint& pending) const {
+    const QString label = endpointTypeLabel(pending.type);
+    return pending.detached
+        ? QStringLiteral("Disconnected Endpoint\n%1 · %2")
+              .arg(pending.detached->endpoint.id, label)
+        : QStringLiteral("New Endpoint draft\n%1").arg(label);
+}
+
+QString NocNodeEditor::pendingEndpointToolTip(
+    const PendingEndpoint& pending) const {
+    return pending.detached
+        ? QStringLiteral(
+              "Disconnected Endpoint %1. Reconnect it to restore its "
+              "preserved Domain and configuration data.")
+              .arg(pending.detached->endpoint.id)
+        : QStringLiteral(
+              "New %1 draft. Connect it to a Router to add it to the design.")
+              .arg(endpointTypeLabel(pending.type));
+}
+
+void NocNodeEditor::refreshPendingEndpointPresentation() {
+    for (auto iterator = m_pendingEndpointNodes.constBegin();
+         iterator != m_pendingEndpointNodes.constEnd(); ++iterator) {
+        const auto pending = m_pendingEndpoints.constFind(iterator.key());
+        if (pending == m_pendingEndpoints.constEnd()) {
+            continue;
+        }
+        if (auto* model = static_cast<NocGraphModel&>(*m_graphModel)
+                              .delegateModel<NocNodeModel>(iterator.value())) {
+            model->setCaption(pendingEndpointCaption(*pending));
+        }
+        if (m_scene) {
+            if (auto* node = m_scene->nodeGraphicsObject(iterator.value())) {
+                node->setToolTip(pendingEndpointToolTip(*pending));
+            }
+        }
+    }
+    emitSelectionChanged();
+}
+
 QString NocNodeEditor::endpointTypeLabel(const QString& endpointType) const {
     for (const NocEndpointTypeItem& type : m_endpointTypes) {
         if (type.id == endpointType) {
@@ -3854,7 +3985,8 @@ std::optional<NocEditorSelection> NocNodeEditor::selectionForIdentity(
             identity.kind,
             pending->detached ? pending->detached->endpoint.id
                               : pending->type,
-            std::nullopt};
+            std::nullopt,
+            EndpointCanvasDraftId{identity.id}};
     }
 
     const ElementKind elementKind = elementKindForSelection(identity.kind);
@@ -4056,6 +4188,8 @@ void NocNodeEditor::updateCanvasAccessibleDescription() {
         "Tab and Shift+Tab move through elements, Space collapses or expands "
         "a selected Router, Shift+F10 opens element actions, and Delete "
         "removes an editable Endpoint or disconnects its attachment.");
+    description += endpoint_canvas_draft_text::accessibleSummary(
+        endpointCanvasDraftState());
     if (m_domainPresentation.status == DomainPresentationStatus::Inactive
         || m_domainPresentation.activeDomainType.trimmed().isEmpty()) {
         m_view->setAccessibleDescription(description);

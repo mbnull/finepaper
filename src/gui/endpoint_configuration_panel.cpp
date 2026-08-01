@@ -117,9 +117,30 @@ EndpointCreationDialog::EndpointCreationDialog(
     QString suggestedType,
     QString suggestedId,
     QWidget* parent)
+    : EndpointCreationDialog(
+          design,
+          package,
+          std::move(suggestedType),
+          std::move(suggestedId),
+          QSet<QString>{},
+          parent) {}
+
+EndpointCreationDialog::EndpointCreationDialog(
+    const NocDesign& design,
+    const PackageDefinition& package,
+    QString suggestedType,
+    QString suggestedId,
+    QSet<QString> reservedEndpointIds,
+    QWidget* parent)
     : QDialog(parent),
       m_design(design),
-      m_package(package) {
+      m_package(package),
+      m_unavailableEndpointIds(std::move(reservedEndpointIds)) {
+    m_unavailableEndpointIds.reserve(
+        m_unavailableEndpointIds.size() + m_design.endpoints.size());
+    for (const EndpointInstance& endpoint : m_design.endpoints) {
+        m_unavailableEndpointIds.insert(endpoint.id);
+    }
     setObjectName(QStringLiteral("finepaper.endpointCreationDialog"));
     setWindowTitle(QStringLiteral("Configure Endpoint"));
     setModal(true);
@@ -261,11 +282,7 @@ QStringList EndpointCreationDialog::localErrors() const {
     const EndpointCreationDraft value = draft();
     if (value.id.isEmpty()) {
         errors.append(QStringLiteral("Enter a non-empty Endpoint ID / name."));
-    } else if (std::any_of(
-                   m_design.endpoints.cbegin(), m_design.endpoints.cend(),
-                   [&](const EndpointInstance& endpoint) {
-                       return endpoint.id == value.id;
-                   })) {
+    } else if (m_unavailableEndpointIds.contains(value.id)) {
         errors.append(QStringLiteral("Endpoint ID %1 is already in use.")
                           .arg(value.id));
     }

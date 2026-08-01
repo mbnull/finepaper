@@ -2,6 +2,7 @@
 
 #include "features/attachment/endpoint_attachment_rules.h"
 #include "features/domain/domain_presentation.h"
+#include "features/topology/drafts/endpoint_canvas_draft_state.h"
 #include "features/topology/topology_workspace_store.h"
 #include "noc/model.h"
 
@@ -30,6 +31,7 @@ using NodeId = unsigned int;
 class QEvent;
 class QGraphicsItem;
 class QGraphicsPathItem;
+class QLabel;
 
 namespace finepaper {
 
@@ -76,6 +78,7 @@ struct NocEditorSelection {
     Kind kind = Kind::None;
     QString id;
     std::optional<RouterPosition> router = std::nullopt;
+    EndpointCanvasDraftId canvasDraftId;
 
     [[nodiscard]] std::optional<ElementRef> element() const {
         switch (kind) {
@@ -116,6 +119,8 @@ struct NocEditorSelectionSet {
 struct NocEndpointTypeItem {
     QString id;
     QString label;
+
+    bool operator==(const NocEndpointTypeItem&) const = default;
 };
 
 using NocAttachmentTarget = attachment::AttachmentTarget;
@@ -157,7 +162,8 @@ public:
     void zoomToFit();
     void setDomainPresentation(DomainPresentationSnapshot presentation);
     [[nodiscard]] const DomainPresentationSnapshot& domainPresentation() const;
-    [[nodiscard]] QStringList detachedEndpointDraftIds() const;
+    [[nodiscard]] const EndpointCanvasDraftState&
+    endpointCanvasDraftState() const;
 
     // Mutation callbacks are synchronous and run on this widget's GUI thread.
     // They may synchronously replace the design and rebuild the graph; callers
@@ -174,6 +180,7 @@ public:
     std::function<bool(const QString&)> endpointRemovalRequested;
     std::function<bool(const QString&)> endpointDeletionRequested;
     std::function<void(const QString&)> detachedEndpointDeletionRequested;
+    std::function<void()> endpointCanvasDraftStateChanged;
     std::function<void(const NocEditorSelection&)> selectionChanged;
     std::function<void(const NocEditorSelectionSet&)> semanticSelectionChanged;
     std::function<void(const TopologyWorkspaceDiagnostic&)>
@@ -251,6 +258,12 @@ private:
     void clearEndpointAttachmentDraft();
     bool handleEndpointDrop(const QString& endpointType, const QPoint& viewportPosition);
     void addPendingEndpoint(const QString& endpointType, QPointF scenePosition);
+    void storeEndpointCanvasDraft(PendingEndpoint draft);
+    bool removeEndpointCanvasDraft(const QString& draftId);
+    void clearEndpointCanvasDrafts();
+    void rebuildEndpointCanvasDraftState();
+    void notifyEndpointCanvasDraftStateChanged();
+    void updateEndpointCanvasDraftNotice();
     bool attachNodeToRouter(QtNodes::NodeId nodeId, NocAttachmentTarget target);
     bool detachEndpoint(QtNodes::NodeId nodeId,
                         bool restoreProjectionOnFailure = false);
@@ -301,6 +314,9 @@ private:
     bool attachmentPortAvailable(QtNodes::NodeId routerNode,
                                  unsigned int portIndex,
                                  std::optional<QtNodes::NodeId> ignoredEndpoint = std::nullopt) const;
+    QString pendingEndpointCaption(const PendingEndpoint& pending) const;
+    QString pendingEndpointToolTip(const PendingEndpoint& pending) const;
+    void refreshPendingEndpointPresentation();
     QString endpointTypeLabel(const QString& endpointType) const;
     std::optional<ElementRef> elementForConnection(
         QtNodes::ConnectionId connectionId) const;
@@ -321,7 +337,10 @@ private:
     std::unique_ptr<QtNodes::DataFlowGraphModel> m_graphModel;
     QtNodes::DataFlowGraphicsScene* m_scene = nullptr;
     AnimatedGraphicsView* m_view = nullptr;
+    QLabel* m_endpointCanvasDraftNotice = nullptr;
+    EndpointCanvasDraftState m_endpointCanvasDraftState;
     QHash<QtNodes::NodeId, NodeMetadata> m_metadata;
+    QHash<QString, QtNodes::NodeId> m_pendingEndpointNodes;
     QHash<QString, QtNodes::NodeId> m_routerNodes;
     QHash<ElementRef, QtNodes::NodeId> m_elementNodes;
     QHash<ElementRef, QtNodes::ConnectionId> m_elementConnections;

@@ -128,7 +128,8 @@ private:
     bool confirmDiscardPendingDomainWorkspace(const QString& action);
     void discardPendingDomainChanges();
     void discardPendingDomainWorkspace();
-    bool canSaveDetachedEndpointDrafts();
+    bool ensureEndpointCanvasDraftsResolved(const QString& operation);
+    bool confirmDiscardEndpointCanvasDrafts();
     bool maybeSave();
     void createDesign();
     void openDesign();
@@ -148,6 +149,7 @@ private:
     bool moveEndpoint(const QString& endpointId, NocAttachmentTarget target);
     bool removeEndpoint(const QString& endpointId,
                         bool discardConfigurationDraft = true);
+    void discardEndpointLifecycleDrafts(const QString& endpointId);
     std::optional<QHash<QString, QStringList>> chooseEndpointDomainAssignments(
         const QString& endpointId,
         const QHash<QString, QStringList>& initialAssignments = {});
@@ -187,6 +189,8 @@ private:
     const PackageDefinition* runtimePackageByKey(const QString& key) const;
     const PackageDefinition* runtimePackageForDesign() const;
     QVector<PackageDefinition> runtimePackages() const;
+    [[nodiscard]] QSet<QString> endpointIdsReservedByCanvasDrafts() const;
+    [[nodiscard]] QSet<QString> unavailableEndpointIds() const;
     QString nextEndpointId(const QString& endpointType) const;
     AttachmentSlotChoice chooseAttachmentSlot(
         NocAttachmentTarget target,

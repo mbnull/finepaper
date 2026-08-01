@@ -569,6 +569,7 @@ FinepaperMainWindow::~FinepaperMainWindow() {
         m_nodeEditor->endpointRemovalRequested = {};
         m_nodeEditor->endpointDeletionRequested = {};
         m_nodeEditor->detachedEndpointDeletionRequested = {};
+        m_nodeEditor->endpointCanvasDraftStateChanged = {};
         m_nodeEditor->selectionChanged = {};
         m_nodeEditor->semanticSelectionChanged = {};
         m_nodeEditor->workspaceDiagnosticRaised = {};
@@ -915,10 +916,10 @@ void FinepaperMainWindow::createCentralViews() {
     };
     m_nodeEditor->detachedEndpointDeletionRequested = [this](
         const QString& endpointId) {
-        if (m_endpointConfigurationPanel) {
-            m_endpointConfigurationPanel->discardDraft(
-                m_designSessionIdentity, endpointId);
-        }
+        discardEndpointLifecycleDrafts(endpointId);
+    };
+    m_nodeEditor->endpointCanvasDraftStateChanged = [this] {
+        updateUiState();
     };
     m_nodeEditor->attachmentRejected = [this](
         attachment::Rejection rejection,
@@ -2973,7 +2974,10 @@ void FinepaperMainWindow::updateUiState() {
          && m_domainManager->hasPendingAssignmentChanges())
         || (m_domainConfigurationWorkspace
             && m_domainConfigurationWorkspace->hasPendingChanges());
-    const bool hasPendingDrafts = hasInspectorDrafts || hasDomainDrafts;
+    const bool hasEndpointCanvasDrafts = m_nodeEditor
+        && !m_nodeEditor->endpointCanvasDraftState().empty();
+    const bool hasPendingDrafts = hasInspectorDrafts || hasDomainDrafts
+        || hasEndpointCanvasDrafts;
     const bool hasParameterDraft = m_parameterDraft
         && m_parameterDraft->designIdentity == m_designSessionIdentity;
     setWindowModified(m_dirty || hasPendingDrafts);
@@ -3413,31 +3417,76 @@ void FinepaperMainWindow::discardPendingDomainWorkspace() {
     }
 }
 
-bool FinepaperMainWindow::canSaveDetachedEndpointDrafts() {
-    const QStringList endpointIds = m_nodeEditor
-        ? m_nodeEditor->detachedEndpointDraftIds() : QStringList{};
-    if (endpointIds.isEmpty()) {
+bool FinepaperMainWindow::ensureEndpointCanvasDraftsResolved(
+    const QString& operation) {
+    const EndpointCanvasDraftState state = m_nodeEditor
+        ? m_nodeEditor->endpointCanvasDraftState()
+        : EndpointCanvasDraftState{};
+    if (state.empty()) {
         return true;
     }
 
-    QMessageBox warning(
-        QMessageBox::Warning,
-        QStringLiteral("Reconnect detached Endpoints before saving"),
-        QStringLiteral(
-            "The following Endpoint(s) are detached editing drafts and are "
-            "not yet part of the durable design:\n\n%1\n\nReconnect them, "
-            "or explicitly choose Delete Unattached Endpoint if they should "
-            "be removed permanently. The design was not saved.")
-            .arg(endpointIds.join(QStringLiteral(", "))),
+    QMessageBox blocker(
+        QMessageBox::NoIcon,
+        QStringLiteral("Resolve Endpoint drafts"),
+        endpoint_canvas_draft_text::operationBlocker(state, operation),
         QMessageBox::Ok,
         this);
-    warning.setObjectName(
-        QStringLiteral("finepaper.detachedEndpointSaveBlocker"));
-    warning.exec();
+    blocker.setObjectName(
+        QStringLiteral("finepaper.endpointCanvasDraftBlocker"));
+    blocker.setTextFormat(Qt::PlainText);
+    if (QPushButton* reviewButton = qobject_cast<QPushButton*>(
+            blocker.button(QMessageBox::Ok))) {
+        reviewButton->setText(QStringLiteral("Return to Canvas"));
+    }
+    blocker.exec();
+    selectCenterView(workbench::editorViewId);
     return false;
 }
 
+bool FinepaperMainWindow::confirmDiscardEndpointCanvasDrafts() {
+    const EndpointCanvasDraftState state = m_nodeEditor
+        ? m_nodeEditor->endpointCanvasDraftState()
+        : EndpointCanvasDraftState{};
+    if (state.empty()) {
+        return true;
+    }
+
+    const bool hasOtherUnsavedChanges = m_dirty
+        || hasPendingInspectorDrafts()
+        || (m_domainManager
+            && m_domainManager->hasPendingAssignmentChanges())
+        || (m_domainConfigurationWorkspace
+            && m_domainConfigurationWorkspace->hasPendingChanges());
+    QMessageBox confirmation(
+        QMessageBox::NoIcon,
+        QStringLiteral("Discard unresolved Endpoint drafts?"),
+        endpoint_canvas_draft_text::discardConfirmation(
+            state, hasOtherUnsavedChanges),
+        QMessageBox::Discard | QMessageBox::Cancel,
+        this);
+    confirmation.setObjectName(
+        QStringLiteral("finepaper.endpointCanvasDraftDiscardConfirmation"));
+    confirmation.setTextFormat(Qt::PlainText);
+    confirmation.setDefaultButton(QMessageBox::Cancel);
+    confirmation.setEscapeButton(QMessageBox::Cancel);
+    if (QPushButton* discardButton = qobject_cast<QPushButton*>(
+            confirmation.button(QMessageBox::Discard))) {
+        discardButton->setText(
+            hasOtherUnsavedChanges
+                ? QStringLiteral("Discard All Changes")
+                : QStringLiteral("Discard Drafts"));
+        discardButton->setProperty(
+            "finepaperRole", QStringLiteral("danger"));
+    }
+    return confirmation.exec() == QMessageBox::Discard;
+}
+
 bool FinepaperMainWindow::maybeSave() {
+    if (m_nodeEditor
+        && !m_nodeEditor->endpointCanvasDraftState().empty()) {
+        return confirmDiscardEndpointCanvasDrafts();
+    }
     if (!m_dirty || !m_design) {
         return confirmDiscardPendingDomainChanges(
                    QStringLiteral("Continuing"))
@@ -3598,6 +3647,9 @@ void FinepaperMainWindow::resizeMesh() {
     if (m_operationBusy || !m_design || !package) {
         return;
     }
+    if (!ensureEndpointCanvasDraftsResolved(QStringLiteral("Resize"))) {
+        return;
+    }
     MeshResizeDialog dialog(*m_design, *package, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
@@ -3695,7 +3747,7 @@ bool FinepaperMainWindow::saveDesignAs() {
                                  QStringLiteral("Create or open a NoC design first."));
         return false;
     }
-    if (!canSaveDetachedEndpointDrafts()) {
+    if (!ensureEndpointCanvasDraftsResolved(QStringLiteral("Save"))) {
         return false;
     }
     const QString suggestedPath = m_designPath.isEmpty()
@@ -3711,15 +3763,15 @@ bool FinepaperMainWindow::saveDesignTo(const QString& path) {
     if (!m_design || path.isEmpty()) {
         return false;
     }
+    if (!ensureEndpointCanvasDraftsResolved(QStringLiteral("Save"))) {
+        return false;
+    }
     if (!confirmDiscardPendingDomainChanges(
             QStringLiteral("Saving the design"))) {
         return false;
     }
     if (!confirmDiscardPendingInspectorDrafts(
             QStringLiteral("Saving the design"))) {
-        return false;
-    }
-    if (!canSaveDetachedEndpointDrafts()) {
         return false;
     }
     QVector<Diagnostic> diagnostics;
@@ -3745,6 +3797,9 @@ void FinepaperMainWindow::validateDesign() {
                                  QStringLiteral("The design's runtime NoC IP Package is not "
                                                 "available. Reload or reinstall the exact "
                                                 "Package before validation."));
+        return;
+    }
+    if (!ensureEndpointCanvasDraftsResolved(QStringLiteral("Validate"))) {
         return;
     }
     if (!confirmDiscardPendingDomainChanges(
@@ -3850,6 +3905,9 @@ void FinepaperMainWindow::generateDesign() {
                                  QStringLiteral("The design's runtime NoC IP Package is not "
                                                 "available. Reload or reinstall the exact "
                                                 "Package before generation."));
+        return;
+    }
+    if (!ensureEndpointCanvasDraftsResolved(QStringLiteral("Generate"))) {
         return;
     }
     const QString root = m_outputRoot->text().trimmed();
@@ -3967,11 +4025,27 @@ attachment::CreateEndpointResult FinepaperMainWindow::addEndpoint(
         *packageForDesign(),
         endpointType,
         nextEndpointId(endpointType),
+        endpointIdsReservedByCanvasDrafts(),
         this);
     if (configuration.exec() != QDialog::Accepted) {
         return {};
     }
     const EndpointCreationDraft draft = configuration.draft();
+    if (unavailableEndpointIds().contains(draft.id)) {
+        QMessageBox duplicateId(
+            QMessageBox::NoIcon,
+            QStringLiteral("Endpoint ID unavailable"),
+            QStringLiteral(
+                "Endpoint ID %1 is already used by the design or reserved "
+                "by a disconnected Endpoint on the canvas. Choose another "
+                "ID before adding this Endpoint.")
+                .arg(draft.id),
+            QMessageBox::Ok,
+            this);
+        duplicateId.setTextFormat(Qt::PlainText);
+        duplicateId.exec();
+        return {};
+    }
     EndpointInstance endpoint;
     endpoint.id = draft.id;
     endpoint.type = draft.type;
@@ -4051,7 +4125,7 @@ bool FinepaperMainWindow::removeEndpoint(
     }
     if (discardConfigurationDraft) {
         QMessageBox confirmation(
-            QMessageBox::Warning,
+            QMessageBox::NoIcon,
             QStringLiteral("Delete Endpoint?"),
             QStringLiteral(
                 "Delete Endpoint %1 and its attachment from this design? "
@@ -4088,15 +4162,33 @@ bool FinepaperMainWindow::removeEndpoint(
     const DesignResult result = m_application.removeEndpoint(*m_design, endpointId);
     if (result.success) {
         discardPendingDomainChanges();
-        if (discardConfigurationDraft && m_endpointConfigurationPanel) {
-            m_endpointConfigurationPanel->discardDraft(
-                m_designSessionIdentity, endpointId);
-            m_elementConfigurationPanel->discardDraftsForElement(
-                m_designSessionIdentity, attachment);
+        if (discardConfigurationDraft) {
+            discardEndpointLifecycleDrafts(endpointId);
         }
     }
-    adoptDesignResult(result, QStringLiteral("Remove Endpoint %1").arg(endpointId));
+    adoptDesignResult(
+        result,
+        (discardConfigurationDraft
+             ? QStringLiteral("Delete Endpoint ")
+             : QStringLiteral("Disconnect Endpoint "))
+            + endpointId);
     return result.success;
+}
+
+void FinepaperMainWindow::discardEndpointLifecycleDrafts(
+    const QString& endpointId) {
+    if (endpointId.isEmpty()) {
+        return;
+    }
+    if (m_endpointConfigurationPanel) {
+        m_endpointConfigurationPanel->discardDraft(
+            m_designSessionIdentity, endpointId);
+    }
+    if (m_elementConfigurationPanel) {
+        m_elementConfigurationPanel->discardDraftsForElement(
+            m_designSessionIdentity,
+            {ElementKind::EndpointAttachment, endpointId});
+    }
 }
 
 FinepaperMainWindow::AttachmentSlotChoice FinepaperMainWindow::chooseAttachmentSlot(
@@ -4258,9 +4350,12 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
     QStringList selectionKeyParts;
     selectionKeyParts.reserve(selection.items.size());
     for (const NocEditorSelection& item : selection.items) {
+        const QString identity = item.canvasDraftId.isValid()
+            ? item.canvasDraftId.value
+            : item.id;
         selectionKeyParts.append(
             QStringLiteral("%1:%2")
-                .arg(QString::number(static_cast<int>(item.kind)), item.id));
+                .arg(QString::number(static_cast<int>(item.kind)), identity));
     }
     const QString selectionKey = !m_design
         ? QStringLiteral("no-design")
@@ -4348,14 +4443,27 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
         int endpoints = 0;
         int routerLinks = 0;
         int attachments = 0;
-        int pendingEndpoints = 0;
+        int newEndpointDrafts = 0;
+        int disconnectedEndpoints = 0;
+        const EndpointCanvasDraftState canvasDrafts = m_nodeEditor
+            ? m_nodeEditor->endpointCanvasDraftState()
+            : EndpointCanvasDraftState{};
         for (const NocEditorSelection& item : selection.items) {
             switch (item.kind) {
             case NocEditorSelection::Kind::Router: ++routers; break;
             case NocEditorSelection::Kind::Endpoint: ++endpoints; break;
             case NocEditorSelection::Kind::RouterLink: ++routerLinks; break;
             case NocEditorSelection::Kind::EndpointAttachment: ++attachments; break;
-            case NocEditorSelection::Kind::PendingEndpoint: ++pendingEndpoints; break;
+            case NocEditorSelection::Kind::PendingEndpoint: {
+                const auto draft = canvasDrafts.find(item.canvasDraftId);
+                if (draft && draft->lifecycle
+                    == EndpointCanvasDraftLifecycle::Detached) {
+                    ++disconnectedEndpoints;
+                } else {
+                    ++newEndpointDrafts;
+                }
+                break;
+            }
             case NocEditorSelection::Kind::None: break;
             }
         }
@@ -4366,8 +4474,15 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
         if (attachments > 0) {
             counts.append(QStringLiteral("%1 Attachment").arg(attachments));
         }
-        if (pendingEndpoints > 0) {
-            counts.append(QStringLiteral("%1 unattached Endpoint").arg(pendingEndpoints));
+        if (newEndpointDrafts > 0) {
+            counts.append(
+                QStringLiteral("%1 new Endpoint draft")
+                    .arg(newEndpointDrafts));
+        }
+        if (disconnectedEndpoints > 0) {
+            counts.append(
+                QStringLiteral("%1 disconnected Endpoint")
+                    .arg(disconnectedEndpoints));
         }
         summary.title = QStringLiteral("%1 items selected")
             .arg(selection.items.size());
@@ -4467,10 +4582,34 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
         return;
     }
     if (item.kind == NocEditorSelection::Kind::PendingEndpoint) {
-        summary.title = QStringLiteral("Unattached Endpoint");
-        summary.metadata = QStringLiteral("Type %1").arg(item.id);
-        appendDetail(QStringLiteral(
-            "Drag its EP port to a Router EP port or Router body to attach it."));
+        const auto draft = m_nodeEditor
+            ? m_nodeEditor->endpointCanvasDraftState().find(item.canvasDraftId)
+            : std::nullopt;
+        if (!draft) {
+            summary.title = QStringLiteral("Endpoint draft unavailable");
+            summary.metadata = QStringLiteral("Canvas state changed");
+            appendDetail(QStringLiteral(
+                "Select the Endpoint draft again to refresh this Inspector."));
+        } else if (draft->lifecycle
+                   == EndpointCanvasDraftLifecycle::Detached) {
+            summary.title = QStringLiteral("Endpoint ") + draft->endpointId;
+            summary.metadata = draft->endpointTypeLabel
+                + QStringLiteral(" · Disconnected from ")
+                + (draft->previousAttachment
+                       ? routerId(draft->previousAttachment->router)
+                       : QStringLiteral("its Router"));
+            appendDetail(QStringLiteral(
+                "Domain assignments and configuration are preserved for this "
+                "editing session. Reconnect or delete this Endpoint before "
+                "Save, Validate, Generate, or Resize."));
+        } else {
+            summary.title = QStringLiteral("Endpoint draft");
+            summary.metadata = draft->endpointTypeLabel
+                + QStringLiteral(" · New · Not in design");
+            appendDetail(QStringLiteral(
+                "Connect its EP port to a Router EP port or Router body to add "
+                "it. This draft is kept only in the current editing session."));
+        }
         m_inspectorSummaryPanel->setSelectionSummary(summary);
         return;
     }
@@ -5048,6 +5187,30 @@ void FinepaperMainWindow::updateResultFreshness() {
     }
 }
 
+QSet<QString> FinepaperMainWindow::endpointIdsReservedByCanvasDrafts() const {
+    QSet<QString> endpointIds;
+    if (m_nodeEditor) {
+        const QStringList detachedIds =
+            m_nodeEditor->endpointCanvasDraftState().detachedEndpointIds();
+        endpointIds.reserve(detachedIds.size());
+        for (const QString& endpointId : detachedIds) {
+            endpointIds.insert(endpointId);
+        }
+    }
+    return endpointIds;
+}
+
+QSet<QString> FinepaperMainWindow::unavailableEndpointIds() const {
+    QSet<QString> endpointIds = endpointIdsReservedByCanvasDrafts();
+    if (m_design) {
+        endpointIds.reserve(endpointIds.size() + m_design->endpoints.size());
+        for (const EndpointInstance& endpoint : m_design->endpoints) {
+            endpointIds.insert(endpoint.id);
+        }
+    }
+    return endpointIds;
+}
+
 QString FinepaperMainWindow::nextEndpointId(const QString& endpointType) const {
     QString base = endpointType.toLower();
     base.replace(QRegularExpression(QStringLiteral("[^a-z0-9_]+")), QStringLiteral("_"));
@@ -5055,20 +5218,12 @@ QString FinepaperMainWindow::nextEndpointId(const QString& endpointType) const {
     if (base.isEmpty()) {
         base = QStringLiteral("endpoint");
     }
+    const QSet<QString> unavailableIds = unavailableEndpointIds();
     int suffix = 0;
     while (true) {
         const QString candidate = QStringLiteral("%1_%2")
             .arg(base, QString::number(suffix));
-        bool exists = false;
-        if (m_design) {
-            for (const EndpointInstance& endpoint : m_design->endpoints) {
-                if (endpoint.id == candidate) {
-                    exists = true;
-                    break;
-                }
-            }
-        }
-        if (!exists) {
+        if (!unavailableIds.contains(candidate)) {
             return candidate;
         }
         ++suffix;

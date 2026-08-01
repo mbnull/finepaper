@@ -1233,6 +1233,35 @@ bool writeTopologyWorkspaceDesign(const QString& path) {
         && file.write(payload) == payload.size();
 }
 
+bool writeEndpointDraftLifecycleDesign(const QString& path) {
+    const QJsonObject design{
+        {QStringLiteral("format"), QStringLiteral("finepaper.noc-design")},
+        {QStringLiteral("formatVersion"), 1},
+        {QStringLiteral("id"), QStringLiteral("endpoint_draft_lifecycle")},
+        {QStringLiteral("name"), QStringLiteral("Endpoint Draft Lifecycle")},
+        {QStringLiteral("package"), QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("finepaper.noc")},
+            {QStringLiteral("version"), QStringLiteral("1.0.0")}
+        }},
+        {QStringLiteral("topology"), QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("mesh")},
+            {QStringLiteral("rows"), 2},
+            {QStringLiteral("columns"), 2}
+        }},
+        {QStringLiteral("parameters"), QJsonObject{
+            {QStringLiteral("dataWidth"), 64},
+            {QStringLiteral("flitWidth"), 128},
+            {QStringLiteral("addrWidth"), 32}
+        }},
+        {QStringLiteral("endpoints"), QJsonArray{}}
+    };
+    const QByteArray payload = QJsonDocument(design).toJson(
+        QJsonDocument::Indented);
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        && file.write(payload) == payload.size();
+}
+
 QSet<QString> currentTopologyWorkspaceKeys() {
     QSettings settings;
     QSet<QString> keys;
@@ -2858,9 +2887,30 @@ int main(int argc, char** argv) {
               QStringLiteral("real viewport drag/drop accepts an Endpoint on blank canvas"));
     }
     const auto pendingEndpoint = nodeIdWithCaptionPrefix(
-        graphicsScene, QStringLiteral("Unattached\nMaster endpoint"));
+        graphicsScene, QStringLiteral("New Endpoint draft\nMaster endpoint"));
+    const finepaper::EndpointCanvasDraftState pendingDraftState = nodeEditor
+        ? nodeEditor->endpointCanvasDraftState()
+        : finepaper::EndpointCanvasDraftState{};
+    auto* endpointDraftNotice = nodeEditor
+        ? nodeEditor->findChild<QLabel*>(
+              QStringLiteral("finepaper.endpointCanvasDraftNotice"))
+        : nullptr;
+    auto* endpointDraftInspectorTitle = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.inspectorSelectionTitle"));
     check(pendingEndpoint
-              && graphicsScene->graphModel().allNodeIds().size() == nodesBeforePending + 1,
+              && graphicsScene->graphModel().allNodeIds().size()
+                     == nodesBeforePending + 1
+              && pendingDraftState.pendingNewCount() == 1
+              && pendingDraftState.detachedCount() == 0
+              && endpointDraftNotice && endpointDraftNotice->isVisible()
+              && endpointDraftNotice->text().contains(
+                  QStringLiteral("not in the design"))
+              && endpointDraftInspectorTitle
+              && endpointDraftInspectorTitle->text()
+                     == QStringLiteral("Endpoint draft")
+              && inspectorSelectionMetadata
+              && inspectorSelectionMetadata->text().contains(
+                  QStringLiteral("New · Not in design")),
           QStringLiteral("blank-canvas drop creates a movable unattached Endpoint"));
 
     const auto connectionRouter = nodeIdWithCaption(
@@ -2925,7 +2975,7 @@ int main(int argc, char** argv) {
     check(endpointToTopologyDraftStarted
               && nodeIdWithCaptionPrefix(
                   graphicsScene,
-                  QStringLiteral("Unattached\nMaster endpoint")),
+                  QStringLiteral("New Endpoint draft\nMaster endpoint")),
           QStringLiteral(
               "Endpoint EP release on Router East stays unattached"));
 
@@ -2970,7 +3020,7 @@ int main(int argc, char** argv) {
         application.processEvents();
     }
     const auto pendingAfterProjectionRebuild = nodeIdWithCaptionPrefix(
-        graphicsScene, QStringLiteral("Unattached\nMaster endpoint"));
+        graphicsScene, QStringLiteral("New Endpoint draft\nMaster endpoint"));
     check(staleConnectionWasQueued && pendingAfterProjectionRebuild
               && !nodeIdWithCaptionPrefix(
                   graphicsScene, QStringLiteral("master_")),
@@ -2994,7 +3044,7 @@ int main(int argc, char** argv) {
     check(endpointPortStartedDraft,
           QStringLiteral("Endpoint EP starts a visible draft line"));
     check(!nodeIdWithCaptionPrefix(
-               graphicsScene, QStringLiteral("Unattached\nMaster endpoint")),
+               graphicsScene, QStringLiteral("New Endpoint draft\nMaster endpoint")),
           QStringLiteral("Endpoint draft line can release on the Router body"));
     const auto manuallyAttachedEndpoint = nodeIdWithCaptionPrefix(
         graphicsScene, QStringLiteral("master"));
@@ -3230,7 +3280,7 @@ int main(int argc, char** argv) {
         application.processEvents();
     }
     const auto contextPendingEndpoint = nodeIdWithCaptionPrefix(
-        graphicsScene, QStringLiteral("Unattached\nMaster endpoint"));
+        graphicsScene, QStringLiteral("New Endpoint draft\nMaster endpoint"));
     check(contextPendingEndpoint.has_value(),
           QStringLiteral("canvas right-click create does not require a selected Router"));
     const auto bodyDropRouter = nodeIdWithCaption(
@@ -3245,7 +3295,7 @@ int main(int argc, char** argv) {
         application.processEvents();
     }
     const auto pendingAfterBodyDrop = nodeIdWithCaptionPrefix(
-        graphicsScene, QStringLiteral("Unattached\nMaster endpoint"));
+        graphicsScene, QStringLiteral("New Endpoint draft\nMaster endpoint"));
     const std::optional<QPointF> pendingBodyPosition = pendingAfterBodyDrop
         ? std::optional<QPointF>(graphicsScene->graphModel().nodeData(
               *pendingAfterBodyDrop, QtNodes::NodeRole::Position).toPointF())
@@ -3352,23 +3402,36 @@ int main(int argc, char** argv) {
         application.processEvents();
     }
     auto detachedBodyEndpoint = nodeIdWithCaptionPrefix(
-        graphicsScene, QStringLiteral("Unattached\nMaster endpoint"));
+        graphicsScene, QStringLiteral("Disconnected Endpoint\n"));
+    const finepaper::EndpointCanvasDraftState detachedDraftState = nodeEditor
+        ? nodeEditor->endpointCanvasDraftState()
+        : finepaper::EndpointCanvasDraftState{};
     check(!endpointAttachedToRouter(graphicsScene, QStringLiteral("r-0-1"))
               && detachedBodyEndpoint
               && nodeEditor
-              && nodeEditor->detachedEndpointDraftIds()
-                     == QStringList{exposedEndpointId},
+              && detachedDraftState.pendingNewCount() == 0
+              && detachedDraftState.detachedCount() == 1
+              && nodeEditor->endpointCanvasDraftState().detachedEndpointIds()
+                     == QStringList{exposedEndpointId}
+              && endpointDraftNotice && endpointDraftNotice->isVisible()
+              && endpointDraftNotice->text().contains(exposedEndpointId)
+              && endpointDraftInspectorTitle
+              && endpointDraftInspectorTitle->text()
+                     == QStringLiteral("Endpoint ") + exposedEndpointId
+              && inspectorSelectionMetadata
+              && inspectorSelectionMetadata->text().contains(
+                  QStringLiteral("Disconnected from")),
           QStringLiteral("line-menu Disconnect removes the attachment and keeps the Endpoint draft"));
-    bool sawDetachedEndpointSaveBlocker = false;
+    bool sawEndpointCanvasDraftBlocker = false;
     if (saveAsAction) {
         QTimer::singleShot(0, [&] {
             auto* dialog = qobject_cast<QDialog*>(
                 QApplication::activeModalWidget());
             auto* messageBox = qobject_cast<QMessageBox*>(dialog);
-            sawDetachedEndpointSaveBlocker = messageBox
+            sawEndpointCanvasDraftBlocker = messageBox
                 && messageBox->objectName()
                     == QStringLiteral(
-                        "finepaper.detachedEndpointSaveBlocker");
+                        "finepaper.endpointCanvasDraftBlocker");
             if (messageBox) {
                 if (QAbstractButton* ok = messageBox->button(QMessageBox::Ok)) {
                     ok->click();
@@ -3382,12 +3445,34 @@ int main(int argc, char** argv) {
         saveAsAction->trigger();
         application.processEvents();
     }
-    check(sawDetachedEndpointSaveBlocker
+    check(sawEndpointCanvasDraftBlocker
               && window.isWindowModified()
               && nodeEditor
-              && nodeEditor->detachedEndpointDraftIds()
+              && nodeEditor->endpointCanvasDraftState().detachedEndpointIds()
                      == QStringList{exposedEndpointId},
           QStringLiteral("saving is blocked while a durable Endpoint survives only as a detached draft"));
+    bool sawDetachedValidationBlocker = false;
+    if (initialValidateAction) {
+        QTimer::singleShot(0, [&] {
+            auto* messageBox = qobject_cast<QMessageBox*>(
+                QApplication::activeModalWidget());
+            sawDetachedValidationBlocker = messageBox
+                && messageBox->objectName()
+                    == QStringLiteral("finepaper.endpointCanvasDraftBlocker")
+                && messageBox->text().startsWith(
+                    QStringLiteral("Validate"));
+            if (messageBox) {
+                messageBox->accept();
+            }
+        });
+        initialValidateAction->trigger();
+        application.processEvents();
+    }
+    check(sawDetachedValidationBlocker && !window.operationBusy()
+              && nodeEditor
+              && nodeEditor->endpointCanvasDraftState().detachedCount() == 1,
+          QStringLiteral(
+              "validation cannot silently omit a disconnected durable Endpoint"));
 
     const auto routerForDeleteKeyReconnect = nodeIdWithCaption(
         graphicsScene, QStringLiteral("r-0-1"));
@@ -3404,7 +3489,9 @@ int main(int argc, char** argv) {
     }
     const auto endpointForDeleteKey = endpointAttachedToRouter(
         graphicsScene, QStringLiteral("r-0-1"));
-    check(nodeEditor && nodeEditor->detachedEndpointDraftIds().isEmpty(),
+    check(nodeEditor
+              && nodeEditor->endpointCanvasDraftState().detachedEndpointIds()
+                     .isEmpty(),
           QStringLiteral("reconnecting a detached Endpoint commits and clears its recoverable draft"));
     if (graphicsScene && endpointForDeleteKey) {
         graphicsScene->clearSelection();
@@ -3476,7 +3563,7 @@ int main(int argc, char** argv) {
         }
     }
     detachedBodyEndpoint = nodeIdWithCaptionPrefix(
-        graphicsScene, QStringLiteral("Unattached\nMaster endpoint"));
+        graphicsScene, QStringLiteral("Disconnected Endpoint\n"));
     check(deleteSelection && detachedBodyEndpoint
               && !endpointAttachedToRouter(
                   graphicsScene, QStringLiteral("r-0-1"))
@@ -3513,7 +3600,7 @@ int main(int argc, char** argv) {
             originalDetachedDeletionRequested;
     }
     check(!nodeIdWithCaptionPrefix(
-               graphicsScene, QStringLiteral("Unattached\nMaster endpoint"))
+               graphicsScene, QStringLiteral("Disconnected Endpoint\n"))
               && detachedEndpointDeletionRequested
               && endpointConfigurationPanel
               && !endpointConfigurationPanel->unappliedDraftEndpointIds(
@@ -4217,6 +4304,10 @@ int main(int argc, char** argv) {
     const auto sessionAttachment = sessionEndpoint
         ? attachmentConnectionForEndpoint(sessionScene, *sessionEndpoint)
         : std::nullopt;
+    int sessionDraftStateChanges = 0;
+    sessionEditor.endpointCanvasDraftStateChanged = [&] {
+        ++sessionDraftStateChanges;
+    };
     sessionEditor.endpointRemovalRequested = [&](const QString& endpointId) {
         if (endpointId != QStringLiteral("session_endpoint")) {
             return false;
@@ -4248,20 +4339,40 @@ int main(int argc, char** argv) {
         application.processEvents();
     }
     check(staleDeletionWasQueued
-              && sessionEditor.detachedEndpointDraftIds()
-              == QStringList{QStringLiteral("session_endpoint")},
+              && sessionEditor.endpointCanvasDraftState().detachedEndpointIds()
+              == QStringList{QStringLiteral("session_endpoint")}
+              && sessionEditor.endpointCanvasDraftState().detachedCount() == 1
+              && sessionDraftStateChanges == 1,
           QStringLiteral(
               "a canceled old deletion does not block a new disconnect, which "
               "creates a transient Endpoint draft"));
+    const auto detachedNodeBeforeTypeRefresh = nodeIdWithCaptionPrefix(
+        sessionScene,
+        QStringLiteral("Disconnected Endpoint\nsession_endpoint"));
+    sessionEditor.setEndpointTypes({{
+        QStringLiteral("master"), QStringLiteral("Renamed master endpoint")}});
+    application.processEvents();
+    const auto detachedNodeAfterTypeRefresh = nodeIdWithCaptionPrefix(
+        sessionScene,
+        QStringLiteral(
+            "Disconnected Endpoint\nsession_endpoint · Renamed master endpoint"));
+    check(detachedNodeBeforeTypeRefresh && detachedNodeAfterTypeRefresh
+              && detachedNodeBeforeTypeRefresh == detachedNodeAfterTypeRefresh
+              && sessionDraftStateChanges == 2,
+          QStringLiteral(
+              "Endpoint type label refresh updates a detached draft in place without rebuilding the graph"));
     sessionEditor.setDesign(&sessionDesign);
-    check(sessionEditor.detachedEndpointDraftIds()
-              == QStringList{QStringLiteral("session_endpoint")},
+    check(sessionEditor.endpointCanvasDraftState().detachedEndpointIds()
+              == QStringList{QStringLiteral("session_endpoint")}
+              && sessionDraftStateChanges == 2,
           QStringLiteral("same-session projection refresh retains the detached Endpoint draft"));
     sessionEditor.beginDocumentSession(QStringLiteral("document-session-b"));
     sessionEditor.setDesign(&sessionDesign);
-    check(sessionEditor.detachedEndpointDraftIds().isEmpty()
+    check(sessionEditor.endpointCanvasDraftState().detachedEndpointIds()
+                  .isEmpty()
+              && sessionDraftStateChanges == 3
               && !nodeIdWithCaptionPrefix(
-                  sessionScene, QStringLiteral("Unattached\nMaster endpoint")),
+                  sessionScene, QStringLiteral("Disconnected Endpoint\n")),
           QStringLiteral("a new document session clears transient state despite the same storage identity"));
     sessionEditor.close();
 
@@ -4694,7 +4805,7 @@ int main(int argc, char** argv) {
         application.processEvents();
     }
     const auto explicitPending = nodeIdWithCaptionPrefix(
-        explicitScene, QStringLiteral("Unattached\nDevice endpoint"));
+        explicitScene, QStringLiteral("New Endpoint draft\nDevice endpoint"));
     const auto exactSlotRouter = nodeIdWithCaption(
         explicitScene, QStringLiteral("r-0-0"));
     bool exactSlotDraftStarted = false;
@@ -4760,7 +4871,7 @@ int main(int argc, char** argv) {
     check(endpointBeforeRejectedDetach && routerBeforeRejectedDetach
               && attachmentAfterRejectedDetach
               && !nodeIdWithCaptionPrefix(
-                  explicitScene, QStringLiteral("Unattached\nDevice endpoint")),
+                  explicitScene, QStringLiteral("Disconnected Endpoint\n")),
           QStringLiteral("a rejected disconnect keeps the durable attachment and creates no pending draft"));
 
     const auto endpointBeforeRejectedLineDelete = nodeIdWithCaptionPrefix(
@@ -4795,7 +4906,7 @@ int main(int argc, char** argv) {
               && attachmentConnectionForEndpoint(
                      explicitScene, *endpointAfterRejectedLineDelete)
               && !nodeIdWithCaptionPrefix(
-                  explicitScene, QStringLiteral("Unattached\nDevice endpoint")),
+                  explicitScene, QStringLiteral("Disconnected Endpoint\n")),
           QStringLiteral("a rejected line deletion restores the projected attachment"));
     closeDiscarding(explicitWindow);
 
@@ -6347,13 +6458,15 @@ int main(int argc, char** argv) {
     // Keep quick-add's deliberate create/delete projection rebuilds isolated
     // from the long-lived canvas interaction fixture above. QtNodes NodeIds are
     // transient across those rebuilds by design.
+    const QString quickAddDesignPath = outputRoot.filePath(
+        QStringLiteral("quick-add-regression.fpnoc"));
+    check(writeEndpointDraftLifecycleDesign(quickAddDesignPath),
+          QStringLiteral("quick-add regression design is writable"));
     finepaper::FinepaperMainWindow quickAddWindow(locations);
     quickAddWindow.show();
     application.processEvents();
-    createDesignThroughDialog(
-        quickAddWindow,
-        QStringLiteral("finepaper.noc@1.0.0"),
-        QStringLiteral("quick_add_regression"));
+    check(quickAddWindow.openDesignFile(quickAddDesignPath),
+          QStringLiteral("quick-add regression design opens cleanly"));
     auto* quickPalette = quickAddWindow.findChild<QListWidget*>(
         QStringLiteral("finepaper.endpointPalette"));
     auto* quickFilter = quickAddWindow.findChild<QLineEdit*>(
@@ -6371,6 +6484,128 @@ int main(int argc, char** argv) {
     if (quickEditor) {
         quickEditor->setRouterCollapsed(QStringLiteral("r-0-0"), false);
     }
+    QAction* quickSave = actionWithText(
+        quickAddWindow, QStringLiteral("Save"));
+    QAction* quickValidate = actionWithText(
+        quickAddWindow, QStringLiteral("Validate / DRC"));
+    QAction* quickGenerate = actionWithText(
+        quickAddWindow, QStringLiteral("Generate RTL"));
+    QAction* quickResize = quickAddWindow.findChild<QAction*>(
+        QStringLiteral("finepaper.resizeMeshAction"));
+    QMimeData quickPendingMime;
+    quickPendingMime.setData(
+        finepaper::workbench::endpointTypeMime,
+        QByteArrayLiteral("master"));
+    const QPoint quickBlankPosition = blankViewportPosition(quickView);
+    if (quickView) {
+        QDragEnterEvent dragEnter(
+            quickBlankPosition,
+            Qt::CopyAction,
+            &quickPendingMime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(quickView->viewport(), &dragEnter);
+        QDropEvent drop(
+            QPointF(quickBlankPosition),
+            Qt::CopyAction,
+            &quickPendingMime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(quickView->viewport(), &drop);
+        application.processEvents();
+    }
+    const auto quickPendingEndpoint = nodeIdWithCaptionPrefix(
+        quickScene, QStringLiteral("New Endpoint draft\nMaster endpoint"));
+    auto* quickDraftNotice = quickEditor
+        ? quickEditor->findChild<QLabel*>(
+              QStringLiteral("finepaper.endpointCanvasDraftNotice"))
+        : nullptr;
+    check(quickPendingEndpoint && quickEditor
+              && quickEditor->endpointCanvasDraftState().pendingNewCount() == 1
+              && quickAddWindow.isWindowModified()
+              && quickSave && quickSave->isEnabled()
+              && quickDraftNotice && quickDraftNotice->isVisible(),
+          QStringLiteral(
+              "an unattached new Endpoint draft alone marks the clean document modified and discoverable"));
+    check(quickValidate && quickValidate->isEnabled(),
+          QStringLiteral(
+              "validation remains available so unresolved Endpoint drafts can explain the blocker"));
+    captureSmokeScreenshot(
+        quickAddWindow, QStringLiteral("endpoint-draft"), requestedTheme);
+    chooseMessageBoxButton(QMessageBox::Cancel);
+    quickAddWindow.close();
+    application.processEvents();
+    check(quickAddWindow.isVisible() && quickEditor
+              && quickEditor->endpointCanvasDraftState().pendingNewCount() == 1,
+          QStringLiteral(
+              "cancelling Close preserves an unresolved Endpoint canvas draft"));
+    const auto operationWasBlocked = [&](QAction* action,
+                                         const QString& operation) {
+        if (!action) {
+            return false;
+        }
+        waitUntil([&] {
+            return action->isEnabled()
+                && !quickAddWindow.operationBusy();
+        });
+        if (!action->isEnabled() || quickAddWindow.operationBusy()) {
+            return false;
+        }
+        bool sawBlocker = false;
+        QTimer::singleShot(0, [&] {
+            for (QWidget* widget : QApplication::topLevelWidgets()) {
+                auto* messageBox = qobject_cast<QMessageBox*>(widget);
+                if (!messageBox || !messageBox->isVisible()
+                    || messageBox->objectName()
+                        != QStringLiteral(
+                            "finepaper.endpointCanvasDraftBlocker")) {
+                    continue;
+                }
+                sawBlocker = messageBox->text().startsWith(operation);
+                messageBox->accept();
+                break;
+            }
+        });
+        action->trigger();
+        application.processEvents();
+        return sawBlocker && !quickAddWindow.operationBusy();
+    };
+    const bool quickSaveBlocked = operationWasBlocked(
+        quickSave, QStringLiteral("Save"));
+    check(!quickAddWindow.operationBusy(),
+          QStringLiteral("Save draft preflight leaves the workbench idle"));
+    const bool quickValidateBlocked = operationWasBlocked(
+        quickValidate, QStringLiteral("Validate"));
+    const bool quickGenerateBlocked = operationWasBlocked(
+        quickGenerate, QStringLiteral("Generate"));
+    const bool quickResizeBlocked = operationWasBlocked(
+        quickResize, QStringLiteral("Resize"));
+    check(quickSaveBlocked,
+          QStringLiteral("Save uses the Endpoint canvas draft preflight"));
+    check(quickValidateBlocked,
+          QStringLiteral("Validate uses the Endpoint canvas draft preflight"));
+    check(quickGenerateBlocked,
+          QStringLiteral("Generate uses the Endpoint canvas draft preflight"));
+    check(quickResizeBlocked,
+          QStringLiteral("Resize uses the Endpoint canvas draft preflight"));
+    check(quickEditor
+              && quickEditor->endpointCanvasDraftState().pendingNewCount() == 1,
+          QStringLiteral(
+              "blocked persistent operations preserve the Endpoint canvas draft"));
+    if (quickScene && quickPendingEndpoint && quickAnimatedView) {
+        quickScene->clearSelection();
+        quickScene->nodeGraphicsObject(*quickPendingEndpoint)->setSelected(true);
+        quickScene->nodeSelected(*quickPendingEndpoint);
+        chooseMessageBoxButton(QMessageBox::Yes);
+        quickAnimatedView->deleteSelectionAction()->trigger();
+        application.processEvents();
+    }
+    check(quickEditor && quickEditor->endpointCanvasDraftState().empty()
+              && !quickAddWindow.isWindowModified()
+              && quickSave && !quickSave->isEnabled()
+              && quickDraftNotice && !quickDraftNotice->isVisible(),
+          QStringLiteral(
+              "discarding the only new Endpoint draft restores the clean document state"));
     const auto quickRouter = nodeIdWithCaption(
         quickScene, QStringLiteral("r-0-0"));
     if (quickScene && quickRouter) {
@@ -6400,8 +6635,6 @@ int main(int argc, char** argv) {
     check(quickAddButton && quickAddButton->isEnabled(),
           QStringLiteral(
               "selecting a Router and Endpoint type enables keyboard-friendly quick-add"));
-    QAction* quickValidate = actionWithText(
-        quickAddWindow, QStringLiteral("Validate / DRC"));
     bool quickBusyObserved = false;
     if (quickValidate && quickAddButton && quickAddButton->isEnabled()) {
         quickValidate->trigger();
@@ -6442,10 +6675,77 @@ int main(int argc, char** argv) {
               && quickAddedGraphics && quickAddedGraphics->isSelected(),
           QStringLiteral(
               "Add to selected Router creates, attaches, and selects the Palette choice"));
-    if (quickAnimatedView && quickAddedGraphics
-        && quickAddedGraphics->isSelected()) {
+    QAction* quickDeleteSelection = quickAnimatedView
+        ? quickAnimatedView->deleteSelectionAction() : nullptr;
+    const auto quickAddedConnection = quickAddedEndpoint
+        ? attachmentConnectionForEndpoint(quickScene, *quickAddedEndpoint)
+        : std::nullopt;
+    if (quickScene && quickAddedConnection && quickDeleteSelection) {
+        quickScene->clearSelection();
+        if (auto* connection = quickScene->connectionGraphicsObject(
+                *quickAddedConnection)) {
+            connection->setSelected(true);
+            quickDeleteSelection->trigger();
+            application.processEvents();
+            application.processEvents();
+        }
+    }
+    check(quickEditor
+              && quickEditor->endpointCanvasDraftState().detachedEndpointIds()
+                     == QStringList{QStringLiteral("master_0")}
+              && nodeGraphicsWithCaptionPrefix(
+                     quickScene,
+                     QStringLiteral("Disconnected Endpoint\nmaster_0")),
+          QStringLiteral(
+              "disconnecting a quick-added Endpoint reserves its durable ID in the canvas draft"));
+    const auto quickRouterForReservedId = nodeIdWithCaption(
+        quickScene, QStringLiteral("r-0-0"));
+    if (quickScene && quickRouterForReservedId) {
+        quickScene->clearSelection();
+        quickScene->nodeGraphicsObject(*quickRouterForReservedId)
+            ->setSelected(true);
+        quickScene->nodeSelected(*quickRouterForReservedId);
+        application.processEvents();
+    }
+    if (quickPalette && quickPalette->count() > 0) {
+        quickPalette->setCurrentRow(0);
+    }
+    if (quickAddButton && quickAddButton->isEnabled()) {
+        quickAddButton->click();
+        application.processEvents();
+    }
+    waitUntil([quickScene] {
+        auto* graphics = nodeGraphicsWithCaptionPrefix(
+            quickScene, QStringLiteral("master_1"));
+        return graphics && endpointAttachedToRouter(
+                   quickScene, QStringLiteral("r-0-0"))
+                   == std::optional<QtNodes::NodeId>(graphics->nodeId());
+    }, std::chrono::seconds(2));
+    auto* quickReplacementGraphics = nodeGraphicsWithCaptionPrefix(
+        quickScene, QStringLiteral("master_1"));
+    check(quickReplacementGraphics && quickEditor
+              && quickEditor->endpointCanvasDraftState().detachedEndpointIds()
+                     == QStringList{QStringLiteral("master_0")}
+              && !nodeGraphicsWithCaptionPrefix(
+                     quickScene, QStringLiteral("master_0\n")),
+          QStringLiteral(
+              "new Endpoint allocation skips IDs reserved by disconnected canvas Endpoints"));
+    if (quickScene && quickReplacementGraphics && quickDeleteSelection) {
+        quickScene->clearSelection();
+        quickReplacementGraphics->setSelected(true);
+        quickScene->nodeSelected(quickReplacementGraphics->nodeId());
         chooseMessageBoxButton(QMessageBox::Yes);
-        quickAnimatedView->deleteSelectionAction()->trigger();
+        quickDeleteSelection->trigger();
+        application.processEvents();
+    }
+    auto* quickDetachedGraphics = nodeGraphicsWithCaptionPrefix(
+        quickScene, QStringLiteral("Disconnected Endpoint\nmaster_0"));
+    if (quickScene && quickDetachedGraphics && quickDeleteSelection) {
+        quickScene->clearSelection();
+        quickDetachedGraphics->setSelected(true);
+        quickScene->nodeSelected(quickDetachedGraphics->nodeId());
+        chooseMessageBoxButton(QMessageBox::Yes);
+        quickDeleteSelection->trigger();
         application.processEvents();
     }
     const std::size_t nodesAfterQuickDelete = quickScene
@@ -6454,7 +6754,8 @@ int main(int argc, char** argv) {
               && nodesAfterQuickDelete == nodesBeforeQuickAdd
               && !nodeGraphicsWithCaptionPrefix(
                   quickScene, QStringLiteral("master_0"))
-              && quickEditor->detachedEndpointDraftIds().isEmpty(),
+              && quickEditor->endpointCanvasDraftState().detachedEndpointIds()
+                     .isEmpty(),
           QStringLiteral(
               "the canvas Delete shortcut permanently removes the selected Endpoint instead of detaching it"));
     closeDiscarding(quickAddWindow);

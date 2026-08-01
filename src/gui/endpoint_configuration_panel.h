@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QDialog>
 #include <QHash>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QWidget>
@@ -42,6 +43,13 @@ public:
         QString suggestedType,
         QString suggestedId,
         QWidget* parent = nullptr);
+    EndpointCreationDialog(
+        const NocDesign& design,
+        const PackageDefinition& package,
+        QString suggestedType,
+        QString suggestedId,
+        QSet<QString> reservedEndpointIds,
+        QWidget* parent = nullptr);
 
     [[nodiscard]] EndpointCreationDraft draft() const;
     [[nodiscard]] QStringList localErrors() const;
@@ -56,6 +64,7 @@ private:
 
     NocDesign m_design;
     PackageDefinition m_package;
+    QSet<QString> m_unavailableEndpointIds;
     EndpointDomainAssignments m_automaticAssignments;
     bool m_updating = false;
 

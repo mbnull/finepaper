@@ -283,7 +283,8 @@ void creationDialogOwnsIdentityParametersAndAutomaticDomains() {
         design,
         package,
         QStringLiteral("initiator-any-name"),
-        QStringLiteral("new-endpoint"));
+        QStringLiteral("new-endpoint"),
+        {QStringLiteral("detached-endpoint")});
     auto* tabs = dialog.findChild<QTabWidget*>(
         QStringLiteral("finepaper.endpointCreation.tabs"));
     auto* type = dialog.findChild<QComboBox*>(
@@ -327,6 +328,16 @@ void creationDialogOwnsIdentityParametersAndAutomaticDomains() {
               && dialog.localErrors().join(QLatin1Char('\n'))
                      .contains(QStringLiteral("already in use")),
           QStringLiteral("creation validates the editable Endpoint ID before mutation"));
+    if (auto* id = dialog.findChild<QLineEdit*>(
+            QStringLiteral("finepaper.endpointCreation.id"))) {
+        id->setText(QStringLiteral("detached-endpoint"));
+        QApplication::processEvents();
+    }
+    check(accept && !accept->isEnabled()
+              && dialog.localErrors().join(QLatin1Char('\n'))
+                     .contains(QStringLiteral("already in use")),
+          QStringLiteral(
+              "creation reserves IDs owned by disconnected canvas Endpoints"));
 }
 
 void targetSelectionProtectsDependentParameterDrafts() {
