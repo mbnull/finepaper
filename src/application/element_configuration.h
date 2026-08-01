@@ -33,7 +33,8 @@ ResolvedElementConfiguration resolveElementConfiguration(
 // identity/reference checks remain owned by validateDesignStructure().
 QVector<Diagnostic> validateElementConfigurations(
     const NocDesign& design,
-    const PackageDefinition& package);
+    const PackageDefinition& package,
+    const ValidationCancellationCheck& cancellationRequested = {});
 
 namespace element_configuration {
 

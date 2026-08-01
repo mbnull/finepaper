@@ -28,7 +28,7 @@ RunTicket DesignRunState::beginRun(
         m_current,
         std::move(outputRoot),
     };
-    m_activeRun = ticket;
+    m_activeRun = ActiveRun{ticket, false};
     return ticket;
 }
 
@@ -37,8 +37,11 @@ CompletionDisposition DesignRunState::disposition(
     if (ticket.input.session != m_current.session) {
         return CompletionDisposition::DifferentSession;
     }
-    if (!m_activeRun || ticket != *m_activeRun) {
+    if (!m_activeRun || ticket != m_activeRun->ticket) {
         return CompletionDisposition::Superseded;
+    }
+    if (m_activeRun->cancelRequested) {
+        return CompletionDisposition::CancelRequested;
     }
     if (ticket.input.catalogRevision != m_current.catalogRevision) {
         return CompletionDisposition::StaleCatalog;
@@ -49,8 +52,17 @@ CompletionDisposition DesignRunState::disposition(
     return CompletionDisposition::Current;
 }
 
+bool DesignRunState::requestCancel(const RunTicket& ticket) {
+    if (!m_activeRun || ticket != m_activeRun->ticket
+        || m_activeRun->cancelRequested) {
+        return false;
+    }
+    m_activeRun->cancelRequested = true;
+    return true;
+}
+
 bool DesignRunState::finishRun(const RunTicket& ticket) {
-    if (!m_activeRun || ticket != *m_activeRun) {
+    if (!m_activeRun || ticket != m_activeRun->ticket) {
         return false;
     }
     m_activeRun = std::nullopt;

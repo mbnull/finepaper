@@ -26,7 +26,6 @@ class QListWidget;
 class QListWidgetItem;
 class QMenu;
 class QPlainTextEdit;
-class QProgressBar;
 class QPushButton;
 class QScrollArea;
 class QSplitter;
@@ -41,6 +40,7 @@ class QWidget;
 namespace finepaper {
 
 class EndpointPaletteList;
+struct FinepaperMainWindowSmokeAccess;
 class DomainConfigurationWorkspace;
 class DomainManagerPanel;
 class DesignExtensionsWorkspace;
@@ -51,6 +51,7 @@ namespace ui {
 class EmptyState;
 class InspectorDesignSettings;
 class InspectorSummaryPanel;
+class OperationTaskStrip;
 class WorkbenchLayoutController;
 class WorkbenchPanelNavigator;
 enum class WorkbenchPanelRole;
@@ -71,6 +72,8 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private:
+    friend struct FinepaperMainWindowSmokeAccess;
+
     enum class DesignRefreshScope {
         FullProjection,
         DomainsOnly,
@@ -95,6 +98,19 @@ private:
         PackageParameterDraft editorState;
     };
 
+    struct ActiveOperation final {
+        operations::RunTicket ticket;
+        CancellationSource cancellation;
+        bool closeWhenFinished = false;
+    };
+
+    struct OperationCompletion final {
+        operations::CompletionDisposition disposition =
+            operations::CompletionDisposition::Superseded;
+        bool finishedActiveRun = false;
+        bool closeWhenFinished = false;
+    };
+
     void createUi();
     void createActions();
     void createCentralViews();
@@ -102,6 +118,7 @@ private:
     void createInspectorDock();
     void createDomainDock();
     void createResultsDock();
+    void createCleanupRecoveryBanner();
     void requestResultsDockReadabilityUpdate();
     void ensureResultsDockReadable();
     [[nodiscard]] int preferredResultsDockHeight() const;
@@ -124,7 +141,41 @@ private:
     void updateEndpointPalette();
     void detachPackageBorrowingPanels();
     void updateUiState();
-    void setOperationBusy(bool busy, const QString& message = {});
+    void setOperationBusy(bool busy);
+    [[nodiscard]] CancellationToken beginOperation(
+        const operations::RunTicket& ticket,
+        const QString& operationName,
+        const QString& cancelAccessibleName);
+    [[nodiscard]] bool requestOperationCancellation(
+        bool closeWhenFinished = false);
+    [[nodiscard]] OperationCompletion finishOperation(
+        const operations::RunTicket& ticket,
+        bool processCleanupUnresolved = false);
+    void presentOperationCancellation(
+        const OperationCompletion& completion,
+        bool cleanupUnresolved,
+        bool processCleanupUnresolved,
+        const QVector<Diagnostic>& cleanupDiagnostics,
+        const QStringList& retainedRuntimePaths,
+        const QString& operationName,
+        const QString& preservedStatus,
+        const QString& preservedActivity,
+        const QVector<QLabel*>& statusLabels);
+    [[nodiscard]] QString runtimeFileCleanupDetails(
+        const QString& operationName,
+        const QVector<Diagnostic>& cleanupDiagnostics,
+        const QStringList& retainedRuntimePaths) const;
+    void presentProcessCleanupFailure(
+        const QString& operationName,
+        const QVector<Diagnostic>& cleanupDiagnostics,
+        const QStringList& retainedRuntimePaths,
+        const QVector<QLabel*>& statusLabels);
+    [[nodiscard]] QString processCleanupDetails(
+        const QString& operationName,
+        const QVector<Diagnostic>& cleanupDiagnostics,
+        const QStringList& retainedRuntimePaths) const;
+    void reviewProcessCleanupDetails();
+    void queueDeferredClose();
     void setDirty(bool dirty);
     void captureParameterDraft();
     void discardParameterDraft();
@@ -230,6 +281,8 @@ private:
     QString m_workspaceStatusMessage;
     bool m_dirty = false;
     bool m_operationBusy = false;
+    bool m_processCleanupUnresolved = false;
+    QString m_processCleanupDetails;
     quint64 m_designSessionSerial = 0;
     QString m_designSessionIdentity;
     operations::DesignRunState m_runState;
@@ -285,6 +338,7 @@ private:
 
     QFutureWatcher<ValidationResult>* m_validationWatcher = nullptr;
     QFutureWatcher<GenerationResult>* m_generationWatcher = nullptr;
+    std::optional<ActiveOperation> m_activeOperation = std::nullopt;
 
     QTabWidget* m_centerViews = nullptr;
     std::optional<WorkbenchViewRegistry> m_viewRegistry = std::nullopt;
@@ -350,9 +404,13 @@ private:
     QTableWidget* m_drcTable = nullptr;
     QPlainTextEdit* m_activityLog = nullptr;
     QLineEdit* m_outputRoot = nullptr;
+    bool m_outputRootEmpty = true;
     QPushButton* m_browseOutputButton = nullptr;
     QPushButton* m_generateButton = nullptr;
-    QProgressBar* m_operationProgress = nullptr;
+    ui::OperationTaskStrip* m_operationTaskStrip = nullptr;
+    QWidget* m_cleanupRecoveryBanner = nullptr;
+    QLabel* m_cleanupRecoveryLabel = nullptr;
+    QPushButton* m_reviewCleanupButton = nullptr;
     QLabel* m_generationStatus = nullptr;
     QTableWidget* m_artifactTable = nullptr;
     QPlainTextEdit* m_generationDetails = nullptr;

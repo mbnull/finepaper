@@ -6,6 +6,7 @@
 #include "application/endpoint_configuration.h"
 #include "application/mesh_resize_plan.h"
 #include "application/package_catalog/catalog.h"
+#include "execution/cancellation.h"
 #include "execution/package_protocol.h"
 #include "noc/model.h"
 #include "package/package.h"
@@ -30,6 +31,10 @@ struct DesignResult {
 struct ValidationResult {
     bool success = false;
     QVector<Diagnostic> diagnostics;
+    bool cancelled = false;
+    bool cleanupUnresolved = false;
+    bool processCleanupUnresolved = false;
+    QStringList retainedRuntimePaths;
 };
 
 struct ExecutionTool {
@@ -45,7 +50,7 @@ struct GenerationOptions {
 struct GenerationResult {
     bool success = false;
     PackageReference package;
-    std::optional<ExecutionTool> tool;
+    std::optional<ExecutionTool> tool = std::nullopt;
     QVector<Diagnostic> diagnostics;
     QVector<Artifact> artifacts;
     QString operationId;
@@ -54,6 +59,10 @@ struct GenerationResult {
     QString stdoutLog;
     QString stderrLog;
     int exitCode = -1;
+    bool cancelled = false;
+    bool cleanupUnresolved = false;
+    bool processCleanupUnresolved = false;
+    QStringList retainedRuntimePaths;
 };
 
 class FinepaperApplication {
@@ -142,17 +151,32 @@ public:
 
     ValidationResult validate(const NocDesign& design,
                               bool includePackageValidation = true) const;
+    ValidationResult validate(const NocDesign& design,
+                              bool includePackageValidation,
+                              const CancellationToken& cancellation) const;
     GenerationResult generate(const NocDesign& design,
                               const GenerationOptions& options) const;
+    GenerationResult generate(const NocDesign& design,
+                              const GenerationOptions& options,
+                              const CancellationToken& cancellation) const;
 
 private:
+    struct PackageValidationExecutionResult final {
+        QVector<Diagnostic> diagnostics;
+        bool cleanupUnresolved = false;
+        bool processCleanupUnresolved = false;
+        QStringList retainedRuntimePaths;
+    };
+
     DesignResult validateEditedDesign(const NocDesign& design) const;
     QVector<Diagnostic> validateAgainstPackage(
         const NocDesign& design,
-        const PackageDefinition& package) const;
-    QVector<Diagnostic> runPackageValidation(
+        const PackageDefinition& package,
+        const CancellationToken& cancellation = {}) const;
+    PackageValidationExecutionResult runPackageValidation(
         const NocDesign& design,
-        const PackageDefinition& package) const;
+        const PackageDefinition& package,
+        const CancellationToken& cancellation) const;
 
     PackageCatalog m_catalog;
 };

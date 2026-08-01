@@ -270,14 +270,25 @@ std::optional<std::pair<ElementRef, ElementRef>> edgeEndpoints(
     return std::nullopt;
 }
 
-NocDesign withResolvedAutomaticSlots(const NocDesign& design) {
+NocDesign withResolvedAutomaticSlots(
+    const NocDesign& design,
+    const ValidationCancellationCheck& cancellationRequested) {
     NocDesign resolved = design;
+    const auto cancelled = [&] {
+        return cancellationRequested && cancellationRequested();
+    };
     QHash<QString, QVector<qsizetype>> byRouter;
     for (qsizetype index = 0; index < resolved.endpoints.size(); ++index) {
+        if (cancelled()) {
+            return resolved;
+        }
         byRouter[routerKey(resolved.endpoints.at(index).attachment.router)].append(index);
     }
 
     for (auto it = byRouter.begin(); it != byRouter.end(); ++it) {
+        if (cancelled()) {
+            return resolved;
+        }
         QVector<qsizetype>& indices = it.value();
         std::sort(indices.begin(), indices.end(), [&](qsizetype lhs, qsizetype rhs) {
             return resolved.endpoints.at(lhs).id < resolved.endpoints.at(rhs).id;
@@ -285,6 +296,9 @@ NocDesign withResolvedAutomaticSlots(const NocDesign& design) {
 
         QSet<QString> usedSlots;
         for (qsizetype index : std::as_const(indices)) {
+            if (cancelled()) {
+                return resolved;
+            }
             const auto& slot = resolved.endpoints.at(index).attachment.slot;
             if (slot && !slot->isEmpty()) {
                 usedSlots.insert(*slot);
@@ -293,6 +307,9 @@ NocDesign withResolvedAutomaticSlots(const NocDesign& design) {
 
         int nextSlot = 0;
         for (qsizetype index : std::as_const(indices)) {
+            if (cancelled()) {
+                return resolved;
+            }
             EndpointInstance& endpoint = resolved.endpoints[index];
             if (endpoint.attachment.slot && !endpoint.attachment.slot->isEmpty()) {
                 continue;
@@ -308,8 +325,16 @@ NocDesign withResolvedAutomaticSlots(const NocDesign& design) {
     return resolved;
 }
 
-TopologyProjection projectTopology(const NocDesign& design) {
+TopologyProjection projectTopology(
+    const NocDesign& design,
+    const ValidationCancellationCheck& cancellationRequested) {
     TopologyProjection projection;
+    const auto cancelled = [&] {
+        return cancellationRequested && cancellationRequested();
+    };
+    if (cancelled()) {
+        return projection;
+    }
     if (design.topology.type != QStringLiteral("mesh") ||
         design.topology.rows <= 0 ||
         design.topology.columns <= 0 ||
@@ -327,6 +352,9 @@ TopologyProjection projectTopology(const NocDesign& design) {
     projection.routers.reserve(static_cast<qsizetype>(routerCount));
     for (int y = 0; y < design.topology.rows; ++y) {
         for (int x = 0; x < design.topology.columns; ++x) {
+            if (cancelled()) {
+                return projection;
+            }
             const RouterPosition current{x, y};
             const QString currentId = routerId(current);
             projection.routers.append(RouterView{currentId, current});
@@ -350,9 +378,16 @@ TopologyProjection projectTopology(const NocDesign& design) {
         }
     }
 
-    const NocDesign resolved = withResolvedAutomaticSlots(design);
+    const NocDesign resolved = withResolvedAutomaticSlots(
+        design, cancellationRequested);
+    if (cancelled()) {
+        return projection;
+    }
     projection.endpoints.reserve(resolved.endpoints.size());
     for (const EndpointInstance& endpoint : resolved.endpoints) {
+        if (cancelled()) {
+            return projection;
+        }
         projection.endpoints.append(EndpointView{
             endpoint.id,
             endpoint.type,
@@ -364,12 +399,23 @@ TopologyProjection projectTopology(const NocDesign& design) {
     return projection;
 }
 
-QVector<DomainCrossingView> projectDomainCrossings(const NocDesign& design) {
+QVector<DomainCrossingView> projectDomainCrossings(
+    const NocDesign& design,
+    const ValidationCancellationCheck& cancellationRequested) {
+    const auto cancelled = [&] {
+        return cancellationRequested && cancellationRequested();
+    };
     QHash<QString, QHash<QString, QStringList>> assignmentsByElement;
     for (const DomainMembership& membership : design.domainMemberships) {
+        if (cancelled()) {
+            return {};
+        }
         QHash<QString, QStringList> normalizedAssignments;
         for (auto iterator = membership.assignments.constBegin();
              iterator != membership.assignments.constEnd(); ++iterator) {
+            if (cancelled()) {
+                return {};
+            }
             normalizedAssignments.insert(
                 iterator.key(), normalizedDomainIds(iterator.value()));
         }
@@ -379,11 +425,17 @@ QVector<DomainCrossingView> projectDomainCrossings(const NocDesign& design) {
 
     QHash<QString, const DomainEdgeOverride*> overrides;
     for (const DomainEdgeOverride& edgeOverride : design.edgeOverrides) {
+        if (cancelled()) {
+            return {};
+        }
         overrides.insert(edgeOverrideKey(edgeOverride), &edgeOverride);
     }
 
     QHash<QString, QVector<const DomainCrossingPolicy*>> policiesByPair;
     for (const DomainCrossingPolicy& policy : design.crossingPolicies) {
+        if (cancelled()) {
+            return {};
+        }
         policiesByPair[crossingPolicyPairKey(policy)].append(&policy);
     }
 
@@ -412,6 +464,9 @@ QVector<DomainCrossingView> projectDomainCrossings(const NocDesign& design) {
         QStringList sortedTypes = types.values();
         std::sort(sortedTypes.begin(), sortedTypes.end());
         for (const QString& type : std::as_const(sortedTypes)) {
+            if (cancelled()) {
+                return;
+            }
             const QStringList fromDomains = normalizedDomainIds(
                 fromAssignments.value(type));
             const QStringList toDomains = normalizedDomainIds(
@@ -419,7 +474,7 @@ QVector<DomainCrossingView> projectDomainCrossings(const NocDesign& design) {
             if (fromDomains == toDomains) {
                 continue;
             }
-            DomainCrossingView crossing{
+            DomainCrossingView crossing = {
                 edge,
                 from,
                 to,
@@ -452,14 +507,24 @@ QVector<DomainCrossingView> projectDomainCrossings(const NocDesign& design) {
         }
     };
 
-    const TopologyProjection topology = projectTopology(design);
+    const TopologyProjection topology = projectTopology(
+        design, cancellationRequested);
+    if (cancelled()) {
+        return {};
+    }
     for (const LinkView& link : topology.links) {
+        if (cancelled()) {
+            return {};
+        }
         appendCrossingsForEdge(
             ElementRef{ElementKind::RouterLink, link.id},
             ElementRef{ElementKind::Router, link.fromRouter},
             ElementRef{ElementKind::Router, link.toRouter});
     }
     for (const EndpointView& endpoint : topology.endpoints) {
+        if (cancelled()) {
+            return {};
+        }
         appendCrossingsForEdge(
             ElementRef{ElementKind::EndpointAttachment, endpoint.id},
             ElementRef{ElementKind::Router, endpoint.routerId},
@@ -476,8 +541,16 @@ ResolvedDesign resolveDesign(const NocDesign& design) {
     return resolved;
 }
 
-QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
+QVector<Diagnostic> validateDesignStructure(
+    const NocDesign& design,
+    const ValidationCancellationCheck& cancellationRequested) {
     QVector<Diagnostic> diagnostics;
+    const auto cancelled = [&] {
+        return cancellationRequested && cancellationRequested();
+    };
+    if (cancelled()) {
+        return diagnostics;
+    }
     if (design.format != QStringLiteral("finepaper.noc-design")) {
         appendError(diagnostics,
                     QStringLiteral("design.unsupported_format"),
@@ -557,6 +630,9 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
 
     QSet<QString> endpointIds;
     for (qsizetype index = 0; index < design.endpoints.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const EndpointInstance& endpoint = design.endpoints.at(index);
         const QString base = QStringLiteral("/endpoints/%1").arg(index);
         if (endpoint.id.trimmed().isEmpty()) {
@@ -590,6 +666,9 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
 
     QHash<QString, QString> domainTypes;
     for (qsizetype index = 0; index < design.domains.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const DomainDefinition& domain = design.domains.at(index);
         const QString base = QStringLiteral("/domains/%1").arg(index);
         if (domain.type.trimmed().isEmpty()) {
@@ -621,6 +700,9 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
 
     QSet<QString> membershipElements;
     for (qsizetype index = 0; index < design.domainMemberships.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const DomainMembership& membership = design.domainMemberships.at(index);
         const QString base = QStringLiteral("/domainMemberships/%1").arg(index);
         const QString elementKey = referenceKey(membership.element);
@@ -670,6 +752,9 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
         QStringList assignmentTypes = membership.assignments.keys();
         std::sort(assignmentTypes.begin(), assignmentTypes.end());
         for (const QString& assignmentType : std::as_const(assignmentTypes)) {
+            if (cancelled()) {
+                return diagnostics;
+            }
             const QString assignmentPath = base + QStringLiteral("/assignments/")
                 + assignmentType;
             if (assignmentType.trimmed().isEmpty()) {
@@ -688,6 +773,9 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
             }
             for (qsizetype assignmentIndex = 0;
                  assignmentIndex < domainIds.size(); ++assignmentIndex) {
+                if (cancelled()) {
+                    return diagnostics;
+                }
                 const QString& domainId = domainIds.at(assignmentIndex);
                 const QString path = assignmentPath
                     + QStringLiteral("/%1").arg(assignmentIndex);
@@ -724,6 +812,9 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
 
     QSet<QString> relations;
     for (qsizetype index = 0; index < design.domainRelations.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const DomainRelation& relation = design.domainRelations.at(index);
         const QString base = QStringLiteral("/domainRelations/%1").arg(index);
         if (relation.type.trimmed().isEmpty()) {
@@ -762,6 +853,9 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
     QHash<QString, QString> policyTypes;
     QSet<QString> policyPairs;
     for (qsizetype index = 0; index < design.crossingPolicies.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const DomainCrossingPolicy& policy = design.crossingPolicies.at(index);
         const QString base = QStringLiteral("/crossingPolicies/%1").arg(index);
         if (policy.id.trimmed().isEmpty()) {
@@ -825,6 +919,9 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
 
     QSet<QString> edgeOverrides;
     for (qsizetype index = 0; index < design.edgeOverrides.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const DomainEdgeOverride& edgeOverride = design.edgeOverrides.at(index);
         const QString base = QStringLiteral("/edgeOverrides/%1").arg(index);
         if (edgeOverride.edge.kind == ElementKind::Invalid) {
@@ -885,6 +982,9 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
 
     QSet<QString> elementConfigurations;
     for (qsizetype index = 0; index < design.elementConfigurations.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const ElementConfiguration& configuration =
             design.elementConfigurations.at(index);
         const QString base = QStringLiteral("/elementConfigurations/%1").arg(index);

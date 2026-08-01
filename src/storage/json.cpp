@@ -8,6 +8,7 @@
 #include <QSaveFile>
 
 #include <algorithm>
+#include <cmath>
 
 namespace finepaper {
 namespace {
@@ -158,6 +159,241 @@ bool hasElementConfigurationData(const NocDesign& design) {
     return !design.elementConfigurations.isEmpty();
 }
 
+class CancellableJsonWriter final {
+public:
+    CancellableJsonWriter(
+        QSaveFile& file,
+        const ValidationCancellationCheck& cancellationRequested)
+        : m_file(file),
+          m_cancellationRequested(cancellationRequested) {}
+
+    bool write(const QJsonValue& value) {
+        if (cancelled()) {
+            return false;
+        }
+        switch (value.type()) {
+        case QJsonValue::Null:
+        case QJsonValue::Undefined:
+            return writeBytes(QByteArrayLiteral("null"));
+        case QJsonValue::Bool:
+            return writeBytes(
+                value.toBool() ? QByteArrayLiteral("true")
+                               : QByteArrayLiteral("false"));
+        case QJsonValue::Double: {
+            const double number = value.toDouble();
+            return writeBytes(
+                std::isfinite(number)
+                    ? QByteArray::number(number, 'g', 17)
+                    : QByteArrayLiteral("null"));
+        }
+        case QJsonValue::String:
+            return writeString(value.toString());
+        case QJsonValue::Array:
+            return writeArray(value.toArray());
+        case QJsonValue::Object:
+            return writeObject(value.toObject());
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool cancellationObserved() const {
+        return m_cancellationObserved;
+    }
+
+    bool finish() {
+        return !cancelled() && flushBuffer();
+    }
+
+private:
+    bool cancelled() {
+        if (m_cancellationRequested && m_cancellationRequested()) {
+            m_cancellationObserved = true;
+            return true;
+        }
+        return false;
+    }
+
+    bool writeBytes(const QByteArray& bytes) {
+        if (cancelled()) {
+            return false;
+        }
+        m_buffer += bytes;
+        return m_buffer.size() < 64 * 1024 || flushBuffer();
+    }
+
+    bool flushBuffer() {
+        if (m_buffer.isEmpty()) {
+            return true;
+        }
+        const bool written = m_file.write(m_buffer) == m_buffer.size();
+        m_buffer.clear();
+        return written;
+    }
+
+    bool writeString(const QString& value) {
+        if (!writeBytes(QByteArrayLiteral("\""))) {
+            return false;
+        }
+        QString plainText;
+        plainText.reserve(2048);
+        const auto flushPlainText = [&]() {
+            if (plainText.isEmpty()) {
+                return true;
+            }
+            const bool written = writeBytes(plainText.toUtf8());
+            plainText.clear();
+            return written;
+        };
+        for (qsizetype index = 0; index < value.size(); ++index) {
+            if ((index & 0xff) == 0 && cancelled()) {
+                return false;
+            }
+            const char16_t character = value.at(index).unicode();
+            QByteArray escape;
+            switch (character) {
+            case '"':
+                escape = QByteArrayLiteral("\\\"");
+                break;
+            case '\\':
+                escape = QByteArrayLiteral("\\\\");
+                break;
+            case '\b':
+                escape = QByteArrayLiteral("\\b");
+                break;
+            case '\f':
+                escape = QByteArrayLiteral("\\f");
+                break;
+            case '\n':
+                escape = QByteArrayLiteral("\\n");
+                break;
+            case '\r':
+                escape = QByteArrayLiteral("\\r");
+                break;
+            case '\t':
+                escape = QByteArrayLiteral("\\t");
+                break;
+            default:
+                if (character < 0x20) {
+                    escape = QStringLiteral("\\u%1")
+                                 .arg(static_cast<uint>(character),
+                                      4, 16,
+                                      QLatin1Char('0'))
+                                 .toLatin1();
+                }
+                break;
+            }
+            if (!escape.isEmpty()) {
+                if (!flushPlainText() || !writeBytes(escape)) {
+                    return false;
+                }
+                continue;
+            }
+            plainText.append(character);
+            if (QChar::isHighSurrogate(character)
+                && index + 1 < value.size()
+                && QChar::isLowSurrogate(value.at(index + 1).unicode())) {
+                plainText.append(value.at(++index));
+            }
+            if (plainText.size() >= 2048 && !flushPlainText()) {
+                return false;
+            }
+        }
+        return flushPlainText() && writeBytes(QByteArrayLiteral("\""));
+    }
+
+    bool writeArray(const QJsonArray& array) {
+        if (!writeBytes(QByteArrayLiteral("["))) {
+            return false;
+        }
+        for (qsizetype index = 0; index < array.size(); ++index) {
+            if (index > 0 && !writeBytes(QByteArrayLiteral(","))) {
+                return false;
+            }
+            if (!write(array.at(index))) {
+                return false;
+            }
+        }
+        return writeBytes(QByteArrayLiteral("]"));
+    }
+
+    bool writeObject(const QJsonObject& object) {
+        if (!writeBytes(QByteArrayLiteral("{"))) {
+            return false;
+        }
+        QStringList keys = object.keys();
+        std::sort(keys.begin(), keys.end());
+        for (qsizetype index = 0; index < keys.size(); ++index) {
+            if (index > 0 && !writeBytes(QByteArrayLiteral(","))) {
+                return false;
+            }
+            const QString& key = keys.at(index);
+            if (!writeString(key)
+                || !writeBytes(QByteArrayLiteral(":"))
+                || !write(object.value(key))) {
+                return false;
+            }
+        }
+        return writeBytes(QByteArrayLiteral("}"));
+    }
+
+    QSaveFile& m_file;
+    const ValidationCancellationCheck& m_cancellationRequested;
+    QByteArray m_buffer;
+    bool m_cancellationObserved = false;
+};
+
+bool saveJsonObjectCancellable(
+    const QString& path,
+    const QJsonObject& object,
+    QVector<Diagnostic>* diagnostics,
+    const ValidationCancellationCheck& cancellationRequested) {
+    const QFileInfo info(path);
+    if (!QDir().mkpath(info.absolutePath())) {
+        if (diagnostics) {
+            appendError(*diagnostics,
+                        QStringLiteral("json.create_directory_failed"),
+                        QStringLiteral("could not create output directory"),
+                        info.absolutePath());
+        }
+        return false;
+    }
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        if (diagnostics) {
+            appendError(*diagnostics,
+                        QStringLiteral("json.write_failed"),
+                        QStringLiteral("could not open file for writing"),
+                        path);
+        }
+        return false;
+    }
+    CancellableJsonWriter writer(file, cancellationRequested);
+    if (!writer.write(QJsonValue(object)) || !writer.finish()) {
+        file.cancelWriting();
+        if (!writer.cancellationObserved() && diagnostics) {
+            appendError(*diagnostics,
+                        QStringLiteral("json.write_failed"),
+                        QStringLiteral("could not write JSON file"),
+                        path);
+        }
+        return false;
+    }
+    if (cancellationRequested && cancellationRequested()) {
+        file.cancelWriting();
+        return false;
+    }
+    if (!file.commit()) {
+        if (diagnostics) {
+            appendError(*diagnostics,
+                        QStringLiteral("json.write_failed"),
+                        QStringLiteral("could not write JSON file"),
+                        path);
+        }
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 JsonObjectLoadResult loadJsonObject(const QString& path) {
@@ -267,23 +503,31 @@ ElementConfigurationsParseResult parseElementConfigurations(
     return result;
 }
 
-QJsonObject designToJson(const NocDesign& design) {
-    QJsonObject package{
+QJsonObject designToJson(
+    const NocDesign& design,
+    const ValidationCancellationCheck& cancellationRequested) {
+    const auto cancelled = [&] {
+        return cancellationRequested && cancellationRequested();
+    };
+    QJsonObject package = {
         {QStringLiteral("id"), design.package.id},
         {QStringLiteral("version"), design.package.version}
     };
-    QJsonObject topology{
+    QJsonObject topology = {
         {QStringLiteral("type"), design.topology.type},
         {QStringLiteral("rows"), design.topology.rows},
         {QStringLiteral("columns"), design.topology.columns}
     };
     QJsonArray endpoints;
     for (const EndpointInstance& endpoint : design.endpoints) {
-        QJsonObject router{
+        if (cancelled()) {
+            return {};
+        }
+        QJsonObject router = {
             {QStringLiteral("x"), endpoint.attachment.router.x},
             {QStringLiteral("y"), endpoint.attachment.router.y}
         };
-        QJsonObject attachment{{QStringLiteral("router"), router}};
+        QJsonObject attachment = {{QStringLiteral("router"), router}};
         if (endpoint.attachment.slot && !endpoint.attachment.slot->isEmpty()) {
             attachment.insert(QStringLiteral("slot"), *endpoint.attachment.slot);
         }
@@ -295,7 +539,7 @@ QJsonObject designToJson(const NocDesign& design) {
         });
     }
 
-    QJsonObject object{
+    QJsonObject object = {
         {QStringLiteral("format"), design.format},
         {QStringLiteral("formatVersion"), design.formatVersion},
         {QStringLiteral("id"), design.id},
@@ -309,6 +553,9 @@ QJsonObject designToJson(const NocDesign& design) {
         || hasDomainData(design)) {
         QJsonArray domains;
         for (const DomainDefinition& domain : design.domains) {
+            if (cancelled()) {
+                return {};
+            }
             domains.append(QJsonObject{
                 {QStringLiteral("id"), domain.id},
                 {QStringLiteral("type"), domain.type},
@@ -319,13 +566,22 @@ QJsonObject designToJson(const NocDesign& design) {
 
         QJsonArray memberships;
         for (const DomainMembership& membership : design.domainMemberships) {
+            if (cancelled()) {
+                return {};
+            }
             QJsonObject assignments;
             QStringList assignmentTypes = membership.assignments.keys();
             std::sort(assignmentTypes.begin(), assignmentTypes.end());
             for (const QString& assignmentType : std::as_const(assignmentTypes)) {
+                if (cancelled()) {
+                    return {};
+                }
                 QJsonArray domainIds;
                 for (const QString& domainId
                      : membership.assignments.value(assignmentType)) {
+                    if (cancelled()) {
+                        return {};
+                    }
                     domainIds.append(domainId);
                 }
                 assignments.insert(assignmentType, domainIds);
@@ -338,6 +594,9 @@ QJsonObject designToJson(const NocDesign& design) {
 
         QJsonArray relations;
         for (const DomainRelation& relation : design.domainRelations) {
+            if (cancelled()) {
+                return {};
+            }
             relations.append(QJsonObject{
                 {QStringLiteral("type"), relation.type},
                 {QStringLiteral("from"), relation.from},
@@ -348,6 +607,9 @@ QJsonObject designToJson(const NocDesign& design) {
 
         QJsonArray crossingPolicies;
         for (const DomainCrossingPolicy& policy : design.crossingPolicies) {
+            if (cancelled()) {
+                return {};
+            }
             crossingPolicies.append(QJsonObject{
                 {QStringLiteral("id"), policy.id},
                 {QStringLiteral("domainType"), policy.domainType},
@@ -359,6 +621,9 @@ QJsonObject designToJson(const NocDesign& design) {
 
         QJsonArray edgeOverrides;
         for (const DomainEdgeOverride& edgeOverride : design.edgeOverrides) {
+            if (cancelled()) {
+                return {};
+            }
             edgeOverrides.append(QJsonObject{
                 {QStringLiteral("edge"), elementRefToJson(edgeOverride.edge)},
                 {QStringLiteral("domainType"), edgeOverride.domainType},
@@ -378,6 +643,9 @@ QJsonObject designToJson(const NocDesign& design) {
         QJsonArray elementConfigurations;
         for (const ElementConfiguration& configuration
              : design.elementConfigurations) {
+            if (cancelled()) {
+                return {};
+            }
             elementConfigurations.append(QJsonObject{
                 {QStringLiteral("element"),
                  elementRefToJson(configuration.element)},
@@ -811,8 +1079,17 @@ DesignLoadResult loadDesign(const QString& path) {
 
 bool saveDesign(const QString& path,
                 const NocDesign& design,
-                QVector<Diagnostic>* diagnostics) {
-    return saveJsonObject(path, designToJson(design), diagnostics);
+                QVector<Diagnostic>* diagnostics,
+                const ValidationCancellationCheck& cancellationRequested) {
+    const QJsonObject object = designToJson(
+        design, cancellationRequested);
+    if (cancellationRequested && cancellationRequested()) {
+        return false;
+    }
+    return cancellationRequested
+        ? saveJsonObjectCancellable(
+              path, object, diagnostics, cancellationRequested)
+        : saveJsonObject(path, object, diagnostics);
 }
 
 QJsonObject diagnosticToJson(const Diagnostic& diagnostic) {

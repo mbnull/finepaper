@@ -26,6 +26,9 @@ The target architecture is described in
 
 ## Build and try it
 
+The GUI and process runner require Qt 6.7 or newer. The current supported
+desktop target is Linux with native Wayland/WSLg.
+
 ```bash
 xmake build finepaper
 xmake build finepaper-gui

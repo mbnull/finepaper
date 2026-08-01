@@ -236,9 +236,9 @@ while [ "$#" -gt 0 ]; do
         *) shift ;;
     esac
 done
-if ! grep -q '"formatVersion": 3' "$design" \
+if ! grep -Eq '"formatVersion"[[:space:]]*:[[:space:]]*3' "$design" \
    || ! grep -q '"elementConfigurations"' "$design" \
-   || ! grep -q '"depth": 8' "$design"; then
+   || ! grep -Eq '"depth"[[:space:]]*:[[:space:]]*8' "$design"; then
     printf '%s\n' '{"success":false,"diagnostics":[{"severity":"error","code":"mock.v3_input_missing","message":"V3 element configuration missing"}],"artifacts":[]}' > "$result"
     exit 1
 fi

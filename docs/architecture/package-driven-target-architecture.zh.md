@@ -512,6 +512,10 @@ struct ExecutionTool {
 struct ValidationResult {
     bool success = false;
     QVector<Diagnostic> diagnostics;
+    bool cancelled = false;
+    bool cleanupUnresolved = false;
+    bool processCleanupUnresolved = false;
+    QStringList retainedRuntimePaths;
 };
 
 struct GenerationResult {
@@ -524,10 +528,14 @@ struct GenerationResult {
     QString stdoutLog;
     QString stderrLog;
     int exitCode = -1;
+    bool cancelled = false;
+    bool cleanupUnresolved = false;
+    bool processCleanupUnresolved = false;
+    QStringList retainedRuntimePaths;
 };
 ~~~
 
-取消和超时不引入复杂运行状态机。它们使用 success=false，并分别返回 operation.cancelled 或 operation.timed_out 诊断码；exitCode 在进程未正常退出时保持 -1。
+取消和超时不引入复杂运行状态机。它们使用 success=false，并分别返回 operation.cancelled 或 operation.timed_out 诊断码；exitCode 在进程未正常退出时保持 -1。`cleanupUnresolved` 表示有运行时文件或目录未清理并由 `retainedRuntimePaths` 暴露；`processCleanupUnresolved` 仅表示无法验证 Package 进程树已经停止，并始终蕴含 `cleanupUnresolved=true`。GUI 只对后一种状态启用会话级运行隔离，普通日志或临时目录残留仍允许后续操作。
 
 第三方入口不暴露内部 QObject、Package 指针或进程对象。
 
@@ -920,6 +928,16 @@ PackageProcessRunner 负责：
 - 检查产物路径没有逃出输出目录；
 - 将进程错误转换成统一诊断。
 
+Package 运行时必须保持前台语义：launcher 应等待自己启动的 helper，所有
+descendant 必须留在 Finepaper 创建的私有 process group 中，禁止通过
+`setsid`、重新 `setpgid` 或 daemonize 脱离。Finepaper 会以宿主拥有的临时
+文件捕获整个 process group 生命周期内的 stdout/stderr，并在取消或超时时
+终止该 group；违反上述约束的进程不属于可安全管理的 Package runtime。
+
+`result.json` 只承载诊断与 artifact 元数据，生成内容必须写入 artifact 文件。
+为避免损坏的 Package 让不可增量的 JSON 解析长期占用工作线程，单个结果
+文档的安全上限为 16 MiB。
+
 Generator 和 Engine 不允许直接修改当前打开的设计文件。
 
 ### 15.4 Generator 成功条件
@@ -1039,6 +1057,12 @@ output-root/
 ~~~json
 {
   "success": true,
+  "cancelled": false,
+  "cleanupUnresolved": false,
+  "processCleanupUnresolved": false,
+  "retainedRuntimePaths": [],
+  "operationId": "op-001",
+  "runDirectory": "/work/build/runs/op-001",
   "outputDirectory": "/work/build/runs/op-001/artifacts",
   "package": {
     "id": "finepaper.ravenoc",

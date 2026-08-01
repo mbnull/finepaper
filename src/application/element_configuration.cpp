@@ -186,9 +186,17 @@ void validateScalar(const QJsonValue& value,
 void validateProperties(const QJsonObject& values,
                         const ElementPropertySetDefinition& definition,
                         const QString& basePath,
-                        QVector<Diagnostic>& diagnostics) {
+                        QVector<Diagnostic>& diagnostics,
+                        const ValidationCancellationCheck&
+                            cancellationRequested = {}) {
+    const auto cancelled = [&] {
+        return cancellationRequested && cancellationRequested();
+    };
     QSet<QString> knownProperties;
     for (const ElementPropertyDefinition& property : definition.properties) {
+        if (cancelled()) {
+            return;
+        }
         knownProperties.insert(property.id);
         if (!values.contains(property.id)) {
             continue;
@@ -209,6 +217,9 @@ void validateProperties(const QJsonObject& values,
         }
         const QJsonArray items = value.toArray();
         for (qsizetype index = 0; index < items.size(); ++index) {
+            if (cancelled()) {
+                return;
+            }
             validateScalar(items.at(index),
                            property,
                            QStringLiteral("%1/%2").arg(path).arg(index),
@@ -216,6 +227,9 @@ void validateProperties(const QJsonObject& values,
         }
     }
     for (auto value = values.constBegin(); value != values.constEnd(); ++value) {
+        if (cancelled()) {
+            return;
+        }
         if (knownProperties.contains(value.key())) {
             continue;
         }
@@ -318,10 +332,17 @@ ResolvedElementConfiguration resolveElementConfiguration(
 
 QVector<Diagnostic> validateElementConfigurations(
     const NocDesign& design,
-    const PackageDefinition& package) {
+    const PackageDefinition& package,
+    const ValidationCancellationCheck& cancellationRequested) {
     QVector<Diagnostic> diagnostics;
+    const auto cancelled = [&] {
+        return cancellationRequested && cancellationRequested();
+    };
     for (qsizetype index = 0;
          index < design.elementConfigurations.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const ElementConfiguration& configuration =
             design.elementConfigurations.at(index);
         const QString basePath =
@@ -337,12 +358,22 @@ QVector<Diagnostic> validateElementConfigurations(
         if (!definition) {
             continue;
         }
+        if (cancelled()) {
+            return diagnostics;
+        }
         validateProperties(configuration.properties,
                            *definition,
                            basePath + QStringLiteral("/properties"),
-                           diagnostics);
+                           diagnostics,
+                           cancellationRequested);
+        if (cancelled()) {
+            return diagnostics;
+        }
         for (const ElementPropertyDefinition& property
              : definition->properties) {
+            if (cancelled()) {
+                return diagnostics;
+            }
             if (configuration.properties.contains(property.id)
                 && configuration.properties.value(property.id)
                     == property.defaultValue) {

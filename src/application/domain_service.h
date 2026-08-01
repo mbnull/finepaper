@@ -64,6 +64,7 @@ MutationResult clearDomainAssignment(
 
 QVector<Diagnostic> validateAgainstPackage(
     const NocDesign& design,
-    const PackageDefinition& package);
+    const PackageDefinition& package,
+    const ValidationCancellationCheck& cancellationRequested = {});
 
 } // namespace finepaper::domain_service

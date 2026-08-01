@@ -7,6 +7,7 @@
 #include <QStringList>
 #include <QVector>
 
+#include <functional>
 #include <optional>
 #include <utility>
 
@@ -36,6 +37,8 @@ struct Diagnostic {
     QString source = QStringLiteral("finepaper");
 };
 
+using ValidationCancellationCheck = std::function<bool()>;
+
 bool hasErrors(const QVector<Diagnostic>& diagnostics);
 
 struct PackageReference {
@@ -58,7 +61,7 @@ struct TopologySpec {
 
 struct EndpointAttachment {
     RouterPosition router;
-    std::optional<QString> slot;
+    std::optional<QString> slot = std::nullopt;
 };
 
 struct EndpointInstance {
@@ -196,9 +199,9 @@ struct DomainCrossingView {
     QString domainType;
     QStringList fromDomains;
     QStringList toDomains;
-    std::optional<QString> defaultPolicy;
+    std::optional<QString> defaultPolicy = std::nullopt;
     QJsonObject defaultProperties;
-    std::optional<QString> overridePolicy;
+    std::optional<QString> overridePolicy = std::nullopt;
     QJsonObject overrideProperties;
 
     bool operator==(const DomainCrossingView&) const = default;
@@ -217,10 +220,18 @@ bool designReferenceExists(const NocDesign& design, const ElementRef& reference)
 std::optional<std::pair<ElementRef, ElementRef>> edgeEndpoints(
     const NocDesign& design,
     const ElementRef& edge);
-TopologyProjection projectTopology(const NocDesign& design);
-QVector<DomainCrossingView> projectDomainCrossings(const NocDesign& design);
-NocDesign withResolvedAutomaticSlots(const NocDesign& design);
+NocDesign withResolvedAutomaticSlots(
+    const NocDesign& design,
+    const ValidationCancellationCheck& cancellationRequested = {});
+TopologyProjection projectTopology(
+    const NocDesign& design,
+    const ValidationCancellationCheck& cancellationRequested = {});
+QVector<DomainCrossingView> projectDomainCrossings(
+    const NocDesign& design,
+    const ValidationCancellationCheck& cancellationRequested = {});
 ResolvedDesign resolveDesign(const NocDesign& design);
-QVector<Diagnostic> validateDesignStructure(const NocDesign& design);
+QVector<Diagnostic> validateDesignStructure(
+    const NocDesign& design,
+    const ValidationCancellationCheck& cancellationRequested = {});
 
 } // namespace finepaper

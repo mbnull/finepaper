@@ -35,8 +35,15 @@ PackageOperationResult parsePackageOperationResult(
     const QJsonObject& object,
     const QString& resultPath,
     const QString& defaultSource,
-    ArtifactResultPolicy artifactPolicy) {
+    ArtifactResultPolicy artifactPolicy,
+    const ValidationCancellationCheck& cancellationRequested) {
     PackageOperationResult result;
+    const auto cancelled = [&] {
+        return cancellationRequested && cancellationRequested();
+    };
+    if (cancelled()) {
+        return result;
+    }
     bool schemaError = false;
 
     const QJsonValue success = object.value(QStringLiteral("success"));
@@ -61,6 +68,9 @@ PackageOperationResult parsePackageOperationResult(
         } else {
             const QJsonArray values = diagnostics.toArray();
             for (qsizetype index = 0; index < values.size(); ++index) {
+                if (cancelled()) {
+                    return result;
+                }
                 const QString base = QStringLiteral("/diagnostics/%1").arg(index);
                 if (!values.at(index).isObject()) {
                     appendProtocolError(result,
@@ -131,6 +141,9 @@ PackageOperationResult parsePackageOperationResult(
             const QJsonArray values = artifacts.toArray();
             QSet<QString> artifactIds;
             for (qsizetype index = 0; index < values.size(); ++index) {
+                if (cancelled()) {
+                    return result;
+                }
                 const QString base = QStringLiteral("/artifacts/%1").arg(index);
                 if (!values.at(index).isObject()) {
                     appendProtocolError(result,

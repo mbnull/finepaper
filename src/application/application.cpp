@@ -21,6 +21,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -35,6 +36,111 @@ void appendDiagnostic(QVector<Diagnostic>& diagnostics,
                       const QString& path,
                       const QString& source = QStringLiteral("finepaper")) {
     diagnostics.append(Diagnostic{severity, code, message, path, source});
+}
+
+bool appendCancellationIfRequested(
+    const CancellationToken& cancellation,
+    QVector<Diagnostic>& diagnostics,
+    const QString& operationName) {
+    if (!cancellation.isCancellationRequested()) {
+        return false;
+    }
+    appendDiagnostic(
+        diagnostics,
+        QStringLiteral("error"),
+        QStringLiteral("operation.cancelled"),
+        QStringLiteral("%1 was cancelled").arg(operationName),
+        QString(),
+        QStringLiteral("execution"));
+    return true;
+}
+
+void appendProcessCleanupFailure(
+    const ProcessResult& process,
+    QVector<Diagnostic>& diagnostics,
+    const QString& executable,
+    const QString& source,
+    const QString& retainedRunDirectory = {}) {
+    if (!process.cleanupFailed) {
+        return;
+    }
+    QString message = process.error.isEmpty()
+        ? QStringLiteral(
+              "Finepaper could not verify that every Package process stopped")
+        : process.error;
+    if (!retainedRunDirectory.isEmpty()) {
+        message += QStringLiteral(
+            ". Runtime files were retained at %1")
+            .arg(retainedRunDirectory);
+    }
+    appendDiagnostic(
+        diagnostics,
+        QStringLiteral("error"),
+        QStringLiteral("operation.cleanup_failed"),
+        message,
+        retainedRunDirectory.isEmpty()
+            ? executable : retainedRunDirectory,
+        source);
+}
+
+JsonObjectLoadResult loadPackageOperationResultObject(
+    const QString& resultPath) {
+    const QFileInfo resultInfo(resultPath);
+    if (resultInfo.exists()
+        && resultInfo.size() > kMaximumPackageOperationResultBytes) {
+        JsonObjectLoadResult result;
+        appendDiagnostic(
+            result.diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("operation.result_too_large"),
+            QStringLiteral(
+                "Package result exceeds Finepaper's %1 MiB safety limit")
+                .arg(kMaximumPackageOperationResultBytes / (1024 * 1024)),
+            resultPath,
+            QStringLiteral("execution"));
+        return result;
+    }
+    return loadJsonObject(resultPath);
+}
+
+void appendUniquePaths(QStringList& destination,
+                       const QStringList& paths) {
+    for (const QString& path : paths) {
+        if (!path.isEmpty() && !destination.contains(path)) {
+            destination.append(path);
+        }
+    }
+}
+
+QJsonArray pathsToJson(const QStringList& paths) {
+    QJsonArray values;
+    for (const QString& path : paths) {
+        values.append(path);
+    }
+    return values;
+}
+
+void applyTemporaryDirectoryFinalization(
+    const TemporaryDirectoryFinalizationResult& finalization,
+    QVector<Diagnostic>& diagnostics,
+    bool& cleanupUnresolved,
+    QStringList& retainedRuntimePaths) {
+    if (!finalization.cleanupUnresolved) {
+        return;
+    }
+    cleanupUnresolved = true;
+    appendUniquePaths(
+        retainedRuntimePaths,
+        QStringList{finalization.retainedPath});
+    if (!finalization.error.isEmpty()) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("operation.cleanup_failed"),
+            finalization.error,
+            finalization.retainedPath,
+            QStringLiteral("execution"));
+    }
 }
 
 QString jsonPointerToken(QString value) {
@@ -62,8 +168,10 @@ std::optional<int> requestInteger(const QJsonValue& value,
     if (!value.isDouble() ||
         !std::isfinite(value.toDouble()) ||
         std::floor(value.toDouble()) != value.toDouble() ||
-        value.toDouble() < static_cast<double>(std::numeric_limits<int>::min()) ||
-        value.toDouble() > static_cast<double>(std::numeric_limits<int>::max())) {
+        value.toDouble()
+            < static_cast<double>((std::numeric_limits<int>::min)())
+        || value.toDouble()
+            > static_cast<double>((std::numeric_limits<int>::max)())) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("error"),
                          QStringLiteral("create.expected_integer"),
@@ -224,26 +332,59 @@ QString packageExecutable(const PackageDefinition& package, const QString& relat
     return QDir(package.rootPath).absoluteFilePath(relativePath);
 }
 
-bool writeTextFile(const QString& path,
-                   const QString& text,
-                   QVector<Diagnostic>& diagnostics) {
-    QSaveFile file(path);
+bool writeProcessLog(const QString& capturePath,
+                     const QString& inMemoryFallback,
+                     const QString& destinationPath,
+                     QVector<Diagnostic>& diagnostics) {
+    const bool captureExists = !capturePath.isEmpty()
+        && QFileInfo::exists(capturePath);
+    if (captureExists) {
+        QFile capture(capturePath);
+        if (capture.rename(destinationPath)) {
+            return true;
+        }
+    }
+
+    QSaveFile file(destinationPath);
     if (!file.open(QIODevice::WriteOnly)) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("error"),
                          QStringLiteral("run.log_write_failed"),
                          QStringLiteral("could not write log file"),
-                         path,
+                         destinationPath,
                          QStringLiteral("execution"));
         return false;
     }
-    const QByteArray bytes = text.toUtf8();
-    if (file.write(bytes) != bytes.size() || !file.commit()) {
+    const auto writeBytes = [&](const QByteArray& bytes) {
+        return file.write(bytes) == bytes.size();
+    };
+    bool written = true;
+    if (captureExists) {
+        QFile capture(capturePath);
+        if (!capture.open(QIODevice::ReadOnly)) {
+            written = false;
+        } else {
+            while (!capture.atEnd()) {
+                const QByteArray chunk = capture.read(64 * 1024);
+                if (chunk.isEmpty() && capture.error() != QFile::NoError) {
+                    written = false;
+                    break;
+                }
+                if (!writeBytes(chunk)) {
+                    written = false;
+                    break;
+                }
+            }
+        }
+    } else {
+        written = writeBytes(inMemoryFallback.toUtf8());
+    }
+    if (!written || !file.commit()) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("error"),
                          QStringLiteral("run.log_write_failed"),
                          QStringLiteral("could not write log file"),
-                         path,
+                         destinationPath,
                          QStringLiteral("execution"));
         return false;
     }
@@ -315,7 +456,7 @@ DesignResult FinepaperApplication::createDesign(const QJsonObject& request) cons
         return result;
     }
     const QJsonObject packageObject = packageValue.toObject();
-    PackageReference reference{
+    PackageReference reference = {
         requestString(packageObject,
                       QStringLiteral("id"),
                       QStringLiteral("/package"),
@@ -1162,8 +1303,12 @@ DesignResult FinepaperApplication::clearDomainAssignment(
 
 QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
     const NocDesign& design,
-    const PackageDefinition& package) const {
+    const PackageDefinition& package,
+    const CancellationToken& cancellation) const {
     QVector<Diagnostic> diagnostics;
+    if (cancellation.isCancellationRequested()) {
+        return diagnostics;
+    }
     if (design.topology.rows < package.mesh.minimumRows ||
         design.topology.rows > package.mesh.maximumRows) {
         appendDiagnostic(diagnostics,
@@ -1191,6 +1336,9 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
     QHash<QString, int> endpointCounts;
     QHash<QString, QSet<QString>> slotsByRouter;
     for (qsizetype index = 0; index < design.endpoints.size(); ++index) {
+        if (cancellation.isCancellationRequested()) {
+            return diagnostics;
+        }
         const EndpointInstance& endpoint = design.endpoints.at(index);
         const QString base = QStringLiteral("/endpoints/%1").arg(index);
         const EndpointTypeDefinition* type = package.endpointType(endpoint.type);
@@ -1267,10 +1415,29 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
         }
     }
 
-    diagnostics += validateElementConfigurations(design, package);
+    if (cancellation.isCancellationRequested()) {
+        return diagnostics;
+    }
+    diagnostics += validateElementConfigurations(
+        design,
+        package,
+        [&cancellation] {
+            return cancellation.isCancellationRequested();
+        });
 
-    diagnostics += domain_service::validateAgainstPackage(design, package);
+    if (cancellation.isCancellationRequested()) {
+        return diagnostics;
+    }
+    diagnostics += domain_service::validateAgainstPackage(
+        design,
+        package,
+        [&cancellation] {
+            return cancellation.isCancellationRequested();
+        });
 
+    if (cancellation.isCancellationRequested()) {
+        return diagnostics;
+    }
     const bool strictDesignExtensions = package.formatVersion >= 3
         || package.designExtensionsDeclared;
     if (strictDesignExtensions) {
@@ -1278,6 +1445,9 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
             std::nullopt;
         for (auto it = design.packageData.constBegin();
              it != design.packageData.constEnd(); ++it) {
+            if (cancellation.isCancellationRequested()) {
+                return diagnostics;
+            }
             const DesignExtensionDefinition* definition =
                 package.designExtension(it.key());
             if (definition) {
@@ -1319,24 +1489,34 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
     return diagnostics;
 }
 
-QVector<Diagnostic> FinepaperApplication::runPackageValidation(
+FinepaperApplication::PackageValidationExecutionResult
+FinepaperApplication::runPackageValidation(
     const NocDesign& design,
-    const PackageDefinition& package) const {
-    QVector<Diagnostic> diagnostics;
+    const PackageDefinition& package,
+    const CancellationToken& cancellation) const {
+    PackageValidationExecutionResult result;
+    QVector<Diagnostic>& diagnostics = result.diagnostics;
+    if (cancellation.isCancellationRequested()) {
+        return result;
+    }
     QString executable;
-    int timeoutSeconds = package.generator.timeoutSeconds;
+    std::chrono::seconds timeout = std::chrono::seconds(
+        package.generator.timeoutSeconds);
     QString source = QStringLiteral("generator");
     if (package.engine && package.engine->providesValidation) {
         executable = packageExecutable(package, package.engine->executable);
-        timeoutSeconds = package.engine->timeoutSeconds;
+        timeout = std::chrono::seconds(package.engine->timeoutSeconds);
         source = QStringLiteral("engine");
     } else if (package.generator.supportsValidate) {
         executable = packageExecutable(package, package.generator.executable);
     } else {
-        return diagnostics;
+        return result;
     }
 
-    QTemporaryDir runDirectory(QStringLiteral("/tmp/finepaper-validate-XXXXXX"));
+    TemporaryDirectoryLease runDirectory(
+        QDir::temp().filePath(
+            QStringLiteral("finepaper-validate-XXXXXX")),
+        QStringLiteral("validation Package runtime directory"));
     if (!runDirectory.isValid()) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("error"),
@@ -1344,14 +1524,50 @@ QVector<Diagnostic> FinepaperApplication::runPackageValidation(
                          QStringLiteral("could not create validation run directory"),
                          QString(),
                          QStringLiteral("execution"));
-        return diagnostics;
+        return result;
     }
-    const QString inputDirectory = QDir(runDirectory.path()).filePath(QStringLiteral("input"));
+    const QString runDirectoryPath = runDirectory.directoryPath();
+    const auto finish = [&]() {
+        const TemporaryDirectoryFinalizationResult finalization =
+            runDirectory.finalize(
+                result.cleanupUnresolved
+                    ? TemporaryDirectoryFinalizationMode::Retain
+                    : TemporaryDirectoryFinalizationMode::Remove);
+        applyTemporaryDirectoryFinalization(
+            finalization,
+            diagnostics,
+            result.cleanupUnresolved,
+            result.retainedRuntimePaths);
+        return result;
+    };
+    if (cancellation.isCancellationRequested()) {
+        return finish();
+    }
+    const QString inputDirectory = QDir(runDirectoryPath).filePath(
+        QStringLiteral("input"));
     QDir().mkpath(inputDirectory);
     const QString inputPath = QDir(inputDirectory).filePath(QStringLiteral("design.json"));
-    const QString resultPath = QDir(runDirectory.path()).filePath(QStringLiteral("result.json"));
-    if (!finepaper::saveDesign(inputPath, withResolvedAutomaticSlots(design), &diagnostics)) {
-        return diagnostics;
+    const QString resultPath = QDir(runDirectoryPath).filePath(
+        QStringLiteral("result.json"));
+    const NocDesign resolvedDesign = withResolvedAutomaticSlots(
+        design,
+        [&cancellation] {
+            return cancellation.isCancellationRequested();
+        });
+    if (cancellation.isCancellationRequested()) {
+        return finish();
+    }
+    if (!finepaper::saveDesign(
+            inputPath,
+            resolvedDesign,
+            &diagnostics,
+            [&cancellation] {
+                return cancellation.isCancellationRequested();
+            })) {
+        return finish();
+    }
+    if (cancellation.isCancellationRequested()) {
+        return finish();
     }
 
     const ProcessResult process = runProcess(
@@ -1363,9 +1579,35 @@ QVector<Diagnostic> FinepaperApplication::runPackageValidation(
             QStringLiteral("--result"),
             resultPath
         },
-        runDirectory.path(),
-        timeoutSeconds * 1000);
+        runDirectoryPath,
+        timeout,
+        QProcessEnvironment::systemEnvironment(),
+        cancellation);
+    result.processCleanupUnresolved = process.cleanupFailed;
 
+    const TemporaryDirectoryFinalizationResult captureFinalization =
+        process.outputCapture.finalize(
+            process.cleanupFailed
+                ? TemporaryDirectoryFinalizationMode::Retain
+                : TemporaryDirectoryFinalizationMode::Remove);
+    if (process.cleanupFailed || captureFinalization.cleanupUnresolved) {
+        result.cleanupUnresolved = true;
+        result.retainedRuntimePaths.append(runDirectoryPath);
+    }
+    applyTemporaryDirectoryFinalization(
+        captureFinalization,
+        diagnostics,
+        result.cleanupUnresolved,
+        result.retainedRuntimePaths);
+    appendProcessCleanupFailure(
+        process,
+        diagnostics,
+        executable,
+        source,
+        process.cleanupFailed ? runDirectoryPath : QString());
+    if (process.cancelled) {
+        return finish();
+    }
     if (!process.started) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("error"),
@@ -1373,7 +1615,7 @@ QVector<Diagnostic> FinepaperApplication::runPackageValidation(
                          process.error,
                          executable,
                          source);
-        return diagnostics;
+        return finish();
     }
     if (process.timedOut) {
         appendDiagnostic(diagnostics,
@@ -1382,15 +1624,31 @@ QVector<Diagnostic> FinepaperApplication::runPackageValidation(
                          QStringLiteral("Package validation timed out"),
                          executable,
                          source);
-        return diagnostics;
+        return finish();
     }
-    const JsonObjectLoadResult rawResult = loadJsonObject(resultPath);
+    if (cancellation.isCancellationRequested()) {
+        return finish();
+    }
+    const JsonObjectLoadResult rawResult =
+        loadPackageOperationResultObject(resultPath);
     diagnostics += rawResult.diagnostics;
-    std::optional<PackageOperationResult> operationResult;
+    if (cancellation.isCancellationRequested()) {
+        return finish();
+    }
+    std::optional<PackageOperationResult> operationResult = std::nullopt;
     if (rawResult.success) {
         operationResult = parsePackageOperationResult(
-            rawResult.object, resultPath, source, ArtifactResultPolicy::Optional);
+            rawResult.object,
+            resultPath,
+            source,
+            ArtifactResultPolicy::Optional,
+            [&cancellation] {
+                return cancellation.isCancellationRequested();
+            });
         diagnostics += operationResult->diagnostics;
+        if (cancellation.isCancellationRequested()) {
+            return finish();
+        }
     }
 
     if (process.crashed || process.exitCode != 0) {
@@ -1406,10 +1664,10 @@ QVector<Diagnostic> FinepaperApplication::runPackageValidation(
                              executable,
                              source);
         }
-        return diagnostics;
+        return finish();
     }
     if (!rawResult.success || !operationResult || !operationResult->protocolValid) {
-        return diagnostics;
+        return finish();
     }
     if (!operationResult->success && !hasErrors(operationResult->diagnostics)) {
         appendDiagnostic(diagnostics,
@@ -1419,13 +1677,43 @@ QVector<Diagnostic> FinepaperApplication::runPackageValidation(
                          resultPath,
                          source);
     }
-    return diagnostics;
+    return finish();
 }
 
-ValidationResult FinepaperApplication::validate(const NocDesign& design,
-                                                bool includePackageValidation) const {
+ValidationResult FinepaperApplication::validate(
+    const NocDesign& design,
+    bool includePackageValidation) const {
+    return validate(design, includePackageValidation, CancellationToken{});
+}
+
+ValidationResult FinepaperApplication::validate(
+    const NocDesign& design,
+    bool includePackageValidation,
+    const CancellationToken& cancellation) const {
     ValidationResult result;
-    result.diagnostics = validateDesignStructure(design);
+    const auto finishCancelled = [&] {
+        if (!appendCancellationIfRequested(
+                cancellation,
+                result.diagnostics,
+                QStringLiteral("Validation"))) {
+            return false;
+        }
+        result.cancelled = true;
+        result.success = false;
+        return true;
+    };
+    if (finishCancelled()) {
+        return result;
+    }
+
+    result.diagnostics = validateDesignStructure(
+        design,
+        [&cancellation] {
+            return cancellation.isCancellationRequested();
+        });
+    if (finishCancelled()) {
+        return result;
+    }
     const auto package = m_catalog.resolve(design.package);
     if (!package) {
         appendDiagnostic(result.diagnostics,
@@ -1435,12 +1723,30 @@ ValidationResult FinepaperApplication::validate(const NocDesign& design,
                          QStringLiteral("/package"));
         return result;
     }
-    result.diagnostics += validateAgainstPackage(design, *package);
+    result.diagnostics += validateAgainstPackage(
+        design, *package, cancellation);
+    if (finishCancelled()) {
+        return result;
+    }
     if (!hasErrors(result.diagnostics) && includePackageValidation) {
         result.diagnostics += domain_runtime_validation::validateConsumption(
             design, *package);
+        if (finishCancelled()) {
+            return result;
+        }
         if (!hasErrors(result.diagnostics)) {
-            result.diagnostics += runPackageValidation(design, *package);
+            const PackageValidationExecutionResult packageValidation =
+                runPackageValidation(design, *package, cancellation);
+            result.diagnostics += packageValidation.diagnostics;
+            result.cleanupUnresolved = packageValidation.cleanupUnresolved;
+            result.processCleanupUnresolved =
+                packageValidation.processCleanupUnresolved;
+            appendUniquePaths(
+                result.retainedRuntimePaths,
+                packageValidation.retainedRuntimePaths);
+            if (finishCancelled()) {
+                return result;
+            }
         }
     }
     result.success = !hasErrors(result.diagnostics);
@@ -1450,11 +1756,45 @@ ValidationResult FinepaperApplication::validate(const NocDesign& design,
 GenerationResult FinepaperApplication::generate(
     const NocDesign& design,
     const GenerationOptions& options) const {
+    return generate(design, options, CancellationToken{});
+}
+
+GenerationResult FinepaperApplication::generate(
+    const NocDesign& design,
+    const GenerationOptions& options,
+    const CancellationToken& cancellation) const {
     GenerationResult result;
     result.package = design.package;
-    const ValidationResult validation = validate(design, true);
+    const auto finishCancelled = [&] {
+        if (!appendCancellationIfRequested(
+                cancellation,
+                result.diagnostics,
+                QStringLiteral("Generation"))) {
+            return false;
+        }
+        result.cancelled = true;
+        result.success = false;
+        result.artifacts.clear();
+        return true;
+    };
+    if (finishCancelled()) {
+        return result;
+    }
+
+    const ValidationResult validation = validate(design, true, cancellation);
     result.diagnostics = validation.diagnostics;
+    result.cleanupUnresolved = validation.cleanupUnresolved;
+    result.processCleanupUnresolved =
+        validation.processCleanupUnresolved;
+    result.retainedRuntimePaths = validation.retainedRuntimePaths;
+    if (validation.cancelled) {
+        result.cancelled = true;
+        return result;
+    }
     if (!validation.success) {
+        return result;
+    }
+    if (finishCancelled()) {
         return result;
     }
     const auto package = m_catalog.resolve(design.package);
@@ -1492,10 +1832,29 @@ GenerationResult FinepaperApplication::generate(
                          QStringLiteral("execution"));
         return result;
     }
+    if (finishCancelled()) {
+        return result;
+    }
     const QString inputPath = QDir(inputDirectory).filePath(QStringLiteral("design.json"));
-    if (!finepaper::saveDesign(inputPath,
-                               withResolvedAutomaticSlots(design),
-                               &result.diagnostics)) {
+    const NocDesign resolvedDesign = withResolvedAutomaticSlots(
+        design,
+        [&cancellation] {
+            return cancellation.isCancellationRequested();
+        });
+    if (finishCancelled()) {
+        return result;
+    }
+    if (!finepaper::saveDesign(
+            inputPath,
+            resolvedDesign,
+            &result.diagnostics,
+            [&cancellation] {
+                return cancellation.isCancellationRequested();
+            })) {
+        (void)finishCancelled();
+        return result;
+    }
+    if (finishCancelled()) {
         return result;
     }
 
@@ -1512,11 +1871,51 @@ GenerationResult FinepaperApplication::generate(
             resultPath
         },
         result.runDirectory,
-        package->generator.timeoutSeconds * 1000);
+        std::chrono::seconds(package->generator.timeoutSeconds),
+        QProcessEnvironment::systemEnvironment(),
+        cancellation);
     result.exitCode = process.exitCode;
-    writeTextFile(result.stdoutLog, process.standardOutput, result.diagnostics);
-    writeTextFile(result.stderrLog, process.standardError, result.diagnostics);
+    result.processCleanupUnresolved =
+        result.processCleanupUnresolved || process.cleanupFailed;
+    result.cleanupUnresolved =
+        result.cleanupUnresolved || process.cleanupFailed;
+    const bool stdoutPersisted = writeProcessLog(
+        process.standardOutputCapturePath,
+        process.standardOutput,
+        result.stdoutLog,
+        result.diagnostics);
+    const bool stderrPersisted = writeProcessLog(
+        process.standardErrorCapturePath,
+        process.standardError,
+        result.stderrLog,
+        result.diagnostics);
+    const bool retainCapture = process.cleanupFailed
+        || !stdoutPersisted || !stderrPersisted;
+    const TemporaryDirectoryFinalizationResult captureFinalization =
+        process.outputCapture.finalize(
+            retainCapture
+                ? TemporaryDirectoryFinalizationMode::Retain
+                : TemporaryDirectoryFinalizationMode::Remove);
+    applyTemporaryDirectoryFinalization(
+        captureFinalization,
+        result.diagnostics,
+        result.cleanupUnresolved,
+        result.retainedRuntimePaths);
+    if (process.cleanupFailed) {
+        appendUniquePaths(
+            result.retainedRuntimePaths,
+            QStringList{result.runDirectory});
+    }
+    appendProcessCleanupFailure(
+        process,
+        result.diagnostics,
+        executable,
+        QStringLiteral("generator"),
+        result.runDirectory);
 
+    if (finishCancelled()) {
+        return result;
+    }
     if (!process.started) {
         appendDiagnostic(result.diagnostics,
                          QStringLiteral("error"),
@@ -1535,16 +1934,29 @@ GenerationResult FinepaperApplication::generate(
                          QStringLiteral("generator"));
         return result;
     }
-    const JsonObjectLoadResult rawResult = loadJsonObject(resultPath);
+    if (finishCancelled()) {
+        return result;
+    }
+    const JsonObjectLoadResult rawResult =
+        loadPackageOperationResultObject(resultPath);
     result.diagnostics += rawResult.diagnostics;
-    std::optional<PackageOperationResult> operationResult;
+    if (finishCancelled()) {
+        return result;
+    }
+    std::optional<PackageOperationResult> operationResult = std::nullopt;
     if (rawResult.success) {
         operationResult = parsePackageOperationResult(
             rawResult.object,
             resultPath,
             QStringLiteral("generator"),
-            ArtifactResultPolicy::Required);
+            ArtifactResultPolicy::Required,
+            [&cancellation] {
+                return cancellation.isCancellationRequested();
+            });
         result.diagnostics += operationResult->diagnostics;
+        if (finishCancelled()) {
+            return result;
+        }
     }
 
     if (process.crashed || process.exitCode != 0) {
@@ -1578,6 +1990,9 @@ GenerationResult FinepaperApplication::generate(
     }
 
     for (qsizetype index = 0; index < operationResult->artifacts.size(); ++index) {
+        if (finishCancelled()) {
+            return result;
+        }
         const QString base = QStringLiteral("/artifacts/%1").arg(index);
         Artifact artifact = operationResult->artifacts.at(index);
         QString absolutePath;
@@ -1595,6 +2010,9 @@ GenerationResult FinepaperApplication::generate(
         result.artifacts.append(std::move(artifact));
     }
 
+    if (finishCancelled()) {
+        return result;
+    }
     result.success = !hasErrors(result.diagnostics);
     if (!result.success) {
         result.artifacts.clear();
@@ -1607,8 +2025,14 @@ QJsonObject generationResultToJson(const GenerationResult& result) {
     for (const Artifact& artifact : result.artifacts) {
         artifacts.append(artifactToJson(artifact));
     }
-    QJsonObject object{
+    QJsonObject object = {
         {QStringLiteral("success"), result.success},
+        {QStringLiteral("cancelled"), result.cancelled},
+        {QStringLiteral("cleanupUnresolved"), result.cleanupUnresolved},
+        {QStringLiteral("processCleanupUnresolved"),
+         result.processCleanupUnresolved},
+        {QStringLiteral("retainedRuntimePaths"),
+         pathsToJson(result.retainedRuntimePaths)},
         {QStringLiteral("operationId"), result.operationId},
         {QStringLiteral("runDirectory"), result.runDirectory},
         {QStringLiteral("outputDirectory"), result.outputDirectory},
@@ -1632,6 +2056,12 @@ QJsonObject generationResultToJson(const GenerationResult& result) {
 QJsonObject validationResultToJson(const ValidationResult& result) {
     return QJsonObject{
         {QStringLiteral("success"), result.success},
+        {QStringLiteral("cancelled"), result.cancelled},
+        {QStringLiteral("cleanupUnresolved"), result.cleanupUnresolved},
+        {QStringLiteral("processCleanupUnresolved"),
+         result.processCleanupUnresolved},
+        {QStringLiteral("retainedRuntimePaths"),
+         pathsToJson(result.retainedRuntimePaths)},
         {QStringLiteral("diagnostics"), diagnosticsToJson(result.diagnostics)}
     };
 }

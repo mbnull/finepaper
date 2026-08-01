@@ -189,10 +189,17 @@ QVector<Diagnostic> validateDomainPropertyObject(
     const QVector<DomainPropertyDefinition>& definitions,
     const QHash<QString, const DomainDefinition*>& domainsById,
     const QString& basePath,
-    DomainPropertyValidationMode mode) {
+    DomainPropertyValidationMode mode,
+    const ValidationCancellationCheck& cancellationRequested = {}) {
     QVector<Diagnostic> diagnostics;
+    const auto cancelled = [&] {
+        return cancellationRequested && cancellationRequested();
+    };
     QSet<QString> knownIds;
     for (const DomainPropertyDefinition& definition : definitions) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         knownIds.insert(definition.id);
         const QString propertyPath = basePath + QLatin1Char('/') + definition.id;
         if (!values.contains(definition.id)) {
@@ -237,6 +244,9 @@ QVector<Diagnostic> validateDomainPropertyObject(
         }
 
         for (qsizetype index = 0; index < items.size(); ++index) {
+            if (cancelled()) {
+                return diagnostics;
+            }
             const QJsonValue item = items.at(index);
             const QString itemPath = definition.multiple
                 ? QStringLiteral("%1/%2").arg(propertyPath).arg(index)
@@ -307,6 +317,9 @@ QVector<Diagnostic> validateDomainPropertyObject(
     }
 
     for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         if (!knownIds.contains(it.key())) {
             appendDiagnostic(diagnostics,
                              QStringLiteral("error"),
@@ -1033,8 +1046,15 @@ MutationResult clearDomainAssignment(
 
 QVector<Diagnostic> validateAgainstPackage(
     const NocDesign& design,
-    const PackageDefinition& package) {
+    const PackageDefinition& package,
+    const ValidationCancellationCheck& cancellationRequested) {
     QVector<Diagnostic> diagnostics;
+    const auto cancelled = [&] {
+        return cancellationRequested && cancellationRequested();
+    };
+    if (cancelled()) {
+        return diagnostics;
+    }
     const int requiredDesignVersion = package.formatVersion;
     if (design.formatVersion != requiredDesignVersion) {
         appendDiagnostic(
@@ -1051,12 +1071,18 @@ QVector<Diagnostic> validateAgainstPackage(
     QHash<QString, const DomainDefinition*> domainsById;
     QHash<QString, int> domainCountsByType;
     for (const DomainDefinition& domain : design.domains) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         if (!domainsById.contains(domain.id)) {
             domainsById.insert(domain.id, &domain);
         }
         domainCountsByType[domain.type] += 1;
     }
     for (qsizetype index = 0; index < design.domains.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const DomainDefinition& domain = design.domains.at(index);
         const QString base = QStringLiteral("/domains/%1").arg(index);
         const DomainTypeDefinition* type = package.domainType(domain.type);
@@ -1074,9 +1100,13 @@ QVector<Diagnostic> validateAgainstPackage(
             type->properties,
             domainsById,
             base + QStringLiteral("/properties"),
-            DomainPropertyValidationMode::Complete);
+            DomainPropertyValidationMode::Complete,
+            cancellationRequested);
     }
     for (const DomainTypeDefinition& type : package.domainTypes) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         if (type.required && domainCountsByType.value(type.id) == 0) {
             appendDiagnostic(diagnostics,
                              QStringLiteral("error"),
@@ -1090,6 +1120,9 @@ QVector<Diagnostic> validateAgainstPackage(
 
     QHash<QString, const DomainMembership*> membershipsByElement;
     for (qsizetype index = 0; index < design.domainMemberships.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const DomainMembership& membership = design.domainMemberships.at(index);
         const QString base = QStringLiteral("/domainMemberships/%1").arg(index);
         const QString key = elementReferenceKey(membership.element);
@@ -1098,6 +1131,9 @@ QVector<Diagnostic> validateAgainstPackage(
         }
         for (auto assignment = membership.assignments.constBegin();
              assignment != membership.assignments.constEnd(); ++assignment) {
+            if (cancelled()) {
+                return diagnostics;
+            }
             const QString assignmentPath = base + QStringLiteral("/assignments/")
                 + assignment.key();
             const DomainTypeDefinition* type = package.domainType(assignment.key());
@@ -1141,9 +1177,15 @@ QVector<Diagnostic> validateAgainstPackage(
 
     const auto validateRequiredMembership = [&](const ElementRef& element,
                                                 const QString& path) {
+        if (cancelled()) {
+            return;
+        }
         const DomainMembership* membership = membershipsByElement.value(
             elementReferenceKey(element), nullptr);
         for (const DomainTypeDefinition& type : package.domainTypes) {
+            if (cancelled()) {
+                return;
+            }
             const std::optional<DomainAssignmentRule> rule =
                 type.assignmentRule(element.kind);
             if (!rule || !rule->requiresAssignment()) {
@@ -1170,14 +1212,24 @@ QVector<Diagnostic> validateAgainstPackage(
         }
     };
     if (canProjectTopology(design.topology)) {
-        const TopologyProjection projection = projectTopology(design);
+        const TopologyProjection projection = projectTopology(
+            design, cancellationRequested);
+        if (cancelled()) {
+            return diagnostics;
+        }
         for (const RouterView& router : projection.routers) {
+            if (cancelled()) {
+                return diagnostics;
+            }
             validateRequiredMembership(
                 ElementRef{ElementKind::Router, router.id},
                 QStringLiteral("/domainMemberships/") + router.id);
         }
     }
     for (const EndpointInstance& endpoint : design.endpoints) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         validateRequiredMembership(
             ElementRef{ElementKind::Endpoint, endpoint.id},
             QStringLiteral("/domainMemberships/") + endpoint.id);
@@ -1189,6 +1241,9 @@ QVector<Diagnostic> validateAgainstPackage(
         return from + QChar(0x1f) + relationType;
     };
     for (qsizetype index = 0; index < design.domainRelations.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const DomainRelation& relation = design.domainRelations.at(index);
         const QString base = QStringLiteral("/domainRelations/%1").arg(index);
         const auto source = domainsById.constFind(relation.from);
@@ -1238,14 +1293,21 @@ QVector<Diagnostic> validateAgainstPackage(
             relationType->properties,
             domainsById,
             base + QStringLiteral("/properties"),
-            DomainPropertyValidationMode::Complete);
+            DomainPropertyValidationMode::Complete,
+            cancellationRequested);
     }
     for (const DomainDefinition& domain : design.domains) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const DomainTypeDefinition* type = package.domainType(domain.type);
         if (!type) {
             continue;
         }
         for (const DomainRelationDefinition& relation : type->relations) {
+            if (cancelled()) {
+                return diagnostics;
+            }
             if (relation.required
                 && relationCounts.value(relationCountKey(domain.id, relation.id)) == 0) {
                 appendDiagnostic(
@@ -1262,6 +1324,9 @@ QVector<Diagnostic> validateAgainstPackage(
 
     QHash<QString, const DomainCrossingPolicy*> policiesById;
     for (qsizetype index = 0; index < design.crossingPolicies.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const DomainCrossingPolicy& policy = design.crossingPolicies.at(index);
         const QString base = QStringLiteral("/crossingPolicies/%1").arg(index);
         if (!policiesById.contains(policy.id)) {
@@ -1282,20 +1347,30 @@ QVector<Diagnostic> validateAgainstPackage(
             type->crossingProperties,
             domainsById,
             base + QStringLiteral("/properties"),
-            DomainPropertyValidationMode::Complete);
+            DomainPropertyValidationMode::Complete,
+            cancellationRequested);
     }
 
     const QVector<DomainCrossingView> projectedCrossings =
         canProjectTopology(design.topology)
-        ? projectDomainCrossings(design)
+        ? projectDomainCrossings(design, cancellationRequested)
         : QVector<DomainCrossingView>{};
+    if (cancelled()) {
+        return diagnostics;
+    }
     QHash<QString, const DomainCrossingView*> crossingsByEdgeAndType;
     for (const DomainCrossingView& crossing : projectedCrossings) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         crossingsByEdgeAndType.insert(
             elementReferenceKey(crossing.edge) + QChar(0x1f) + crossing.domainType,
             &crossing);
     }
     for (qsizetype index = 0; index < design.edgeOverrides.size(); ++index) {
+        if (cancelled()) {
+            return diagnostics;
+        }
         const DomainEdgeOverride& edgeOverride = design.edgeOverrides.at(index);
         const QString base = QStringLiteral("/edgeOverrides/%1").arg(index);
         const DomainTypeDefinition* type = package.domainType(
@@ -1314,7 +1389,8 @@ QVector<Diagnostic> validateAgainstPackage(
             type->crossingProperties,
             domainsById,
             base + QStringLiteral("/properties"),
-            DomainPropertyValidationMode::Partial);
+            DomainPropertyValidationMode::Partial,
+            cancellationRequested);
 
         const QString crossingKey = elementReferenceKey(edgeOverride.edge)
             + QChar(0x1f) + edgeOverride.domainType;

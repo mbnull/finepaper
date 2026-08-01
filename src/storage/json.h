@@ -34,7 +34,9 @@ bool saveJsonObject(const QString& path,
                     const QJsonObject& object,
                     QVector<Diagnostic>* diagnostics = nullptr);
 
-QJsonObject designToJson(const NocDesign& design);
+QJsonObject designToJson(
+    const NocDesign& design,
+    const ValidationCancellationCheck& cancellationRequested = {});
 ElementConfigurationsParseResult parseElementConfigurations(
     const QJsonValue& value,
     const QString& basePath = QStringLiteral("/elementConfigurations"));
@@ -42,7 +44,8 @@ DesignLoadResult designFromJson(const QJsonObject& object);
 DesignLoadResult loadDesign(const QString& path);
 bool saveDesign(const QString& path,
                 const NocDesign& design,
-                QVector<Diagnostic>* diagnostics = nullptr);
+                QVector<Diagnostic>* diagnostics = nullptr,
+                const ValidationCancellationCheck& cancellationRequested = {});
 
 QJsonObject diagnosticToJson(const Diagnostic& diagnostic);
 QJsonArray diagnosticsToJson(const QVector<Diagnostic>& diagnostics);

@@ -35,6 +35,7 @@ enum class CompletionDisposition {
     DifferentSession,
     StaleCatalog,
     Superseded,
+    CancelRequested,
 };
 
 // Pure workbench state for accepting or rejecting asynchronous results.  The
@@ -51,15 +52,21 @@ public:
         QString outputRoot = {});
     [[nodiscard]] CompletionDisposition disposition(
         const RunTicket& ticket) const;
+    [[nodiscard]] bool requestCancel(const RunTicket& ticket);
     [[nodiscard]] bool finishRun(const RunTicket& ticket);
 
     [[nodiscard]] const DesignStamp& currentStamp() const;
     [[nodiscard]] bool hasActiveRun() const;
 
 private:
+    struct ActiveRun final {
+        RunTicket ticket;
+        bool cancelRequested = false;
+    };
+
     DesignStamp m_current;
     quint64 m_nextRunId = 0;
-    std::optional<RunTicket> m_activeRun = std::nullopt;
+    std::optional<ActiveRun> m_activeRun = std::nullopt;
 };
 
 } // namespace finepaper::operations

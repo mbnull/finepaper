@@ -51,6 +51,7 @@ target("finepaper-gui")
     add_files("src/features/topology/drafts/*.cpp")
     add_files("src/ui/common/*.cpp")
     add_files("src/ui/components/*.cpp")
+    add_files("src/ui/components/operation_task_strip.h")
     add_files("src/ui/layouts/*.cpp")
     add_files("src/ui/theme/*.cpp")
     add_files("src/ui/workbench/*.cpp")
@@ -71,6 +72,18 @@ target("finepaper-tests")
     add_files("tests/core_tests.cpp")
     add_includedirs("src")
     add_defines('FINEPAPER_SOURCE_DIR="' .. path.unix(os.projectdir()) .. '"')
+    add_tests("default", {
+        trim_output = true
+    })
+
+target("finepaper-cancellation-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/cancellation_tests.cpp")
+    add_includedirs("src")
     add_tests("default", {
         trim_output = true
     })
@@ -453,6 +466,7 @@ target("finepaper-gui-smoke")
     add_files("src/gui/package_parameter_form.cpp")
     add_files("src/ui/common/schema_value_editor.cpp")
     add_files("src/ui/components/*.cpp")
+    add_files("src/ui/components/operation_task_strip.h")
     add_files("src/ui/layouts/*.cpp")
     add_files("src/ui/theme/*.cpp")
     add_files("src/ui/workbench/*.cpp")
@@ -541,6 +555,22 @@ target("finepaper-workbench-theme-tests")
     add_files("src/ui/theme/workbench_style.cpp")
     add_files("src/ui/workbench/widgets/workbench_dock_title_bar.cpp")
     add_files("src/ui/workbench/widgets/workbench_dock_title_bar.h")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+
+target("finepaper-operation-task-strip-tests")
+    add_rules("qt.widgetapp")
+    add_frameworks("QtTest")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_files("tests/operation_task_strip_tests.cpp")
+    add_files("src/ui/components/operation_task_strip.cpp")
+    add_files("src/ui/components/operation_task_strip.h")
+    add_files("src/ui/theme/ui_tokens.cpp")
     add_includedirs("src")
     add_tests("default", {
         trim_output = true,

@@ -4,6 +4,7 @@
 
 #include <QJsonObject>
 #include <QString>
+#include <QtTypes>
 #include <QVector>
 
 namespace finepaper {
@@ -20,6 +21,12 @@ enum class ArtifactResultPolicy {
     Required
 };
 
+// Package results contain metadata only; generated payloads belong in artifact
+// files. Bounding this document keeps a damaged Package from monopolizing an
+// uncancellable QJson parse.
+inline constexpr qint64 kMaximumPackageOperationResultBytes =
+    16 * 1024 * 1024;
+
 struct PackageOperationResult {
     bool protocolValid = false;
     bool success = false;
@@ -31,6 +38,7 @@ PackageOperationResult parsePackageOperationResult(
     const QJsonObject& object,
     const QString& resultPath,
     const QString& defaultSource,
-    ArtifactResultPolicy artifactPolicy = ArtifactResultPolicy::Optional);
+    ArtifactResultPolicy artifactPolicy = ArtifactResultPolicy::Optional,
+    const ValidationCancellationCheck& cancellationRequested = {});
 
 } // namespace finepaper

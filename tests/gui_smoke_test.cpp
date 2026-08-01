@@ -13,6 +13,7 @@
 #include <QAction>
 #include <QAbstractButton>
 #include <QApplication>
+#include <QClipboard>
 #include <QColor>
 #include <QComboBox>
 #include <QContextMenuEvent>
@@ -84,6 +85,45 @@
 #include <limits>
 #include <memory>
 #include <unordered_set>
+
+namespace finepaper {
+
+struct FinepaperMainWindowSmokeAccess final {
+    static void presentRetainedFileCancellation(
+        FinepaperMainWindow& window,
+        const QVector<Diagnostic>& diagnostics,
+        const QStringList& retainedRuntimePaths) {
+        FinepaperMainWindow::OperationCompletion completion;
+        window.presentOperationCancellation(
+            completion,
+            true,
+            false,
+            diagnostics,
+            retainedRuntimePaths,
+            QStringLiteral("Validation"),
+            QStringLiteral(
+                "Cancelled — previous validation results remain available."),
+            QStringLiteral(
+                "Validation cancelled; previous results were preserved."),
+            {});
+    }
+
+    static bool processCleanupIsUnresolved(
+        const FinepaperMainWindow& window) {
+        return window.m_processCleanupUnresolved;
+    }
+
+    static void presentCleanupFailure(
+        FinepaperMainWindow& window,
+        const QString& operationName,
+        const QVector<Diagnostic>& diagnostics,
+        const QStringList& retainedRuntimePaths) {
+        window.presentProcessCleanupFailure(
+            operationName, diagnostics, retainedRuntimePaths, {});
+    }
+};
+
+} // namespace finepaper
 
 namespace {
 
@@ -794,6 +834,30 @@ void chooseMessageBoxButton(QMessageBox::StandardButton button, int attempts = 1
     });
 }
 
+void chooseVisibleButtonByObjectName(
+    const QString& objectName,
+    int attempts = 100) {
+    QTimer::singleShot(0, [objectName, attempts] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (!widget || !widget->isVisible()) {
+                continue;
+            }
+            if (auto* target = widget->findChild<QPushButton*>(objectName)) {
+                target->click();
+                return;
+            }
+        }
+        if (attempts > 1) {
+            QTimer::singleShot(
+                10,
+                [objectName, attempts] {
+                    chooseVisibleButtonByObjectName(
+                        objectName, attempts - 1);
+                });
+        }
+    });
+}
+
 void rejectEndpointCreationDialog(int attempts = 100) {
     QTimer::singleShot(0, [attempts] {
         for (QWidget* widget : QApplication::topLevelWidgets()) {
@@ -991,6 +1055,126 @@ bool createNumberParameterPackage(const QString& sourceRoot,
         return false;
     }
     return QFile::setPermissions(destinationGenerator, QFile::permissions(sourceGenerator));
+}
+
+bool createSlowOperationPackage(const QString& sourceRoot,
+                                const QString& destinationRoot) {
+    QFile sourceManifest(
+        QDir(sourceRoot).filePath(QStringLiteral("package.json")));
+    if (!sourceManifest.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    QJsonParseError error;
+    const QJsonDocument document = QJsonDocument::fromJson(
+        sourceManifest.readAll(), &error);
+    if (error.error != QJsonParseError::NoError
+        || !document.isObject()) {
+        return false;
+    }
+
+    QJsonObject package = document.object();
+    package.insert(
+        QStringLiteral("id"), QStringLiteral("test.slow-operation"));
+    package.insert(
+        QStringLiteral("name"), QStringLiteral("Slow Operation Fixture"));
+    QJsonObject generator = package.value(
+        QStringLiteral("generator")).toObject();
+    generator.insert(
+        QStringLiteral("name"), QStringLiteral("slow-operation-fixture"));
+    generator.insert(QStringLiteral("timeoutSeconds"), 30);
+    package.insert(QStringLiteral("generator"), generator);
+
+    const QString runtimeDirectory = QDir(destinationRoot).filePath(
+        QStringLiteral("runtime/bin"));
+    if (!QDir().mkpath(runtimeDirectory)) {
+        return false;
+    }
+    QFile destinationManifest(
+        QDir(destinationRoot).filePath(QStringLiteral("package.json")));
+    const QByteArray manifestPayload = QJsonDocument(package).toJson(
+        QJsonDocument::Indented);
+    if (!destinationManifest.open(
+            QIODevice::WriteOnly | QIODevice::Truncate)
+        || destinationManifest.write(manifestPayload)
+               != manifestPayload.size()) {
+        return false;
+    }
+    destinationManifest.close();
+
+    QFile executable(
+        QDir(runtimeDirectory).filePath(QStringLiteral("generate")));
+    const QByteArray script = QByteArrayLiteral(
+        "#!/bin/sh\n"
+        "trap '' TERM\n"
+        "while :; do\n"
+        "  sleep 1\n"
+        "done\n");
+    if (!executable.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        || executable.write(script) != script.size()) {
+        return false;
+    }
+    executable.close();
+    return QFile::setPermissions(
+        executable.fileName(),
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner
+            | QFileDevice::ExeOwner | QFileDevice::ReadGroup
+            | QFileDevice::ExeGroup | QFileDevice::ReadOther
+            | QFileDevice::ExeOther);
+}
+
+bool writeSlowOperationDesign(const QString& path) {
+    const QJsonObject design{
+        {QStringLiteral("format"), QStringLiteral("finepaper.noc-design")},
+        {QStringLiteral("formatVersion"), 1},
+        {QStringLiteral("id"), QStringLiteral("slow_operation_design")},
+        {QStringLiteral("name"), QStringLiteral("Slow Operation Design")},
+        {QStringLiteral("package"), QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("test.slow-operation")},
+            {QStringLiteral("version"), QStringLiteral("1.0.0")}
+        }},
+        {QStringLiteral("topology"), QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("mesh")},
+            {QStringLiteral("rows"), 2},
+            {QStringLiteral("columns"), 2}
+        }},
+        {QStringLiteral("parameters"), QJsonObject{
+            {QStringLiteral("dataWidth"), 64},
+            {QStringLiteral("flitWidth"), 128},
+            {QStringLiteral("addrWidth"), 32}
+        }},
+        {QStringLiteral("endpoints"), QJsonArray{}}
+    };
+    const QByteArray payload = QJsonDocument(design).toJson(
+        QJsonDocument::Indented);
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        && file.write(payload) == payload.size();
+}
+
+bool makeSlowOperationPackageCompleteNaturally(
+    const QString& packageRoot) {
+    QFile executable(QDir(packageRoot).filePath(
+        QStringLiteral("runtime/bin/generate")));
+    const QFileDevice::Permissions permissions = QFile::permissions(
+        executable.fileName());
+    const QByteArray script = QByteArrayLiteral(
+        "#!/bin/sh\n"
+        "shift\n"
+        "result=''\n"
+        "while [ \"$#\" -gt 0 ]; do\n"
+        "  case \"$1\" in\n"
+        "    --result) result=\"$2\"; shift 2 ;;\n"
+        "    *) shift ;;\n"
+        "  esac\n"
+        "done\n"
+        "sleep 0.1\n"
+        "printf '%s\\n' '{\"success\":true,\"diagnostics\":[]}' > \"$result\"\n");
+    if (!executable.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        || executable.write(script) != script.size()) {
+        return false;
+    }
+    executable.close();
+    return QFile::setPermissions(executable.fileName(), permissions);
 }
 
 bool createDomainPresentationPackage(const QString& sourceRoot,
@@ -2337,6 +2521,204 @@ int main(int argc, char** argv) {
               && emptyStateInstall && !emptyStateInstall->isVisible(),
           QStringLiteral(
               "the no-design canvas offers Create and Open CTAs when a runnable NoC IP is installed"));
+
+    finepaper::FinepaperMainWindow cleanupWindow(locations);
+    cleanupWindow.resize(window.size());
+    cleanupWindow.show();
+    application.processEvents();
+    const QVector<finepaper::Diagnostic> retainedFileDiagnostics{
+        finepaper::Diagnostic{
+            QStringLiteral("error"),
+            QStringLiteral("operation.cleanup_failed"),
+            QStringLiteral("could not remove validation runtime directory"),
+            QStringLiteral("/tmp/finepaper-runtime/validation-retained"),
+            QStringLiteral("execution")}};
+    const QStringList retainedFilePaths{
+        QStringLiteral("/tmp/finepaper-runtime/validation-retained")};
+    finepaper::FinepaperMainWindowSmokeAccess::
+        presentRetainedFileCancellation(
+            cleanupWindow,
+            retainedFileDiagnostics,
+            retainedFilePaths);
+    application.processEvents();
+    auto* cleanupBanner = cleanupWindow.findChild<QWidget*>(
+        QStringLiteral("finepaper.cleanupRecoveryBanner"));
+    auto* cleanupActivity = cleanupWindow.findChild<QPlainTextEdit*>(
+        QStringLiteral("finepaper.activityLog"));
+    check(!finepaper::FinepaperMainWindowSmokeAccess::
+                  processCleanupIsUnresolved(cleanupWindow)
+              && cleanupBanner && cleanupBanner->isHidden()
+              && cleanupActivity
+              && cleanupActivity->toPlainText().contains(
+                  QStringLiteral("Package processes are verified stopped"))
+              && cleanupActivity->toPlainText().contains(
+                  retainedFilePaths.constFirst()),
+          QStringLiteral(
+              "retained runtime files remain recoverable without entering Package-process quarantine"));
+
+    const QVector<finepaper::Diagnostic> cleanupDiagnostics{
+        finepaper::Diagnostic{
+            QStringLiteral("error"),
+            QStringLiteral("operation.cleanup_failed"),
+            QStringLiteral(
+                "could not verify that Package process group 4242 stopped"),
+            QStringLiteral("/tmp/finepaper-runtime/generate"),
+            QStringLiteral("generator")}};
+    const QStringList retainedCleanupPaths{
+        QStringLiteral("/tmp/finepaper-runtime/run-4242"),
+        QStringLiteral("/tmp/finepaper-runtime/output-4242")};
+    finepaper::FinepaperMainWindowSmokeAccess::presentCleanupFailure(
+        cleanupWindow,
+        QStringLiteral("RTL generation"),
+        cleanupDiagnostics,
+        retainedCleanupPaths);
+    application.processEvents();
+    auto* cleanupStatus = cleanupWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.cleanupRecoveryStatus"));
+    auto* reviewCleanup = cleanupWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.reviewCleanupDetails"));
+    cleanupWindow.statusBar()->showMessage(
+        QStringLiteral("A later transient workspace message"), 5000);
+    application.processEvents();
+    const QString cleanupActivityText = cleanupActivity
+        ? cleanupActivity->toPlainText() : QString();
+    check(cleanupBanner && cleanupBanner->isVisibleTo(&cleanupWindow)
+              && cleanupStatus
+              && cleanupStatus->text()
+                  == QStringLiteral("Cleanup unresolved")
+              && reviewCleanup && reviewCleanup->isVisibleTo(&cleanupWindow)
+              && reviewCleanup->isEnabled()
+              && reviewCleanup->property("finepaperRole").toString()
+                     == QStringLiteral("primary")
+              && widgetIsFullyVisibleWithin(
+                  cleanupWindow.statusBar(), cleanupBanner)
+              && cleanupActivityText.contains(
+                  QStringLiteral("process group 4242"))
+              && cleanupActivityText.contains(
+                  QStringLiteral("/tmp/finepaper-runtime/generate"))
+              && cleanupActivityText.contains(retainedCleanupPaths.at(0))
+              && cleanupActivityText.contains(retainedCleanupPaths.at(1)),
+          QStringLiteral(
+              "cleanup-unresolved exposes a persistent text recovery area and writes complete process and retained-path details to Activity Log"));
+    captureSmokeScreenshot(
+        cleanupWindow, QStringLiteral("cleanup-unresolved"), requestedTheme);
+
+    bool cleanupDialogReviewed = false;
+    bool cleanupDialogSafeDefault = false;
+    bool cleanupDetailsCopied = false;
+    bool cleanupCopyFeedbackVisible = false;
+    bool cleanupDialogActionsFit = false;
+    bool cleanupReviewKeyboardFocus = false;
+    if (reviewCleanup) {
+        activateWindowForKeyboard(cleanupWindow);
+        reviewCleanup->setFocus(Qt::TabFocusReason);
+        application.processEvents();
+        cleanupReviewKeyboardFocus = focusIsWithin(reviewCleanup);
+    }
+    QTimer::singleShot(0, [&] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QDialog*>(widget);
+            if (!dialog || !dialog->isVisible()
+                || dialog->objectName()
+                    != QStringLiteral("finepaper.cleanupDetailsDialog")) {
+                continue;
+            }
+            auto* details = dialog->findChild<QPlainTextEdit*>(
+                QStringLiteral("finepaper.cleanupDetailsText"));
+            auto* copy = dialog->findChild<QPushButton*>(
+                QStringLiteral("finepaper.copyCleanupDetails"));
+            auto* keepOpen = dialog->findChild<QPushButton*>(
+                QStringLiteral("finepaper.keepOpenFromCleanupDetails"));
+            auto* copyFeedback = dialog->findChild<QLabel*>(
+                QStringLiteral("finepaper.cleanupCopyFeedback"));
+            cleanupDialogSafeDefault = keepOpen && keepOpen->isDefault();
+            cleanupDialogActionsFit = copy && keepOpen
+                && widgetIsFullyVisibleWithin(dialog, copy)
+                && widgetIsFullyVisibleWithin(dialog, keepOpen)
+                && !copy->geometry().intersects(keepOpen->geometry());
+            cleanupDialogReviewed = details
+                && details->isVisibleTo(dialog)
+                && details->toPlainText().contains(
+                    QStringLiteral("process group 4242"))
+                && details->toPlainText().contains(
+                    retainedCleanupPaths.at(0));
+            if (copy) {
+                copy->click();
+                cleanupDetailsCopied = QApplication::clipboard()
+                    && QApplication::clipboard()->text().contains(
+                        QStringLiteral("process group 4242"));
+                cleanupCopyFeedbackVisible = copyFeedback
+                    && !copyFeedback->isHidden()
+                    && copyFeedback->text()
+                        == QStringLiteral("Copied to clipboard.")
+                    && copy->text() == QStringLiteral("Copy Again")
+                    && copy->accessibleDescription().contains(
+                        QStringLiteral("copied"), Qt::CaseInsensitive);
+            }
+            if (keepOpen) {
+                keepOpen->click();
+            } else {
+                dialog->reject();
+            }
+            return;
+        }
+    });
+    if (reviewCleanup) {
+        reviewCleanup->click();
+    }
+    application.processEvents();
+    check(cleanupReviewKeyboardFocus
+              && cleanupDialogReviewed && cleanupDialogSafeDefault
+              && cleanupDialogActionsFit
+              && cleanupDetailsCopied
+              && cleanupCopyFeedbackVisible
+              && cleanupBanner
+              && cleanupBanner->isVisibleTo(&cleanupWindow),
+          QStringLiteral(
+              "Review Details keeps Finepaper open by default and offers keyboard-focusable complete cleanup text with Copy Cleanup Details"));
+
+    bool closeDialogSafeDefault = false;
+    bool closeDialogGuidanceUsesReview = false;
+    QTimer::singleShot(0, [&] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* messageBox = qobject_cast<QMessageBox*>(widget);
+            if (!messageBox || !messageBox->isVisible()
+                || messageBox->objectName()
+                    != QStringLiteral(
+                        "finepaper.cleanupUnresolvedCloseConfirmation")) {
+                continue;
+            }
+            auto* keepOpen = messageBox->findChild<QPushButton*>(
+                QStringLiteral("finepaper.keepOpenWithUnresolvedCleanup"));
+            closeDialogSafeDefault = keepOpen && keepOpen->isDefault()
+                && messageBox->escapeButton() == keepOpen;
+            closeDialogGuidanceUsesReview = messageBox->informativeText().contains(
+                QStringLiteral("Review Details"));
+            if (keepOpen) {
+                keepOpen->click();
+            }
+            return;
+        }
+    });
+    cleanupWindow.close();
+    application.processEvents();
+    check(closeDialogSafeDefault && closeDialogGuidanceUsesReview
+              && cleanupWindow.isVisible()
+              && cleanupBanner
+              && cleanupBanner->isVisibleTo(&cleanupWindow),
+          QStringLiteral(
+              "Keep Finepaper Open remains the default and Escape-safe choice while cleanup is unresolved"));
+    if (fontScale >= 1.5) {
+        check(cleanupBanner && reviewCleanup
+                  && widgetIsFullyVisibleWithin(
+                      cleanupWindow.statusBar(), cleanupBanner)
+                  && widgetIsFullyVisibleWithin(cleanupBanner, reviewCleanup),
+              QStringLiteral(
+                  "large text keeps the cleanup recovery area and Review Details action inside the status region without overlap"));
+    }
+    cleanupWindow.hide();
+    application.processEvents();
+
     restoreRequestedClientSize();
     captureSmokeScreenshot(window, QStringLiteral("no-design"), requestedTheme);
     if (requestedScope == QStringLiteral("workbench")) {
@@ -2597,12 +2979,17 @@ int main(int argc, char** argv) {
               && graphicsView->dragMode() == QGraphicsView::ScrollHandDrag,
           QStringLiteral("canvas opens in the directly draggable Pan mode"));
     QWidget* canvasKeyTarget = nullptr;
+    bool shortcutWindowActive = false;
     if (graphicsView) {
-        window.activateWindow();
-        window.raise();
+        shortcutWindowActive = activateWindowForKeyboard(window);
         graphicsView->setFocus(Qt::ShortcutFocusReason);
-        application.processEvents();
+        (void)waitUntil(
+            [graphicsView] { return focusIsWithin(graphicsView); },
+            std::chrono::seconds(1));
         canvasKeyTarget = QApplication::focusWidget();
+        if (!canvasKeyTarget || canvasKeyTarget->window() != &window) {
+            canvasKeyTarget = window.focusWidget();
+        }
         if (canvasKeyTarget) {
             QTest::keyClick(canvasKeyTarget, Qt::Key_V);
         }
@@ -2617,14 +3004,26 @@ int main(int argc, char** argv) {
         QTest::keyClick(canvasKeyTarget, Qt::Key_H);
         application.processEvents();
     }
-    check(canvasKeyTarget && focusIsWithin(graphicsView)
+    check(shortcutWindowActive
+              && canvasKeyTarget && focusIsWithin(graphicsView)
               && selectShortcutApplied
               && panCanvasAction && panCanvasAction->isChecked()
               && nodeEditor
               && nodeEditor->canvasInteractionMode()
                   == finepaper::NocCanvasInteractionMode::Pan,
           QStringLiteral(
-              "V and H switch the visible Canvas mode through real keyboard input"));
+              "V and H switch the visible Canvas mode through real keyboard input "
+              "(target=%1, canvasFocus=%2, selectApplied=%3, panChecked=%4, "
+              "finalMode=%5, activeWindow=%6)")
+              .arg(canvasKeyTarget != nullptr)
+              .arg(focusIsWithin(graphicsView))
+              .arg(selectShortcutApplied)
+              .arg(panCanvasAction && panCanvasAction->isChecked())
+              .arg(nodeEditor
+                       ? static_cast<int>(
+                             nodeEditor->canvasInteractionMode())
+                       : -1)
+              .arg(shortcutWindowActive && window.isActiveWindow()));
     if (reduceMotionAction) {
         const bool originalReducedMotion = reduceMotionAction->isChecked();
         reduceMotionAction->setChecked(!originalReducedMotion);
@@ -4402,11 +4801,19 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.generateButton"));
     auto* generationControls = window.findChild<QWidget*>(
         QStringLiteral("finepaper.generationControls"));
-    if (outputPath) {
-        outputPath->setText(outputRoot.path());
-    }
     QAction* generateAction = actionWithText(window, QStringLiteral("Generate RTL"));
     check(generateAction != nullptr, QStringLiteral("shared RTL generation action is available"));
+    if (outputPath) {
+        outputPath->clear();
+        application.processEvents();
+        check(generateAction && !generateAction->isEnabled()
+                  && generateOutput && !generateOutput->isEnabled()
+                  && generateOutput->toolTip().contains(
+                      QStringLiteral("Choose an output root")),
+              QStringLiteral(
+                  "blank output roots disable generation with inline recovery guidance"));
+        outputPath->setText(outputRoot.path());
+    }
     application.processEvents();
     application.processEvents();
     const QSize windowSizeBeforeResultsResize = window.size();
@@ -7667,6 +8074,170 @@ int main(int argc, char** argv) {
           QStringLiteral(
               "the canvas Delete shortcut permanently removes the selected Endpoint instead of detaching it"));
     closeDiscarding(quickAddWindow);
+
+    QTemporaryDir slowOperationRoot(
+        QStringLiteral("/tmp/finepaper-slow-operation-XXXXXX"));
+    const QString slowPackageRoot = QDir(slowOperationRoot.path()).filePath(
+        QStringLiteral("slow-package"));
+    const QString slowDesignPath = QDir(slowOperationRoot.path()).filePath(
+        QStringLiteral("slow-operation.fpnoc"));
+    check(slowOperationRoot.isValid()
+              && createSlowOperationPackage(
+                  QDir(projectRoot).filePath(
+                      QStringLiteral("packages/finepaper-noc")),
+                  slowPackageRoot)
+              && writeSlowOperationDesign(slowDesignPath),
+          QStringLiteral(
+              "a deterministic slow Package fixture is available for operation lifecycle testing"));
+    finepaper::RuntimeLocations slowLocations = {
+        QStringList{slowPackageRoot},
+        QDir(slowOperationRoot.path()).filePath(QStringLiteral("output"))};
+    finepaper::FinepaperMainWindow slowWindow(slowLocations);
+    slowWindow.show();
+    application.processEvents();
+    check(slowWindow.openDesignFile(slowDesignPath),
+          QStringLiteral("the slow operation design opens as an editable clean document"));
+    auto* slowValidate = actionWithText(
+        slowWindow, QStringLiteral("Validate / DRC"));
+    auto* slowReduceMotion = slowWindow.findChild<QAction*>(
+        finepaper::workbench::reducedMotionActionName);
+    auto* operationStrip = slowWindow.findChild<QWidget*>(
+        QStringLiteral("finepaper.operationTaskStrip"));
+    auto* operationState = slowWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.operationTaskState"));
+    auto* operationName = slowWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.operationTaskName"));
+    auto* cancelOperation = slowWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.cancelOperation"));
+    auto* slowCanvasView = slowWindow.findChild<QWidget*>(
+        QStringLiteral("finepaper.canvasView"));
+    auto* slowDiagnosticsStatus = slowWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.diagnosticsStatus"));
+    if (slowReduceMotion) {
+        slowReduceMotion->setChecked(false);
+    }
+    if (slowValidate) {
+        slowValidate->trigger();
+    }
+    const bool operationFeedbackAppeared = waitUntil(
+        [operationStrip, operationState, &slowWindow] {
+            return slowWindow.operationBusy()
+                && operationStrip
+                && operationStrip->isVisibleTo(&slowWindow)
+                && operationState
+                && operationState->text() == QStringLiteral("Running");
+        },
+        std::chrono::seconds(3));
+    QTest::qWait(400);
+    check(slowValidate && slowWindow.operationBusy()
+              && operationStrip && operationStrip->isVisibleTo(&slowWindow)
+              && operationState
+              && operationState->text() == QStringLiteral("Running")
+              && operationName
+              && operationName->accessibleName().contains(
+                  QStringLiteral("Validating"))
+              && cancelOperation && cancelOperation->isEnabled()
+              && operationFeedbackAppeared,
+          QStringLiteral(
+              "a slow validation exposes operation text, delayed progress, and an enabled Cancel action"));
+    captureSmokeScreenshot(
+        slowWindow, QStringLiteral("operation-running"), requestedTheme);
+    activateWindowForKeyboard(slowWindow);
+    if (cancelOperation) {
+        cancelOperation->setFocus(Qt::TabFocusReason);
+        QTest::keyClick(cancelOperation, Qt::Key_Space);
+    }
+    application.processEvents();
+    check(slowWindow.operationBusy()
+              && operationState
+              && operationState->text()
+                     == QStringLiteral("Cancel requested")
+              && cancelOperation && !cancelOperation->isEnabled()
+              && cancelOperation->text() == QString::fromUtf8("Cancelling…")
+              && slowCanvasView && focusIsWithin(slowCanvasView),
+          QStringLiteral(
+              "keyboard Cancel becomes a visible idempotent request and returns focus to the canvas"));
+    check(waitUntil(
+              [&slowWindow] { return !slowWindow.operationBusy(); },
+              std::chrono::seconds(5)),
+          QStringLiteral(
+              "cancelling validation waits for the Package process group and returns the workbench to idle"));
+    check(operationStrip && !operationStrip->isVisibleTo(&slowWindow)
+              && slowDiagnosticsStatus
+              && slowDiagnosticsStatus->text().startsWith(
+                  QStringLiteral("Cancelled")),
+          QStringLiteral(
+              "a cancelled validation publishes no replacement result and leaves explicit recovery text"));
+
+    if (slowValidate) {
+        slowValidate->trigger();
+    }
+    check(waitUntil(
+              [&slowWindow, operationState] {
+                  return slowWindow.operationBusy()
+                      && operationState
+                      && operationState->text() == QStringLiteral("Running");
+              },
+              std::chrono::seconds(3)),
+          QStringLiteral("a second slow validation starts for Close-flow testing"));
+    chooseVisibleButtonByObjectName(
+        QStringLiteral("finepaper.keepOperationRunning"));
+    slowWindow.close();
+    application.processEvents();
+    check(slowWindow.isVisible() && slowWindow.operationBusy()
+              && operationState
+              && operationState->text() == QStringLiteral("Running")
+              && cancelOperation && cancelOperation->isEnabled(),
+          QStringLiteral(
+              "Keep Running is the safe Close choice and leaves the operation unchanged"));
+
+    chooseVisibleButtonByObjectName(
+        QStringLiteral("finepaper.cancelOperationAndClose"));
+    slowWindow.close();
+    application.processEvents();
+    const bool closeCancellationVisible =
+        !slowWindow.operationBusy()
+        || (operationState
+            && operationState->text()
+                   == QStringLiteral("Cancel requested"));
+    check(closeCancellationVisible,
+          QStringLiteral(
+              "Cancel Operation and Close first presents cancellation instead of destroying a live worker"));
+    check(waitUntil(
+              [&slowWindow] {
+                  return !slowWindow.operationBusy()
+                      && !slowWindow.isVisible();
+              },
+              std::chrono::seconds(5)),
+          QStringLiteral(
+              "Cancel Operation and Close closes only after the Package process has stopped"));
+
+    check(makeSlowOperationPackageCompleteNaturally(slowPackageRoot),
+          QStringLiteral(
+              "the operation fixture can complete inside the Close confirmation event loop"));
+    finepaper::FinepaperMainWindow closeRaceWindow(slowLocations);
+    closeRaceWindow.show();
+    application.processEvents();
+    check(closeRaceWindow.openDesignFile(slowDesignPath),
+          QStringLiteral("the Close completion-race design opens cleanly"));
+    QAction* closeRaceValidate = actionWithText(
+        closeRaceWindow, QStringLiteral("Validate / DRC"));
+    if (closeRaceValidate) {
+        closeRaceValidate->trigger();
+    }
+    check(closeRaceWindow.operationBusy(),
+          QStringLiteral(
+              "the Close completion-race starts while validation is busy"));
+    QTimer::singleShot(400, [] {
+        chooseVisibleButtonByObjectName(
+            QStringLiteral("finepaper.cancelOperationAndClose"));
+    });
+    closeRaceWindow.close();
+    application.processEvents();
+    check(!closeRaceWindow.operationBusy()
+              && !closeRaceWindow.isVisible(),
+          QStringLiteral(
+              "Cancel Operation and Close still closes when the worker finishes inside the confirmation dialog"));
 
     QTextStream(stdout) << (failures == 0 ? "finepaper-gui-smoke passed"
                                           : "finepaper-gui-smoke failed")

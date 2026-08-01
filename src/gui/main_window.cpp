@@ -14,6 +14,7 @@
 #include "gui/package_parameter_form.h"
 #include "ui/common/focus_target.h"
 #include "ui/components/empty_state.h"
+#include "ui/components/operation_task_strip.h"
 #include "ui/components/segmented_action_control.h"
 #include "ui/layouts/responsive_action_layout.h"
 #include "ui/theme/ui_tokens.h"
@@ -29,6 +30,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QDateTime>
@@ -57,10 +59,10 @@
 #include <QMimeData>
 #include <QPlainTextEdit>
 #include <QPushButton>
-#include <QProgressBar>
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QScreen>
 #include <QScopedValueRollback>
 #include <QSet>
 #include <QSettings>
@@ -290,6 +292,8 @@ QString ignoredRunReason(
         return QStringLiteral("the Package catalog was reloaded");
     case operations::CompletionDisposition::Superseded:
         return QStringLiteral("a newer operation superseded it");
+    case operations::CompletionDisposition::CancelRequested:
+        return QStringLiteral("cancellation was requested");
     case operations::CompletionDisposition::Current:
         break;
     }
@@ -558,6 +562,9 @@ FinepaperMainWindow::FinepaperMainWindow(RuntimeLocations locations, QWidget* pa
 }
 
 FinepaperMainWindow::~FinepaperMainWindow() {
+    if (m_activeOperation) {
+        m_activeOperation->cancellation.requestCancellation();
+    }
     if (m_inspectorSummaryPanel) {
         m_inspectorSummaryPanel->editDomainAssignmentsRequested = {};
         m_inspectorSummaryPanel->reviewDiagnosticsRequested = {};
@@ -631,18 +638,63 @@ void FinepaperMainWindow::createUi() {
     createResultsDock();
     createActions();
 
-    m_operationProgress = new QProgressBar(this);
-    m_operationProgress->setObjectName(QStringLiteral("finepaper.operationProgress"));
-    m_operationProgress->setRange(0, 0);
-    m_operationProgress->setMaximumWidth(180);
-    m_operationProgress->setTextVisible(false);
-    m_operationProgress->setAccessibleName(
-        QStringLiteral("Background operation in progress"));
-    m_operationProgress->hide();
-    statusBar()->addPermanentWidget(m_operationProgress);
+    createCleanupRecoveryBanner();
+
+    m_operationTaskStrip = new ui::OperationTaskStrip(this);
+    m_operationTaskStrip->setReducedMotion(
+        m_reduceMotionAction && m_reduceMotionAction->isChecked());
+    connect(m_operationTaskStrip,
+            &ui::OperationTaskStrip::cancelRequested,
+            this,
+            [this] { (void)requestOperationCancellation(); });
+    statusBar()->addPermanentWidget(m_operationTaskStrip);
 
     resetWorkbenchLayout();
     updateUiState();
+}
+
+void FinepaperMainWindow::createCleanupRecoveryBanner() {
+    m_cleanupRecoveryBanner = new QWidget(this);
+    m_cleanupRecoveryBanner->setObjectName(
+        QStringLiteral("finepaper.cleanupRecoveryBanner"));
+    m_cleanupRecoveryBanner->setAccessibleName(
+        QStringLiteral("Package cleanup recovery"));
+    m_cleanupRecoveryBanner->setProperty(
+        "finepaperRole", QStringLiteral("card"));
+    auto* layout = new QHBoxLayout(m_cleanupRecoveryBanner);
+    layout->setContentsMargins(
+        ui::UiMetrics::spacing8,
+        0,
+        ui::UiMetrics::spacing4,
+        0);
+    layout->setSpacing(ui::UiMetrics::spacing4);
+
+    m_cleanupRecoveryLabel = new QLabel(
+        QStringLiteral("Cleanup unresolved"), m_cleanupRecoveryBanner);
+    m_cleanupRecoveryLabel->setObjectName(
+        QStringLiteral("finepaper.cleanupRecoveryStatus"));
+    m_cleanupRecoveryLabel->setAccessibleName(
+        QStringLiteral("Package process cleanup unresolved"));
+    m_cleanupRecoveryLabel->setProperty(
+        "finepaperRole", QStringLiteral("error"));
+    layout->addWidget(m_cleanupRecoveryLabel);
+
+    m_reviewCleanupButton = new QPushButton(
+        QStringLiteral("Review Details"), m_cleanupRecoveryBanner);
+    m_reviewCleanupButton->setObjectName(
+        QStringLiteral("finepaper.reviewCleanupDetails"));
+    m_reviewCleanupButton->setAccessibleName(
+        QStringLiteral("Review unresolved Package cleanup details"));
+    m_reviewCleanupButton->setProperty(
+        "finepaperRole", QStringLiteral("primary"));
+    connect(m_reviewCleanupButton,
+            &QPushButton::clicked,
+            this,
+            [this] { reviewProcessCleanupDetails(); });
+    layout->addWidget(m_reviewCleanupButton);
+
+    m_cleanupRecoveryBanner->hide();
+    statusBar()->addPermanentWidget(m_cleanupRecoveryBanner);
 }
 
 void FinepaperMainWindow::resetWorkbenchLayout() {
@@ -1799,6 +1851,7 @@ void FinepaperMainWindow::createResultsDock() {
     outputControls->setContentsMargins(0, 0, 0, 0);
     outputControls->setSpacing(ui::UiMetrics::spacing8);
     m_outputRoot = new QLineEdit(m_locations.defaultOutputRoot);
+    m_outputRootEmpty = m_outputRoot->text().trimmed().isEmpty();
     m_outputRoot->setObjectName(QStringLiteral("finepaper.outputRoot"));
     m_outputRoot->setAccessibleName(QStringLiteral("Output root directory"));
     m_outputRoot->setSizePolicy(
@@ -1873,6 +1926,15 @@ void FinepaperMainWindow::createResultsDock() {
     });
     connect(m_generateButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::generateDesign);
+    connect(m_outputRoot, &QLineEdit::textChanged,
+            this, [this](const QString& text) {
+                const bool outputRootEmpty = text.trimmed().isEmpty();
+                if (m_outputRootEmpty == outputRootEmpty) {
+                    return;
+                }
+                m_outputRootEmpty = outputRootEmpty;
+                updateUiState();
+            });
 }
 
 void FinepaperMainWindow::createActions() {
@@ -2041,6 +2103,9 @@ void FinepaperMainWindow::createActions() {
                 QSettings().setValue(
                     workbench::reducedMotionSetting, reduced);
                 m_nodeEditor->setReducedMotion(reduced);
+                if (m_operationTaskStrip) {
+                    m_operationTaskStrip->setReducedMotion(reduced);
+                }
                 QMainWindow::DockOptions options = dockOptions();
                 options.setFlag(QMainWindow::AnimatedDocks, !reduced);
                 setDockOptions(options);
@@ -2485,12 +2550,87 @@ void FinepaperMainWindow::restoreWorkbenchState() {
 
 void FinepaperMainWindow::closeEvent(QCloseEvent* event) {
     if (m_operationBusy) {
-        QMessageBox::information(
-            this,
+        if (m_activeOperation
+            && m_activeOperation->cancellation.isCancellationRequested()) {
+            m_activeOperation->closeWhenFinished = true;
+            statusBar()->showMessage(
+                QStringLiteral(
+                    "Cancellation is already in progress. The workbench will close after the operation stops."));
+            event->ignore();
+            return;
+        }
+
+        QMessageBox confirmation(
+            QMessageBox::Warning,
             QStringLiteral("Operation in progress"),
-            QStringLiteral("Wait for the current validation or generation operation to finish."));
-        event->ignore();
-        return;
+            QStringLiteral(
+                "Validation or RTL generation is still running. Cancel the operation and close after its process has stopped?"),
+            QMessageBox::NoButton,
+            this);
+        confirmation.setObjectName(
+            QStringLiteral("finepaper.operationCloseConfirmation"));
+        confirmation.setInformativeText(
+            QStringLiteral(
+                "No new result will be published. If the design has unsaved changes, the normal save prompt will still appear before closing."));
+        QPushButton* cancelAndClose = confirmation.addButton(
+            QStringLiteral("Cancel Operation and Close"),
+            QMessageBox::DestructiveRole);
+        cancelAndClose->setObjectName(
+            QStringLiteral("finepaper.cancelOperationAndClose"));
+        cancelAndClose->setProperty(
+            "finepaperRole", QStringLiteral("danger"));
+        QPushButton* keepRunning = confirmation.addButton(
+            QStringLiteral("Keep Running"),
+            QMessageBox::RejectRole);
+        keepRunning->setObjectName(
+            QStringLiteral("finepaper.keepOperationRunning"));
+        confirmation.setDefaultButton(keepRunning);
+        confirmation.setEscapeButton(keepRunning);
+        confirmation.exec();
+        if (confirmation.clickedButton() != cancelAndClose) {
+            event->ignore();
+            return;
+        }
+        if (m_operationBusy) {
+            (void)requestOperationCancellation(true);
+            event->ignore();
+            return;
+        }
+        // The worker may finish inside QMessageBox's nested event loop. Honor
+        // the user's Close choice by continuing through the normal save path
+        // instead of leaving an already-idle window open.
+    }
+    if (m_processCleanupUnresolved) {
+        QMessageBox cleanupWarning(
+            QMessageBox::Critical,
+            QStringLiteral("Package process cleanup unresolved"),
+            QStringLiteral(
+                "Finepaper could not verify that every Package process stopped. Close the workbench anyway?"),
+            QMessageBox::NoButton,
+            this);
+        cleanupWarning.setObjectName(
+            QStringLiteral("finepaper.cleanupUnresolvedCloseConfirmation"));
+        cleanupWarning.setInformativeText(
+            QStringLiteral(
+                "Run controls remain disabled to avoid overlapping file access. Closing Finepaper does not guarantee that an untracked Package process will stop. Keep Finepaper open, then use Review Details to copy the process identifier and retained paths before confirming or terminating it outside Finepaper."));
+        QPushButton* closeAnyway = cleanupWarning.addButton(
+            QStringLiteral("Close Finepaper Anyway"),
+            QMessageBox::DestructiveRole);
+        closeAnyway->setObjectName(
+            QStringLiteral("finepaper.closeWithUnresolvedCleanup"));
+        closeAnyway->setProperty("finepaperRole", QStringLiteral("danger"));
+        QPushButton* keepOpen = cleanupWarning.addButton(
+            QStringLiteral("Keep Finepaper Open"),
+            QMessageBox::RejectRole);
+        keepOpen->setObjectName(
+            QStringLiteral("finepaper.keepOpenWithUnresolvedCleanup"));
+        cleanupWarning.setDefaultButton(keepOpen);
+        cleanupWarning.setEscapeButton(keepOpen);
+        cleanupWarning.exec();
+        if (cleanupWarning.clickedButton() != closeAnyway) {
+            event->ignore();
+            return;
+        }
     }
     if (!maybeSave()) {
         event->ignore();
@@ -2535,7 +2675,7 @@ void FinepaperMainWindow::loadInstalledPackageRoots() {
 }
 
 void FinepaperMainWindow::reloadPackages() {
-    if (m_operationBusy) {
+    if (m_operationBusy || m_processCleanupUnresolved) {
         return;
     }
     FinepaperApplication candidateApplication = m_application;
@@ -2631,7 +2771,7 @@ void FinepaperMainWindow::reloadPackages() {
 }
 
 void FinepaperMainWindow::installPackage() {
-    if (m_operationBusy) {
+    if (m_operationBusy || m_processCleanupUnresolved) {
         return;
     }
     const QString directory = QFileDialog::getExistingDirectory(
@@ -2647,7 +2787,8 @@ void FinepaperMainWindow::installPackage() {
 }
 
 bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
-    if (m_operationBusy || directory.trimmed().isEmpty()) {
+    if (m_operationBusy || m_processCleanupUnresolved
+        || directory.trimmed().isEmpty()) {
         return false;
     }
     const PackageLoadResult package = loadPackage(directory);
@@ -3013,7 +3154,8 @@ void FinepaperMainWindow::updateEditorEmptyState() {
     }
     if (m_emptyInstallButton) {
         m_emptyInstallButton->setVisible(!hasRunnablePackages);
-        m_emptyInstallButton->setEnabled(!m_operationBusy);
+        m_emptyInstallButton->setEnabled(
+            !m_operationBusy && !m_processCleanupUnresolved);
     }
     if (m_emptyOpenButton) {
         m_emptyOpenButton->setEnabled(!m_operationBusy);
@@ -3167,7 +3309,12 @@ void FinepaperMainWindow::updateUiState() {
     const bool hasDesign = m_design.has_value();
     const bool hasDesignMetadata = hasDesign && packageForDesign();
     const bool hasDesignRuntime = hasDesign && runtimePackageForDesign();
+    const bool hasOutputRoot = m_outputRoot && !m_outputRootEmpty;
     const bool hasRunnablePackages = !m_runtimeAvailablePackageKeys.isEmpty();
+    const bool packageActionsBlocked = m_operationBusy
+        || m_processCleanupUnresolved;
+    const QString cleanupBlockedHint = QStringLiteral(
+        "Unavailable because Finepaper could not verify that a previous Package process stopped. Confirm or terminate it outside Finepaper, then save your work and restart before running or changing Packages.");
     const bool hasInspectorDrafts = hasPendingInspectorDrafts();
     const bool hasDomainDrafts =
         (m_domainManager
@@ -3190,10 +3337,14 @@ void FinepaperMainWindow::updateUiState() {
         m_openAction->setEnabled(!m_operationBusy);
     }
     if (m_installAction) {
-        m_installAction->setEnabled(!m_operationBusy);
+        m_installAction->setEnabled(!packageActionsBlocked);
+        m_installAction->setToolTip(
+            m_processCleanupUnresolved ? cleanupBlockedHint : QString());
     }
     if (m_reloadAction) {
-        m_reloadAction->setEnabled(!m_operationBusy);
+        m_reloadAction->setEnabled(!packageActionsBlocked);
+        m_reloadAction->setToolTip(
+            m_processCleanupUnresolved ? cleanupBlockedHint : QString());
     }
 
     if (m_saveAction) {
@@ -3204,10 +3355,25 @@ void FinepaperMainWindow::updateUiState() {
         m_saveAsAction->setEnabled(hasDesign && !m_operationBusy);
     }
     if (m_validateAction) {
-        m_validateAction->setEnabled(hasDesignRuntime && !m_operationBusy);
+        m_validateAction->setEnabled(
+            hasDesignRuntime && !packageActionsBlocked);
+        m_validateAction->setToolTip(
+            m_processCleanupUnresolved ? cleanupBlockedHint : QString());
+        m_validateAction->setStatusTip(
+            m_processCleanupUnresolved ? cleanupBlockedHint : QString());
     }
     if (m_generateAction) {
-        m_generateAction->setEnabled(hasDesignRuntime && !m_operationBusy);
+        m_generateAction->setEnabled(
+            hasDesignRuntime && hasOutputRoot && !packageActionsBlocked);
+        const QString generationHint = m_processCleanupUnresolved
+            ? cleanupBlockedHint
+            : hasOutputRoot
+            ? QStringLiteral(
+                  "Validate the design, then generate RTL in the selected output root.")
+            : QStringLiteral(
+                  "Choose an output root before generating RTL.");
+        m_generateAction->setToolTip(generationHint);
+        m_generateAction->setStatusTip(generationHint);
     }
     if (m_resizeMeshAction) {
         m_resizeMeshAction->setEnabled(hasDesignMetadata && !m_operationBusy);
@@ -3236,10 +3402,14 @@ void FinepaperMainWindow::updateUiState() {
         m_designExtensionsWorkspace->setBusy(m_operationBusy);
     }
     if (m_installPackageButton) {
-        m_installPackageButton->setEnabled(!m_operationBusy);
+        m_installPackageButton->setEnabled(!packageActionsBlocked);
+        m_installPackageButton->setToolTip(
+            m_processCleanupUnresolved ? cleanupBlockedHint : QString());
     }
     if (m_reloadPackagesButton) {
-        m_reloadPackagesButton->setEnabled(!m_operationBusy);
+        m_reloadPackagesButton->setEnabled(!packageActionsBlocked);
+        m_reloadPackagesButton->setToolTip(
+            m_processCleanupUnresolved ? cleanupBlockedHint : QString());
     }
     if (m_endpointPalette) {
         m_endpointPalette->setEnabled(
@@ -3319,7 +3489,16 @@ void FinepaperMainWindow::updateUiState() {
         m_endpointConfigurationPanel->setBusy(m_operationBusy);
     }
     if (m_generateButton) {
-        m_generateButton->setEnabled(hasDesignRuntime && !m_operationBusy);
+        m_generateButton->setEnabled(
+            hasDesignRuntime && hasOutputRoot && !packageActionsBlocked);
+        m_generateButton->setToolTip(
+            m_processCleanupUnresolved
+                ? cleanupBlockedHint
+                : hasOutputRoot
+                ? QStringLiteral(
+                      "Validate the design, then generate RTL in the selected output root.")
+                : QStringLiteral(
+                      "Choose an output root before generating RTL."));
     }
     if (m_outputRoot) {
         m_outputRoot->setEnabled(!m_operationBusy);
@@ -3358,15 +3537,387 @@ void FinepaperMainWindow::updateUiState() {
     }
 }
 
-void FinepaperMainWindow::setOperationBusy(bool busy, const QString& message) {
+void FinepaperMainWindow::setOperationBusy(bool busy) {
     m_operationBusy = busy;
-    if (m_operationProgress) {
-        m_operationProgress->setVisible(busy);
-    }
-    if (busy && !message.isEmpty()) {
-        statusBar()->showMessage(message);
-    }
     updateUiState();
+}
+
+CancellationToken FinepaperMainWindow::beginOperation(
+    const operations::RunTicket& ticket,
+    const QString& operationName,
+    const QString& cancelAccessibleName) {
+    Q_ASSERT(!m_activeOperation);
+    m_activeOperation.emplace(ActiveOperation{
+        ticket,
+        CancellationSource{},
+        false,
+    });
+    const CancellationToken token = m_activeOperation->cancellation.token();
+    if (m_operationTaskStrip) {
+        m_operationTaskStrip->begin(
+            operationName, cancelAccessibleName);
+    }
+    statusBar()->clearMessage();
+    setOperationBusy(true);
+    return token;
+}
+
+bool FinepaperMainWindow::requestOperationCancellation(
+    bool closeWhenFinished) {
+    if (!m_operationBusy || !m_activeOperation) {
+        return false;
+    }
+
+    m_activeOperation->closeWhenFinished =
+        m_activeOperation->closeWhenFinished || closeWhenFinished;
+    const bool firstRequest = m_runState.requestCancel(
+        m_activeOperation->ticket);
+    if (firstRequest) {
+        m_activeOperation->cancellation.requestCancellation();
+        appendActivity(
+            QStringLiteral(
+                "Cancellation requested; waiting for the Package process to stop."));
+    } else if (!m_activeOperation->cancellation.isCancellationRequested()) {
+        return false;
+    }
+
+    const QWidget* focusWidget = QApplication::focusWidget();
+    const bool operationControlHadFocus = m_operationTaskStrip
+        && focusWidget
+        && (focusWidget == m_operationTaskStrip
+            || m_operationTaskStrip->isAncestorOf(focusWidget));
+    if (m_operationTaskStrip) {
+        m_operationTaskStrip->setCancellationRequested();
+    }
+    statusBar()->clearMessage();
+    if (operationControlHadFocus) {
+        focusCurrentCenterView();
+    }
+    return true;
+}
+
+FinepaperMainWindow::OperationCompletion FinepaperMainWindow::finishOperation(
+    const operations::RunTicket& ticket,
+    bool processCleanupUnresolved) {
+    OperationCompletion completion;
+    completion.disposition = m_runState.disposition(ticket);
+    completion.finishedActiveRun = m_runState.finishRun(ticket);
+
+    const bool matchesActiveOperation = m_activeOperation
+        && m_activeOperation->ticket == ticket;
+    const bool newlyUnresolvedProcessCleanup = processCleanupUnresolved
+        && !m_processCleanupUnresolved;
+    m_processCleanupUnresolved = m_processCleanupUnresolved
+        || processCleanupUnresolved;
+    if (!completion.finishedActiveRun) {
+        if (newlyUnresolvedProcessCleanup) {
+            updateUiState();
+        }
+        return completion;
+    }
+
+    Q_ASSERT(matchesActiveOperation);
+    if (matchesActiveOperation) {
+        completion.closeWhenFinished =
+            m_activeOperation->closeWhenFinished;
+    } else if (m_activeOperation) {
+        // Recover to a safe idle state if future lifecycle changes ever break
+        // the one-ticket invariant instead of leaving an unowned worker live.
+        m_activeOperation->cancellation.requestCancellation();
+    }
+    m_activeOperation.reset();
+    if (m_operationTaskStrip) {
+        m_operationTaskStrip->finish();
+    }
+    setOperationBusy(false);
+    return completion;
+}
+
+void FinepaperMainWindow::presentOperationCancellation(
+    const OperationCompletion& completion,
+    bool cleanupUnresolved,
+    bool processCleanupUnresolved,
+    const QVector<Diagnostic>& cleanupDiagnostics,
+    const QStringList& retainedRuntimePaths,
+    const QString& operationName,
+    const QString& preservedStatus,
+    const QString& preservedActivity,
+    const QVector<QLabel*>& statusLabels) {
+    if (processCleanupUnresolved) {
+        presentProcessCleanupFailure(
+            operationName,
+            cleanupDiagnostics,
+            retainedRuntimePaths,
+            statusLabels);
+        return;
+    }
+    QString activity = preservedActivity;
+    QString status = QStringLiteral("%1 cancelled.").arg(operationName);
+    QString resultStatus = preservedStatus;
+    if (cleanupUnresolved) {
+        activity += QLatin1Char('\n');
+        activity += runtimeFileCleanupDetails(
+            operationName, cleanupDiagnostics, retainedRuntimePaths);
+        status = QStringLiteral(
+            "%1 cancelled; some runtime files were retained — see Activity Log.")
+                     .arg(operationName);
+        resultStatus += QStringLiteral(
+            " Some runtime files were retained; see Activity Log.");
+    }
+    appendActivity(activity);
+    statusBar()->showMessage(
+        status, cleanupUnresolved ? 10000 : 5000);
+    for (QLabel* label : statusLabels) {
+        setStatusLabel(label, resultStatus, QStringLiteral("warning"));
+    }
+    requestResultsDockReadabilityUpdate();
+    if (completion.closeWhenFinished) {
+        queueDeferredClose();
+    }
+}
+
+QString FinepaperMainWindow::runtimeFileCleanupDetails(
+    const QString& operationName,
+    const QVector<Diagnostic>& cleanupDiagnostics,
+    const QStringList& retainedRuntimePaths) const {
+    QStringList details = {
+        QStringLiteral(
+            "%1 left retained runtime files. Package processes are verified stopped; future operations remain available.")
+            .arg(operationName),
+        QStringLiteral("Cleanup diagnostics:")};
+    bool foundCleanupDiagnostic = false;
+    for (const Diagnostic& diagnostic : cleanupDiagnostics) {
+        if (diagnostic.code != QStringLiteral("operation.cleanup_failed")
+            && diagnostic.code != QStringLiteral("run.log_write_failed")) {
+            continue;
+        }
+        foundCleanupDiagnostic = true;
+        QString detail = QStringLiteral("- [%1] %2")
+                             .arg(diagnostic.code, diagnostic.message);
+        if (!diagnostic.path.isEmpty()) {
+            detail += QStringLiteral(" (%1)").arg(diagnostic.path);
+        }
+        details.append(detail);
+    }
+    if (!foundCleanupDiagnostic) {
+        details.append(QStringLiteral("- No cleanup diagnostic was reported."));
+    }
+    details.append(QStringLiteral("Retained runtime paths:"));
+    if (retainedRuntimePaths.isEmpty()) {
+        details.append(QStringLiteral("- None reported"));
+    } else {
+        for (const QString& path : retainedRuntimePaths) {
+            details.append(QStringLiteral("- %1").arg(path));
+        }
+    }
+    return details.join(QLatin1Char('\n'));
+}
+
+void FinepaperMainWindow::presentProcessCleanupFailure(
+    const QString& operationName,
+    const QVector<Diagnostic>& cleanupDiagnostics,
+    const QStringList& retainedRuntimePaths,
+    const QVector<QLabel*>& statusLabels) {
+    if (!m_processCleanupUnresolved) {
+        m_processCleanupUnresolved = true;
+        updateUiState();
+    }
+    const QString status = QStringLiteral(
+        "Package process cleanup unresolved — run and Package controls are disabled. Confirm or terminate any remaining Package process outside Finepaper before restarting.");
+    appendActivity(
+        QStringLiteral(
+            "%1 ended without verified Package process cleanup; automatic close and further Package operations are blocked for this session.")
+            .arg(operationName));
+    m_processCleanupDetails = processCleanupDetails(
+        operationName, cleanupDiagnostics, retainedRuntimePaths);
+    appendActivity(
+        QStringLiteral("Cleanup recovery details:\n%1")
+            .arg(m_processCleanupDetails));
+    if (m_cleanupRecoveryBanner) {
+        m_cleanupRecoveryBanner->setAccessibleDescription(
+            m_processCleanupDetails);
+        m_cleanupRecoveryBanner->setToolTip(m_processCleanupDetails);
+        m_cleanupRecoveryBanner->show();
+    }
+    if (m_cleanupRecoveryLabel) {
+        m_cleanupRecoveryLabel->setToolTip(m_processCleanupDetails);
+        m_cleanupRecoveryLabel->setAccessibleDescription(
+            m_processCleanupDetails);
+    }
+    if (m_reviewCleanupButton) {
+        m_reviewCleanupButton->setToolTip(
+            QStringLiteral(
+                "Review and copy the complete cleanup diagnostic and retained runtime paths."));
+    }
+    statusBar()->showMessage(status);
+    for (QLabel* label : statusLabels) {
+        setStatusLabel(label, status, QStringLiteral("error"));
+        if (label) {
+            label->setToolTip(
+                retainedRuntimePaths.isEmpty()
+                    ? status
+                    : status + QStringLiteral("\nRetained runtime paths:\n")
+                        + retainedRuntimePaths.join(QLatin1Char('\n')));
+        }
+    }
+    requestResultsDockReadabilityUpdate();
+}
+
+QString FinepaperMainWindow::processCleanupDetails(
+    const QString& operationName,
+    const QVector<Diagnostic>& cleanupDiagnostics,
+    const QStringList& retainedRuntimePaths) const {
+    QStringList details = {
+        QStringLiteral("Package process cleanup unresolved"),
+        QStringLiteral("Operation: %1").arg(operationName),
+        QStringLiteral(
+            "Safety state: Run and Package controls are disabled for this session."),
+        QStringLiteral(
+            "Recovery: Confirm or terminate any remaining Package process outside Finepaper before restarting."),
+        QString(),
+        QStringLiteral("Cleanup diagnostics:")};
+
+    bool foundCleanupDiagnostic = false;
+    for (const Diagnostic& diagnostic : cleanupDiagnostics) {
+        if (diagnostic.code != QStringLiteral("operation.cleanup_failed")) {
+            continue;
+        }
+        foundCleanupDiagnostic = true;
+        details.append(
+            QStringLiteral("- [%1] %2")
+                .arg(diagnostic.code, diagnostic.message));
+        if (!diagnostic.source.isEmpty()) {
+            details.append(
+                QStringLiteral("  Source: %1").arg(diagnostic.source));
+        }
+        if (!diagnostic.path.isEmpty()) {
+            details.append(
+                QStringLiteral("  Program or runtime path: %1")
+                    .arg(diagnostic.path));
+        }
+    }
+    if (!foundCleanupDiagnostic) {
+        details.append(
+            QStringLiteral(
+                "- Finepaper could not verify that every Package process stopped; no additional process identifier was reported."));
+    }
+
+    details.append(QString());
+    details.append(QStringLiteral("Retained runtime paths:"));
+    if (retainedRuntimePaths.isEmpty()) {
+        details.append(QStringLiteral("- None reported"));
+    } else {
+        for (const QString& path : retainedRuntimePaths) {
+            details.append(QStringLiteral("- %1").arg(path));
+        }
+    }
+    return details.join(QLatin1Char('\n'));
+}
+
+void FinepaperMainWindow::reviewProcessCleanupDetails() {
+    if (!m_processCleanupUnresolved || m_processCleanupDetails.isEmpty()) {
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("finepaper.cleanupDetailsDialog"));
+    dialog.setWindowTitle(QStringLiteral("Cleanup Recovery Details"));
+    dialog.setModal(true);
+    dialog.setSizeGripEnabled(true);
+    auto* layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(
+        ui::UiMetrics::spacing16,
+        ui::UiMetrics::spacing16,
+        ui::UiMetrics::spacing16,
+        ui::UiMetrics::spacing16);
+    layout->setSpacing(ui::UiMetrics::spacing12);
+
+    auto* heading = new QLabel(
+        QStringLiteral("Package process cleanup is unresolved"), &dialog);
+    heading->setObjectName(
+        QStringLiteral("finepaper.cleanupDetailsHeading"));
+    heading->setProperty("finepaperRole", QStringLiteral("error"));
+    heading->setWordWrap(true);
+    layout->addWidget(heading);
+
+    auto* guidance = new QLabel(
+        QStringLiteral(
+            "Keep Finepaper open while you review these details. Confirm or terminate the reported process outside Finepaper before restarting."),
+        &dialog);
+    guidance->setObjectName(
+        QStringLiteral("finepaper.cleanupDetailsGuidance"));
+    guidance->setWordWrap(true);
+    layout->addWidget(guidance);
+
+    auto* details = new QPlainTextEdit(&dialog);
+    details->setObjectName(QStringLiteral("finepaper.cleanupDetailsText"));
+    details->setAccessibleName(
+        QStringLiteral("Unresolved Package cleanup details"));
+    details->setReadOnly(true);
+    details->setPlainText(m_processCleanupDetails);
+    details->setMinimumSize(0, 0);
+    details->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Expanding);
+    layout->addWidget(details, 1);
+
+    auto* copyFeedback = new QLabel(&dialog);
+    copyFeedback->setObjectName(
+        QStringLiteral("finepaper.cleanupCopyFeedback"));
+    copyFeedback->setAccessibleName(
+        QStringLiteral("Cleanup details copy status"));
+    copyFeedback->setProperty("finepaperRole", QStringLiteral("success"));
+    copyFeedback->setWordWrap(true);
+    copyFeedback->hide();
+    layout->addWidget(copyFeedback);
+
+    auto* actionsWidget = new QWidget(&dialog);
+    actionsWidget->setObjectName(
+        QStringLiteral("finepaper.cleanupDetailsActions"));
+    auto* actions = new ui::ResponsiveActionLayout(actionsWidget);
+    actions->setContentsMargins(0, 0, 0, 0);
+    actions->setSpacing(ui::UiMetrics::spacing8);
+    QPushButton* copyDetails = new QPushButton(
+        QStringLiteral("Copy Cleanup Details"), actionsWidget);
+    copyDetails->setObjectName(
+        QStringLiteral("finepaper.copyCleanupDetails"));
+    QPushButton* keepOpen = new QPushButton(
+        QStringLiteral("Keep Finepaper Open"), actionsWidget);
+    keepOpen->setObjectName(
+        QStringLiteral("finepaper.keepOpenFromCleanupDetails"));
+    keepOpen->setDefault(true);
+    actions->addWidget(copyDetails);
+    actions->addWidget(keepOpen);
+    connect(copyDetails, &QPushButton::clicked, this,
+            [this, copyDetails, copyFeedback] {
+        if (QClipboard* clipboard = QApplication::clipboard()) {
+            clipboard->setText(m_processCleanupDetails);
+        }
+        copyFeedback->setText(QStringLiteral("Copied to clipboard."));
+        copyFeedback->show();
+        copyDetails->setText(QStringLiteral("Copy Again"));
+        copyDetails->setAccessibleName(
+            QStringLiteral("Copy cleanup details again"));
+        copyDetails->setAccessibleDescription(
+            QStringLiteral("Cleanup details were copied to the clipboard."));
+        appendActivity(
+            QStringLiteral("Copied unresolved cleanup details."));
+        statusBar()->showMessage(
+            QStringLiteral("Cleanup details copied."), 5000);
+    });
+    connect(keepOpen, &QPushButton::clicked, &dialog, &QDialog::accept);
+    layout->addWidget(actionsWidget);
+
+    const QSize available = screen()
+        ? screen()->availableGeometry().size()
+        : QSize(800, 600);
+    dialog.resize(
+        (std::min)(720, (std::max)(320, available.width() - 64)),
+        (std::min)(520, (std::max)(280, available.height() - 64)));
+    dialog.exec();
+}
+
+void FinepaperMainWindow::queueDeferredClose() {
+    QTimer::singleShot(0, this, [this] { close(); });
 }
 
 void FinepaperMainWindow::setDirty(bool dirty) {
@@ -3976,7 +4527,8 @@ bool FinepaperMainWindow::saveDesignTo(const QString& path) {
 }
 
 void FinepaperMainWindow::validateDesign() {
-    if (m_operationBusy) {
+    if (m_operationBusy || m_runState.hasActiveRun()
+        || m_activeOperation || m_processCleanupUnresolved) {
         return;
     }
     if (!m_design || !runtimePackageForDesign()) {
@@ -4006,24 +4558,60 @@ void FinepaperMainWindow::validateDesign() {
     connect(watcher, &QFutureWatcher<ValidationResult>::finished,
             this, [this, watcher, ticket] {
                 const ValidationResult result = watcher->result();
-                const operations::CompletionDisposition disposition =
-                    m_runState.disposition(ticket);
-                const bool finishedActiveRun = m_runState.finishRun(ticket);
                 if (m_validationWatcher == watcher) {
                     m_validationWatcher = nullptr;
                 }
                 watcher->deleteLater();
-                if (finishedActiveRun) {
-                    setOperationBusy(false);
+                const bool cleanupUnresolved = result.cleanupUnresolved;
+                const bool processCleanupUnresolved =
+                    result.processCleanupUnresolved;
+                const OperationCompletion completion =
+                    finishOperation(ticket, processCleanupUnresolved);
+                if (completion.disposition
+                        == operations::CompletionDisposition::CancelRequested
+                    || result.cancelled) {
+                    presentOperationCancellation(
+                        completion,
+                        cleanupUnresolved,
+                        processCleanupUnresolved,
+                        result.diagnostics,
+                        result.retainedRuntimePaths,
+                        QStringLiteral("Validation"),
+                        QStringLiteral(
+                            "Cancelled — no new validation result was published. Previous results remain available."),
+                        QStringLiteral(
+                            "Validation cancelled; previous results were preserved."),
+                        QVector<QLabel*>{
+                            m_diagnosticsStatus,
+                            m_problemReportStatus});
+                    return;
                 }
-                if (disposition != operations::CompletionDisposition::Current) {
-                    const QString reason = ignoredRunReason(disposition);
+                if (processCleanupUnresolved) {
+                    presentProcessCleanupFailure(
+                        QStringLiteral("Validation"),
+                        result.diagnostics,
+                        result.retainedRuntimePaths,
+                        QVector<QLabel*>{
+                            m_diagnosticsStatus,
+                            m_problemReportStatus});
+                    return;
+                }
+                if (cleanupUnresolved) {
+                    appendActivity(runtimeFileCleanupDetails(
+                        QStringLiteral("Validation"),
+                        result.diagnostics,
+                        result.retainedRuntimePaths));
+                }
+                if (completion.disposition
+                    != operations::CompletionDisposition::Current) {
+                    const QString reason = ignoredRunReason(
+                        completion.disposition);
                     appendActivity(
                         QStringLiteral("Ignored validation result for ")
                         + designRevisionText(ticket.input)
                         + QStringLiteral(": ") + reason
                         + QStringLiteral("."));
-                    if (finishedActiveRun) {
+                    if (completion.finishedActiveRun) {
                         const QString status =
                             QStringLiteral(
                                 "Result not published — validation for ")
@@ -4045,7 +4633,11 @@ void FinepaperMainWindow::validateDesign() {
                 presentValidationResult(result, ticket.input);
             });
     appendActivity(QStringLiteral("Starting validation and Package DRC."));
-    setOperationBusy(true, QStringLiteral("Validating design…"));
+    const CancellationToken cancellation = beginOperation(
+        ticket,
+        QStringLiteral("Validating %1")
+            .arg(designRevisionText(ticket.input)),
+        QStringLiteral("Cancel design validation"));
     setStatusLabel(
         m_diagnosticsStatus,
         QStringLiteral("Running — validating ")
@@ -4062,8 +4654,10 @@ void FinepaperMainWindow::validateDesign() {
         QStringLiteral("warning"));
     requestResultsDockReadabilityUpdate();
     watcher->setFuture(QtConcurrent::run(
-        [application = std::move(application), design = std::move(design)]() mutable {
-            return application.validate(design, true);
+        [application = std::move(application),
+         design = std::move(design),
+         cancellation]() mutable {
+            return application.validate(design, true, cancellation);
         }));
     discardPendingDomainChanges();
     discardPendingInspectorDrafts();
@@ -4084,7 +4678,8 @@ void FinepaperMainWindow::presentValidationResult(
 }
 
 void FinepaperMainWindow::generateDesign() {
-    if (m_operationBusy) {
+    if (m_operationBusy || m_runState.hasActiveRun()
+        || m_activeOperation || m_processCleanupUnresolved) {
         return;
     }
     if (!m_design || !runtimePackageForDesign()) {
@@ -4121,18 +4716,50 @@ void FinepaperMainWindow::generateDesign() {
     connect(watcher, &QFutureWatcher<GenerationResult>::finished,
             this, [this, watcher, ticket] {
                 const GenerationResult result = watcher->result();
-                const operations::CompletionDisposition disposition =
-                    m_runState.disposition(ticket);
-                const bool finishedActiveRun = m_runState.finishRun(ticket);
                 if (m_generationWatcher == watcher) {
                     m_generationWatcher = nullptr;
                 }
                 watcher->deleteLater();
-                if (finishedActiveRun) {
-                    setOperationBusy(false);
+                const bool cleanupUnresolved = result.cleanupUnresolved;
+                const bool processCleanupUnresolved =
+                    result.processCleanupUnresolved;
+                const OperationCompletion completion =
+                    finishOperation(ticket, processCleanupUnresolved);
+                if (completion.disposition
+                        == operations::CompletionDisposition::CancelRequested
+                    || result.cancelled) {
+                    presentOperationCancellation(
+                        completion,
+                        cleanupUnresolved,
+                        processCleanupUnresolved,
+                        result.diagnostics,
+                        result.retainedRuntimePaths,
+                        QStringLiteral("RTL generation"),
+                        QStringLiteral(
+                            "Cancelled — no new RTL generation result was published. Previous outputs remain available."),
+                        QStringLiteral(
+                            "RTL generation cancelled; previous outputs were preserved."),
+                        QVector<QLabel*>{m_generationStatus});
+                    return;
                 }
-                if (disposition != operations::CompletionDisposition::Current) {
-                    const QString reason = ignoredRunReason(disposition);
+                if (processCleanupUnresolved) {
+                    presentProcessCleanupFailure(
+                        QStringLiteral("RTL generation"),
+                        result.diagnostics,
+                        result.retainedRuntimePaths,
+                        QVector<QLabel*>{m_generationStatus});
+                    return;
+                }
+                if (cleanupUnresolved) {
+                    appendActivity(runtimeFileCleanupDetails(
+                        QStringLiteral("RTL generation"),
+                        result.diagnostics,
+                        result.retainedRuntimePaths));
+                }
+                if (completion.disposition
+                    != operations::CompletionDisposition::Current) {
+                    const QString reason = ignoredRunReason(
+                        completion.disposition);
                     appendActivity(
                         QStringLiteral("Ignored RTL generation result for ")
                         + designRevisionText(ticket.input)
@@ -4140,7 +4767,7 @@ void FinepaperMainWindow::generateDesign() {
                         + QStringLiteral(
                             ". The requested output root was ")
                         + ticket.outputRoot + QStringLiteral("."));
-                    if (finishedActiveRun) {
+                    if (completion.finishedActiveRun) {
                         setStatusLabel(
                             m_generationStatus,
                             QStringLiteral(
@@ -4156,7 +4783,11 @@ void FinepaperMainWindow::generateDesign() {
                 }
                 presentGenerationResult(result, ticket.input);
             });
-    setOperationBusy(true, QStringLiteral("Generating RTL…"));
+    const CancellationToken cancellation = beginOperation(
+        ticket,
+        QStringLiteral("Generating RTL for %1")
+            .arg(designRevisionText(ticket.input)),
+        QStringLiteral("Cancel RTL generation"));
     setStatusLabel(
         m_generationStatus,
         QStringLiteral("Running — generating RTL for ")
@@ -4167,8 +4798,10 @@ void FinepaperMainWindow::generateDesign() {
     watcher->setFuture(QtConcurrent::run(
         [application = std::move(application),
          design = std::move(design),
-         root]() mutable {
-            return application.generate(design, GenerationOptions{root});
+         root,
+         cancellation]() mutable {
+            return application.generate(
+                design, GenerationOptions{root}, cancellation);
         }));
     discardPendingDomainChanges();
     discardPendingInspectorDrafts();
@@ -4182,11 +4815,18 @@ void FinepaperMainWindow::presentGenerationResult(
         result.diagnostics, QStringLiteral("RTL generation"), stamp);
     m_resultTabs->setCurrentWidget(m_generationResultsPage);
     showResultsDock();
-    appendActivity(result.success
-                       ? QStringLiteral("RTL generation completed: %1 artifact(s).")
-                             .arg(result.artifacts.size())
-                       : QStringLiteral("RTL generation failed with exit code %1.")
-                             .arg(result.exitCode));
+    if (result.success) {
+        appendActivity(
+            QStringLiteral("RTL generation completed: %1 artifact(s).")
+                .arg(result.artifacts.size()));
+    } else if (result.exitCode >= 0) {
+        appendActivity(
+            QStringLiteral("RTL generation failed with exit code %1.")
+                .arg(result.exitCode));
+    } else {
+        appendActivity(QStringLiteral(
+            "RTL generation failed before the Package generator completed."));
+    }
     statusBar()->showMessage(result.success ? QStringLiteral("RTL generated.")
                                             : QStringLiteral("RTL generation failed."));
 }
