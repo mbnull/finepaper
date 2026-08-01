@@ -1686,14 +1686,37 @@ int main(int argc, char** argv) {
               .arg(workspaceToolbar && workspaceToolbar->isVisible())
               .arg(canvasControlsButton && canvasControlsButton->isVisible())
               .arg(visibleToolbarWidgetsFit));
-    check(packagePanelAction && packagePanelAction->shortcut() == QKeySequence(QStringLiteral("Ctrl+B")),
-          QStringLiteral("left Package panel has the VS Code style Ctrl+B shortcut"));
-    check(inspectorPanelAction
-              && inspectorPanelAction->shortcut() == QKeySequence(QStringLiteral("Ctrl+Shift+B")),
-          QStringLiteral("right Inspector panel has a direct collapse shortcut"));
-    check(resultsPanelAction
-              && resultsPanelAction->shortcut() == QKeySequence(QStringLiteral("Ctrl+J")),
-          QStringLiteral("bottom results panel has the VS Code style Ctrl+J shortcut"));
+    QAction* packageNavigation = window.findChild<QAction*>(
+        finepaper::workbench::packageNavigationActionName);
+    QAction* inspectorNavigation = window.findChild<QAction*>(
+        finepaper::workbench::inspectorNavigationActionName);
+    QAction* domainNavigation = window.findChild<QAction*>(
+        finepaper::workbench::domainNavigationActionName);
+    QAction* resultsNavigation = window.findChild<QAction*>(
+        finepaper::workbench::resultsNavigationActionName);
+    check(packagePanelAction && packagePanelAction->shortcut().isEmpty()
+              && packageNavigation && !packageNavigation->isCheckable()
+              && packageNavigation->shortcut()
+                  == QKeySequence(QStringLiteral("Ctrl+B")),
+          QStringLiteral(
+              "Ctrl+B is a dedicated Package navigation command, not a responsive preference toggle"));
+    check(inspectorPanelAction && inspectorPanelAction->shortcut().isEmpty()
+              && inspectorNavigation && !inspectorNavigation->isCheckable()
+              && inspectorNavigation->shortcut()
+                  == QKeySequence(QStringLiteral("Ctrl+Shift+B")),
+          QStringLiteral(
+              "Ctrl+Shift+B is a dedicated Inspector navigation command"));
+    check(domainNavigation && !domainNavigation->isCheckable()
+              && domainNavigation->shortcut()
+                  == QKeySequence(QStringLiteral("Ctrl+Shift+D")),
+          QStringLiteral(
+              "Ctrl+Shift+D is a dedicated Domain navigation command"));
+    check(resultsPanelAction && resultsPanelAction->shortcut().isEmpty()
+              && resultsNavigation && !resultsNavigation->isCheckable()
+              && resultsNavigation->shortcut()
+                  == QKeySequence(QStringLiteral("Ctrl+J")),
+          QStringLiteral(
+              "Ctrl+J is a dedicated Results navigation command"));
     check(canvasFocusAction
               && canvasFocusAction->isCheckable()
               && canvasFocusAction->shortcut()
@@ -1709,14 +1732,44 @@ int main(int argc, char** argv) {
         application.processEvents();
         check(!packageDock->isVisible() && !packagePanelAction->isChecked(),
               QStringLiteral("View menu toggle hides the left Package panel"));
+        if (centerViews) {
+            centerViews->setFocus(Qt::OtherFocusReason);
+        }
+        application.processEvents();
+        const QPointer<QWidget> focusBeforePackageRestore =
+            QApplication::focusWidget();
+        const bool focusStartedOutsidePackage =
+            !focusBeforePackageRestore
+            || (focusBeforePackageRestore != packageDock
+                && !packageDock->isAncestorOf(
+                    focusBeforePackageRestore));
         packagePanelAction->trigger();
         application.processEvents();
-        auto* focusedPackageSelector = packageDock->findChild<QComboBox*>(
-            QStringLiteral("finepaper.packageSelector"));
-        check(packageDock->isVisible() && packagePanelAction->isChecked()
-                  && focusIsWithin(focusedPackageSelector),
+        const bool packageExposureMatchesResponsiveMode =
+            responsiveMode != QStringLiteral("wide")
+            || packageDock->isVisible();
+        QWidget* focusAfterPackageRestore = QApplication::focusWidget();
+        const bool focusRemainedOutsidePackage =
+            !focusAfterPackageRestore
+            || (focusAfterPackageRestore != packageDock
+                && !packageDock->isAncestorOf(
+                    focusAfterPackageRestore));
+        check(packageExposureMatchesResponsiveMode
+                  && packagePanelAction->isChecked()
+                  && focusStartedOutsidePackage
+                  && focusRemainedOutsidePackage,
               QStringLiteral(
-                  "showing the left Package panel restores it at the primary Package selector"));
+                  "View restores the Package preference without stealing workspace focus; constrained layouts may defer exposure "
+                  "(mode=%1, visible=%2, preferred=%3, focus before=%4, after=%5)")
+                  .arg(responsiveMode)
+                  .arg(packageDock->isVisible())
+                  .arg(packagePanelAction->isChecked())
+                  .arg(focusBeforePackageRestore
+                           ? focusBeforePackageRestore->objectName()
+                           : QStringLiteral("none"))
+                  .arg(focusAfterPackageRestore
+                           ? focusAfterPackageRestore->objectName()
+                           : QStringLiteral("none")));
     }
     if (inspectorPanelAction && inspectorDock) {
         inspectorDock->show();
@@ -1744,14 +1797,6 @@ int main(int argc, char** argv) {
               QStringLiteral("View menu toggle restores the bottom diagnostics panel"));
     }
 
-    QAction* packageNavigation = window.findChild<QAction*>(
-        finepaper::workbench::packageNavigationActionName);
-    QAction* inspectorNavigation = window.findChild<QAction*>(
-        finepaper::workbench::inspectorNavigationActionName);
-    QAction* domainNavigation = window.findChild<QAction*>(
-        finepaper::workbench::domainNavigationActionName);
-    QAction* resultsNavigation = window.findChild<QAction*>(
-        finepaper::workbench::resultsNavigationActionName);
     auto* creationPackageSelector = window.findChild<QComboBox*>(
         QStringLiteral("finepaper.packageSelector"));
     auto* inspectorEmptyFocusTarget = window.findChild<QLabel*>(
@@ -1811,6 +1856,59 @@ int main(int argc, char** argv) {
                   .arg(QApplication::focusWidget()
                            ? QApplication::focusWidget()->objectName()
                            : QStringLiteral("none")));
+    }
+
+    if (centerViews && packageDock && inspectorDock && domainDock
+        && resultsDock && packageNavigation && inspectorNavigation
+        && domainNavigation && resultsNavigation) {
+        packageDock->hide();
+        centerViews->setFocus(Qt::ShortcutFocusReason);
+        QTest::keyClick(centerViews, Qt::Key_B, Qt::ControlModifier);
+        application.processEvents();
+        application.processEvents();
+        check(packageDock->isVisible()
+                  && focusIsWithin(creationPackageSelector)
+                  && packagePanelAction->isChecked()
+                  && inspectorPanelAction->isChecked(),
+              QStringLiteral(
+                  "Ctrl+B reveals and focuses an automatically hidden Package panel without erasing other panel preferences"));
+
+        centerViews->setFocus(Qt::ShortcutFocusReason);
+        QTest::keyClick(
+            centerViews,
+            Qt::Key_B,
+            Qt::ControlModifier | Qt::ShiftModifier);
+        application.processEvents();
+        application.processEvents();
+        check(inspectorDock->isVisible()
+                  && focusIsWithin(inspectorEmptyFocusTarget)
+                  && packagePanelAction->isChecked()
+                  && inspectorPanelAction->isChecked(),
+              QStringLiteral(
+                  "Ctrl+Shift+B routes to Inspector while preserving the responsive Package preference"));
+
+        centerViews->setFocus(Qt::ShortcutFocusReason);
+        QTest::keyClick(
+            centerViews,
+            Qt::Key_D,
+            Qt::ControlModifier | Qt::ShiftModifier);
+        application.processEvents();
+        application.processEvents();
+        check(domainDock->isVisible()
+                  && focusIsWithin(domainEmptyFocusTarget),
+              QStringLiteral(
+                  "Ctrl+Shift+D raises the Domain tab and focuses its current task"));
+
+        resultsDock->hide();
+        centerViews->setFocus(Qt::ShortcutFocusReason);
+        QTest::keyClick(centerViews, Qt::Key_J, Qt::ControlModifier);
+        application.processEvents();
+        application.processEvents();
+        check(resultsDock->isVisible()
+                  && (focusIsWithin(initialDiagnosticsStatus)
+                      || focusIsWithin(initialDrcTable)),
+              QStringLiteral(
+                  "Ctrl+J opens Results and focuses its active readable content"));
     }
 
     QAction* resetWorkbenchLayoutAction = window.findChild<QAction*>(
@@ -2430,9 +2528,10 @@ int main(int argc, char** argv) {
         application.processEvents();
         const QPixmap tinyOverlay = overlayRegressionView.grab();
         check(pulseInitiallyRunning && pulseStopped && pulseResumed
+                  && dragPulse && dragPulse->duration() <= 400
                   && !tinyOverlay.isNull(),
               QStringLiteral(
-                  "drag feedback resumes after Reduce Motion and safely degrades in a transiently narrow canvas"));
+                  "drag feedback is brief, resumes after Reduce Motion, and safely degrades in a transiently narrow canvas"));
         overlayRegressionView.endEndpointDrag();
         overlayRegressionView.close();
     }
@@ -2988,8 +3087,30 @@ int main(int argc, char** argv) {
           QStringLiteral("Inspector contains properties rather than Endpoint wiring tools"));
     auto* selectionInspector = window.findChild<QWidget*>(
         finepaper::workbench::selectionInspectorName);
-    check(selectionInspector && selectionInspector->findChildren<QPushButton*>().isEmpty(),
-          QStringLiteral("selection Inspector contains no connect or delete controls"));
+    auto* inspectorContextActions = window.findChild<QWidget*>(
+        QStringLiteral("finepaper.inspectorContextActions"));
+    const QList<QPushButton*> selectionCardButtons = selectionInspector
+        ? selectionInspector->findChildren<QPushButton*>()
+        : QList<QPushButton*>{};
+    const QList<QPushButton*> contextButtons = inspectorContextActions
+        ? inspectorContextActions->findChildren<QPushButton*>()
+        : QList<QPushButton*>{};
+    QSet<QString> contextButtonNames;
+    for (const QPushButton* button : contextButtons) {
+        if (button) {
+            contextButtonNames.insert(button->objectName());
+        }
+    }
+    const QSet<QString> expectedContextButtonNames = {
+        QStringLiteral("finepaper.inspectorEditDomainAssignments"),
+        QStringLiteral("finepaper.inspectorReviewDiagnostics"),
+    };
+    check(selectionInspector && selectionCardButtons.isEmpty()
+              && inspectorContextActions
+              && contextButtons.size() == expectedContextButtonNames.size()
+              && contextButtonNames == expectedContextButtonNames,
+          QStringLiteral(
+              "selection Inspector exposes task navigation without duplicating connect or delete controls"));
     std::unique_ptr<QMimeData> endpointMime;
     if (endpointPalette && endpointPalette->count() > 0) {
         endpointMime.reset(endpointPalette->model()->mimeData(
@@ -4082,6 +4203,8 @@ int main(int argc, char** argv) {
     }
     auto* diagnosticsStatus = window.findChild<QLabel*>(
         QStringLiteral("finepaper.diagnosticsStatus"));
+    auto* diagnosticsResultsPage = window.findChild<QWidget*>(
+        QStringLiteral("finepaper.results.diagnosticsPage"));
     auto* problemReportStatus = window.findChild<QLabel*>(
         QStringLiteral("finepaper.problemReportStatus"));
     check(diagnosticsStatus
@@ -4097,6 +4220,41 @@ int main(int argc, char** argv) {
               && problemReportStatus->textFormat() == Qt::PlainText,
           QStringLiteral(
               "validation publishes literal plain-text provenance for arbitrary design names"));
+
+    auto* reviewDiagnostics = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.inspectorReviewDiagnostics"));
+    window.activateWindow();
+    application.processEvents();
+    if (inspectorNavigation) {
+        inspectorNavigation->trigger();
+        application.processEvents();
+        application.processEvents();
+    }
+    const bool reviewDiagnosticsWasVisible = reviewDiagnostics
+        && reviewDiagnostics->isVisibleTo(&window)
+        && widgetIntersectsScrollViewport(
+            inspectorScroll, reviewDiagnostics);
+    captureSmokeScreenshot(
+        window, QStringLiteral("diagnostics-task-route"), requestedTheme);
+    if (reviewDiagnostics) {
+        reviewDiagnostics->click();
+        application.processEvents();
+        application.processEvents();
+    }
+    check(reviewDiagnosticsWasVisible && resultsDock
+              && resultsDock->isVisible() && resultTabs
+              && resultTabs->currentWidget() == diagnosticsResultsPage
+              && (focusIsWithin(diagnosticsStatus)
+                  || focusIsWithin(initialDrcTable)),
+          QStringLiteral(
+              "Inspector exposes a visible diagnostics route and focuses the current DRC result "
+              "(visible %1; dock %2; tab %3; focus %4)")
+              .arg(reviewDiagnosticsWasVisible)
+              .arg(resultsDock && resultsDock->isVisible())
+              .arg(resultTabs ? resultTabs->currentIndex() : -1)
+              .arg(QApplication::focusWidget()
+                       ? QApplication::focusWidget()->objectName()
+                       : QStringLiteral("none")));
 
     auto* outputPath = window.findChild<QLineEdit*>(QStringLiteral("finepaper.outputRoot"));
     auto* browseOutput = window.findChild<QPushButton*>(
@@ -4438,7 +4596,17 @@ int main(int argc, char** argv) {
     if (nodeEditor) {
         nodeEditor->setRouterCollapsed(QStringLiteral("r-0-0"), true);
     }
+    auto* activityResultPage = window.findChild<QPlainTextEdit*>(
+        QStringLiteral("finepaper.activityLog"));
+    if (resultTabs && activityResultPage) {
+        resultTabs->setCurrentWidget(activityResultPage);
+    }
     closeDiscarding(window);
+
+    check(QSettings().value(finepaper::workbench::resultTabSetting).toString()
+              == QStringLiteral("finepaper.activityLog"),
+          QStringLiteral(
+              "the active Results page persists by stable semantic id instead of tab index"));
 
     finepaper::FinepaperMainWindow restoredWindow(locations);
     restoredWindow.show();
@@ -4456,6 +4624,10 @@ int main(int argc, char** argv) {
         finepaper::workbench::resultsDockName);
     auto* restoredCenterViews = qobject_cast<QTabWidget*>(
         restoredWindow.centralWidget());
+    auto* restoredResultTabs = restoredWindow.findChild<QTabWidget*>(
+        QStringLiteral("finepaper.resultTabs"));
+    auto* restoredActivityResultPage = restoredWindow.findChild<QPlainTextEdit*>(
+        QStringLiteral("finepaper.activityLog"));
     check(restoredPackageDock && !restoredPackageDock->isVisible()
               && ((restoredInspectorDock && restoredInspectorDock->isVisible())
                   || (restoredDomainDock && restoredDomainDock->isVisible())
@@ -4464,6 +4636,11 @@ int main(int argc, char** argv) {
               && restoredCenterViews->currentIndex() == 1,
           QStringLiteral(
               "closing during Canvas Focus persists the underlying panel and center-view state, not the transient focus state"));
+    check(restoredResultTabs && restoredActivityResultPage
+              && restoredResultTabs->currentWidget()
+                  == restoredActivityResultPage,
+          QStringLiteral(
+              "the semantic Results page id restores the same task across workbench sessions"));
     auto* restoredCreateButton = restoredWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.createDesign"));
     check(restoredCreateButton != nullptr,
@@ -5844,12 +6021,16 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.instanceView"));
     auto* domainManagerTabs = domainWindow.findChild<QTabWidget*>(
         QStringLiteral("finepaper.domainManager.tabs"));
+    auto* domainAssignmentPage = domainWindow.findChild<QWidget*>(
+        QStringLiteral("finepaper.domainManager.assignmentPage"));
     auto* domainAssignmentState = domainWindow.findChild<QLabel*>(
         QStringLiteral("finepaper.domainManager.assignmentState"));
     auto* domainMultipleAssignment = domainWindow.findChild<QListWidget*>(
         QStringLiteral("finepaper.domainManager.assignmentEditor.multiple"));
     auto* domainApplyAssignment = domainWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.applyAssignment"));
+    auto* domainDiscardAssignment = domainWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainManager.discardAssignment"));
     auto* domainCompleteConfiguration = domainWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.completeConfiguration"));
     auto* domainSelectMembers = domainWindow.findChild<QPushButton*>(
@@ -6005,6 +6186,95 @@ int main(int argc, char** argv) {
                   QStringLiteral("Trusted (zone-a)")),
           QStringLiteral(
               "Router Inspector states the active Domain id, per-kind bounds, and full assignment in text"));
+    auto* editDomainAssignments = domainWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.inspectorEditDomainAssignments"));
+    auto* domainInspectorScroll = domainWindow.findChild<QScrollArea*>(
+        QStringLiteral("finepaper.inspectorScroll"));
+    QAction* domainInspectorNavigation = domainWindow.findChild<QAction*>(
+        finepaper::workbench::inspectorNavigationActionName);
+    if (domainInspectorNavigation) {
+        domainInspectorNavigation->trigger();
+        application.processEvents();
+        application.processEvents();
+    }
+    const bool editDomainAssignmentsWasVisible = editDomainAssignments
+        && editDomainAssignments->isVisibleTo(&domainWindow)
+        && widgetIntersectsScrollViewport(
+            domainInspectorScroll, editDomainAssignments);
+    captureSmokeScreenshot(
+        domainWindow, QStringLiteral("domain-task-route"), requestedTheme);
+    if (editDomainAssignments) {
+        editDomainAssignments->click();
+        application.processEvents();
+        application.processEvents();
+    }
+    check(editDomainAssignmentsWasVisible
+              && domainManagerDock && domainManagerDock->isVisible()
+              && domainManagerTabs
+              && domainManagerTabs->currentWidget() == domainAssignmentPage
+              && (focusIsWithin(domainMultipleAssignment)
+                  || focusIsWithin(domainManagerType)),
+          QStringLiteral(
+              "Router Inspector exposes a visible Domain-assignment task route and focuses its editor"));
+    if (domainScene && domainLinkGraphics && domainRouterGraphics) {
+        domainScene->clearSelection();
+        domainLinkGraphics->setSelected(true);
+        application.processEvents();
+        check(editDomainAssignments && editDomainAssignments->isHidden(),
+              QStringLiteral(
+                  "Router Link selection hides the inapplicable Domain-assignment task route"));
+        domainScene->clearSelection();
+        domainRouterGraphics->setSelected(true);
+        application.processEvents();
+        domainLayerSelectionCallbacks = 0;
+    }
+
+    QListWidgetItem* draftProbeAssignment = nullptr;
+    if (domainScene && domainRouterGraphics && domainRouter1Graphics
+        && domainMultipleAssignment) {
+        domainScene->clearSelection();
+        domainRouterGraphics->setSelected(true);
+        domainRouter1Graphics->setSelected(true);
+        application.processEvents();
+        for (int row = 0; row < domainMultipleAssignment->count(); ++row) {
+            QListWidgetItem* item = domainMultipleAssignment->item(row);
+            if (item && item->data(finepaper::domainManagerDomainIdRole)
+                            .toString() == QStringLiteral("zone-a")) {
+                draftProbeAssignment = item;
+                break;
+            }
+        }
+    }
+    if (draftProbeAssignment) {
+        draftProbeAssignment->setCheckState(
+            draftProbeAssignment->checkState() == Qt::Checked
+                ? Qt::Unchecked : Qt::Checked);
+        application.processEvents();
+    }
+    const bool assignmentDraftWasStaged = draftProbeAssignment
+        && domainDiscardAssignment && domainDiscardAssignment->isEnabled();
+    if (domainScene && domainLinkGraphics) {
+        domainScene->clearSelection();
+        domainLinkGraphics->setSelected(true);
+        application.processEvents();
+    }
+    const bool pendingDraftRouteRemainsAvailable = editDomainAssignments
+        && editDomainAssignments->isVisibleTo(&domainWindow)
+        && domainDiscardAssignment && domainDiscardAssignment->isEnabled();
+    if (domainDiscardAssignment) {
+        domainDiscardAssignment->click();
+        application.processEvents();
+    }
+    check(assignmentDraftWasStaged && pendingDraftRouteRemainsAvailable
+              && editDomainAssignments && editDomainAssignments->isHidden(),
+          QStringLiteral(
+              "discarding an assignment draft refreshes the Inspector route against the latest ineligible selection"));
+    if (domainScene && domainRouterGraphics) {
+        domainScene->clearSelection();
+        domainRouterGraphics->setSelected(true);
+        application.processEvents();
+        domainLayerSelectionCallbacks = 0;
+    }
     check(domainScene && domainRouter && domainRouterGraphics
               && domainScene->nodeGraphicsObject(*domainRouter)
                   == domainRouterGraphics

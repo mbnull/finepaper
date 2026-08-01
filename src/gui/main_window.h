@@ -52,7 +52,10 @@ class EmptyState;
 class InspectorDesignSettings;
 class InspectorSummaryPanel;
 class WorkbenchLayoutController;
+class WorkbenchPanelNavigator;
 enum class WorkbenchPanelRole;
+enum class WorkbenchPanelId;
+enum class WorkbenchPanelIntent;
 enum class WorkbenchWidthMode;
 }
 
@@ -110,6 +113,7 @@ private:
     void updatePackageControls();
     void updateCreationPackageDetails();
     void updateEditorEmptyState();
+    void updateInspectorContextActions();
     void updateEndpointQuickAddState();
     void filterEndpointPalette(const QString& text);
     void addEndpointFromPalette(QListWidgetItem* item = nullptr);
@@ -183,6 +187,9 @@ private:
     void showWorkspaceStatusMessage();
     void showResultsDock();
     void showWorkbenchPanel(QDockWidget* dock);
+    void activateWorkbenchPanel(
+        ui::WorkbenchPanelId id,
+        ui::WorkbenchPanelIntent intent);
     [[nodiscard]] std::optional<ui::WorkbenchPanelRole>
         panelRole(QDockWidget* dock) const;
     void setCanvasFocusMode(bool enabled);
@@ -329,8 +336,11 @@ private:
 
     QDockWidget* m_resultsDock = nullptr;
     ui::WorkbenchLayoutController* m_workbenchLayoutController = nullptr;
+    ui::WorkbenchPanelNavigator* m_panelNavigator = nullptr;
     QString m_canvasFocusRestoreCenterViewId;
     QTabWidget* m_resultTabs = nullptr;
+    QWidget* m_diagnosticsResultsPage = nullptr;
+    QWidget* m_generationResultsPage = nullptr;
     QWidget* m_generationControls = nullptr;
     QSplitter* m_outputSplitter = nullptr;
     QLabel* m_diagnosticsStatus = nullptr;

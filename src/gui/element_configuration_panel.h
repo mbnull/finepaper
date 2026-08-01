@@ -68,6 +68,7 @@ public:
                     ElementConfigurationContextStamp stamp,
                     bool busy = false);
     void setBusy(bool busy);
+    [[nodiscard]] QWidget* preferredFocusTarget();
     [[nodiscard]] ElementConfigurationPanelState projectionState() const {
         return m_projection.state;
     }

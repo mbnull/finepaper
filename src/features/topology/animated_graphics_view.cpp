@@ -16,6 +16,12 @@
 #include <utility>
 
 namespace finepaper {
+namespace {
+
+constexpr int endpointDragPulseDurationMs = 360;
+constexpr int endpointDragFadeDurationMs = 180;
+
+} // namespace
 
 AnimatedGraphicsView::AnimatedGraphicsView(QtNodes::BasicGraphicsScene* scene,
                                            QWidget* parent)
@@ -30,7 +36,7 @@ AnimatedGraphicsView::AnimatedGraphicsView(QtNodes::BasicGraphicsScene* scene,
         QStringLiteral("finepaper.endpointDragPulse"));
     m_pulseAnimation->setStartValue(0.0);
     m_pulseAnimation->setEndValue(1.0);
-    m_pulseAnimation->setDuration(480);
+    m_pulseAnimation->setDuration(endpointDragPulseDurationMs);
     m_pulseAnimation->setEasingCurve(QEasingCurve::InOutSine);
     m_pulseAnimation->setLoopCount(-1);
     connect(m_pulseAnimation, &QVariantAnimation::valueChanged,
@@ -41,7 +47,7 @@ AnimatedGraphicsView::AnimatedGraphicsView(QtNodes::BasicGraphicsScene* scene,
                 }
             });
 
-    m_fadeAnimation->setDuration(180);
+    m_fadeAnimation->setDuration(endpointDragFadeDurationMs);
     m_fadeAnimation->setObjectName(
         QStringLiteral("finepaper.endpointDragFade"));
     m_fadeAnimation->setEasingCurve(QEasingCurve::OutCubic);

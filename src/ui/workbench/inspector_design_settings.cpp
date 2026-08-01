@@ -1,5 +1,6 @@
 #include "ui/workbench/inspector_design_settings.h"
 
+#include "ui/common/focus_target.h"
 #include "ui/theme/ui_tokens.h"
 
 #include <QLabel>
@@ -64,6 +65,10 @@ void InspectorDesignSettings::addSection(QWidget* section) {
 
 bool InspectorDesignSettings::isExpanded() const {
     return m_toggle && m_toggle->isChecked();
+}
+
+QWidget* InspectorDesignSettings::preferredFocusTarget() {
+    return firstAvailableFocusTarget(this, {m_toggle});
 }
 
 void InspectorDesignSettings::setExpanded(bool expanded) {

@@ -2,6 +2,7 @@
 
 #include "application/element_configuration.h"
 #include "package/parameter_schema_identity.h"
+#include "ui/common/focus_target.h"
 #include "ui/common/schema_value_editor.h"
 #include "ui/theme/ui_tokens.h"
 
@@ -263,6 +264,12 @@ void ElementConfigurationPanel::setBusy(bool busy) {
     m_busy = busy;
     showProjectionMessage();
     updateButtons();
+}
+
+QWidget* ElementConfigurationPanel::preferredFocusTarget() {
+    return ui::firstAvailableFocusTarget(
+        this,
+        {m_discardDraft, m_propertySetSelector, m_apply, m_reset});
 }
 
 bool ElementConfigurationPanel::hasUnappliedDrafts(

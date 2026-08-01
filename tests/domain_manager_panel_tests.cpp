@@ -216,6 +216,10 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.instanceView"));
     auto* tabs = panel.findChild<QTabWidget*>(
         QStringLiteral("finepaper.domainManager.tabs"));
+    auto* instancesPage = panel.findChild<QWidget*>(
+        QStringLiteral("finepaper.domainManager.instancesPage"));
+    auto* assignmentPage = panel.findChild<QWidget*>(
+        QStringLiteral("finepaper.domainManager.assignmentPage"));
     auto* assignmentState = panel.findChild<QLabel*>(
         QStringLiteral("finepaper.domainManager.assignmentState"));
     auto* assignmentFeedback = panel.findChild<QLabel*>(
@@ -245,14 +249,16 @@ int main(int argc, char** argv) {
     auto* selectUnassigned = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.selectUnassigned"));
 
-    check(typeSelector && instances && tabs && assignmentState
+    check(typeSelector && instances && tabs && instancesPage
+              && assignmentPage && assignmentState
               && assignmentFeedback && singleAssignment
               && multipleAssignment && applyAssignment && clearAssignment
               && discardAssignment
               && completeConfiguration && addDomain && editDomain && deleteDomain
               && selectMembers && selectAllEligible && selectUnassigned,
           QStringLiteral("Domain Manager exposes its stable test controls"));
-    if (!typeSelector || !instances || !tabs || !assignmentState
+    if (!typeSelector || !instances || !tabs || !instancesPage
+        || !assignmentPage || !assignmentState
         || !assignmentFeedback || !singleAssignment
         || !multipleAssignment || !applyAssignment || !clearAssignment
         || !discardAssignment
@@ -295,6 +301,43 @@ int main(int argc, char** argv) {
                   == QStringLiteral("fabric-tier")
               && panel.currentDomainType() == QStringLiteral("security-zone"),
           QStringLiteral("Package V2 Domain types drive the selector without fixed names"));
+
+    check(!panel.canActivateAssignmentPage(),
+          QStringLiteral(
+              "Domain assignment navigation stays unavailable without a semantic selection"));
+    typeSelector->setCurrentIndex(
+        typeSelector->findData(QStringLiteral("fabric-tier")));
+    panel.setSelection({endpoint});
+    QApplication::processEvents();
+    check(assignmentState->property("assignmentState").toString()
+                  == QStringLiteral("no-eligible")
+              && panel.canActivateAssignmentPage(),
+          QStringLiteral(
+              "an Endpoint remains assignable when another Package Domain type supports it"));
+    tabs->setCurrentWidget(instancesPage);
+    panel.activateAssignmentPage();
+    QApplication::processEvents();
+    check(tabs->currentWidget() == assignmentPage
+              && panel.currentDomainType() == QStringLiteral("security-zone")
+              && multipleAssignment->isVisible(),
+          QStringLiteral(
+              "assignment navigation selects the first compatible Package Domain type"));
+
+    panel.setSelection({link});
+    tabs->setCurrentWidget(instancesPage);
+    QApplication::processEvents();
+    check(!panel.canActivateAssignmentPage(),
+          QStringLiteral(
+              "derived Router Links do not expose a dead-end Domain assignment route"));
+    panel.activateAssignmentPage();
+    check(tabs->currentWidget() == instancesPage,
+          QStringLiteral(
+              "an ineligible selection cannot force the assignment page open"));
+    panel.setSelection({});
+    typeSelector->setCurrentIndex(
+        typeSelector->findData(QStringLiteral("security-zone")));
+    QApplication::processEvents();
+
     check(instances->rowCount() == 3
               && instances->item(0, 2)->text() == QStringLiteral("zone-a")
               && instances->item(1, 2)->text() == QStringLiteral("zone-b")

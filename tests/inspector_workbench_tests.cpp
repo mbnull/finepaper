@@ -66,9 +66,41 @@ void summaryUsesStablePlainTextWidgets() {
                   QStringLiteral("power<&>core"))
               && selectionDetail->textFormat() == Qt::PlainText,
           QStringLiteral("selection content reuses fixed wrapping labels without HTML interpretation"));
-    check(selection && selection->findChildren<QPushButton*>().isEmpty()
+    auto* editDomainAssignments = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.inspectorEditDomainAssignments"));
+    auto* reviewDiagnostics = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.inspectorReviewDiagnostics"));
+    check(selection && editDomainAssignments && reviewDiagnostics
+              && !editDomainAssignments->isVisible()
+              && !reviewDiagnostics->isVisible()
+              && editDomainAssignments->icon().isNull()
+              && reviewDiagnostics->icon().isNull()
               && selection->findChildren<QToolButton*>().isEmpty(),
-          QStringLiteral("selection summary contains no hidden icon or wiring actions"));
+          QStringLiteral(
+              "selection summary keeps only explicit text task routes hidden by default"));
+
+    int editDomainRequests = 0;
+    int reviewDiagnosticRequests = 0;
+    panel.editDomainAssignmentsRequested = [&editDomainRequests] {
+        ++editDomainRequests;
+    };
+    panel.reviewDiagnosticsRequested = [&reviewDiagnosticRequests] {
+        ++reviewDiagnosticRequests;
+    };
+    panel.setContextActions({true, true});
+    QApplication::processEvents();
+    editDomainAssignments->click();
+    reviewDiagnostics->click();
+    check(editDomainAssignments->isVisible()
+              && editDomainAssignments->text()
+                  == QStringLiteral("Edit Domain assignments")
+              && reviewDiagnostics->isVisible()
+              && reviewDiagnostics->text()
+                  == QStringLiteral("Review diagnostics")
+              && panel.preferredFocusTarget() == editDomainAssignments
+              && editDomainRequests == 1 && reviewDiagnosticRequests == 1,
+          QStringLiteral(
+              "selection summary exposes discoverable text routes with stable callbacks"));
     check(panel.minimumSizeHint().width() <= panel.width(),
           QStringLiteral("long summary text does not force a wider Inspector"));
 
@@ -77,12 +109,16 @@ void summaryUsesStablePlainTextWidgets() {
     panel.setFont(enlarged);
     panel.setDesignSummary({hostileTitle, QStringLiteral("metadata"), {}});
     panel.setSelectionSummary(std::nullopt);
+    panel.setContextActions({false, true});
     QApplication::processEvents();
     check(availability && !availability->isVisible()
               && selection && !selection->isVisible()
               && selectionTitle && selectionTitle->text().isEmpty()
+              && editDomainAssignments && !editDomainAssignments->isVisible()
+              && reviewDiagnostics && reviewDiagnostics->isVisible()
               && panel.minimumSizeHint().width() <= panel.width(),
-          QStringLiteral("clearing verbose state leaves no stale selection at large font size"));
+          QStringLiteral(
+              "clearing verbose state leaves no stale selection while design-level diagnostics remain reachable"));
 }
 
 void designSettingsUseTextDisclosureAndExposeDrafts() {

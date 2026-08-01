@@ -17,7 +17,7 @@
 | 层级 | 内容 | 行为 |
 |---|---|---|
 | 主任务 | NoC Editor 画布 | 始终获得最大可用空间；默认 Pan，可切换 Select |
-| 当前上下文 | Package Library、Inspector、Domain Manager | 主工具栏的文字 Panels 菜单打开并聚焦，View 菜单控制显隐 |
+| 当前上下文 | Package Library、Inspector、Domain Manager | 主工具栏的文字 Panels 菜单打开并聚焦，View 菜单只控制响应式显示偏好 |
 | 任务结果 | Diagnostics、Activity、Generation Output | 默认收起；校验、生成或错误出现时展开 |
 | 低频任务 | Domain Configuration、Design Extensions、Performance、Problem Report | 作为中央工作区切换，不与画布同时挤占空间 |
 
@@ -27,6 +27,19 @@
 操作标签采用文字优先：主工具栏和 Panels 导航必须直接显示动作名称，不依赖
 图标或 Tooltip 才能理解。图形标记只用于端口、Domain 色块、展开状态等空间或
 数据语义。
+
+面板命令分为两种不可混用的语义：View > Panels 的 checkable action 表示用户希望
+该面板在布局空间允许时保持可见；窗口变窄造成的自动收起不得改写这个偏好。
+`Go to …` 命令及 `Ctrl+B`、`Ctrl+Shift+B`、`Ctrl+Shift+D`、`Ctrl+J` 是非
+checkable 的任务导航：退出 Canvas Focus、显示并抬起相应 Dock，再把键盘焦点送到
+当前可继续操作的控件。面板重建后焦点目标必须即时求值，不能依赖 `findChild()`
+对象名或缓存内部控件指针。被自动收起的 Dock 若仍持有焦点，应将焦点修复到当前
+中央工作区。
+
+Inspector 可以按当前状态显示文字任务入口，例如 `Edit Domain assignments` 和
+`Review diagnostics`。这些入口与快捷键复用同一导航路径：前者切换到 Domain
+Manager 的 assignment 页，后者切换到 Diagnostics；自动出现的结果仍不得主动抢
+走画布焦点。
 
 设计名、Endpoint ID、Package label、路径等外部文本必须按纯文本展示；确需富文本
 的 Inspector 摘要先逐项 HTML escape。动态文案应一次性完成占位符替换或直接拼接，

@@ -3,6 +3,7 @@
 #include "features/domain/endpoint_domain_assignment_dialog.h"
 #include "gui/package_parameter_form.h"
 #include "package/parameter_schema_identity.h"
+#include "ui/common/focus_target.h"
 #include "ui/theme/ui_tokens.h"
 
 #include <QComboBox>
@@ -679,6 +680,12 @@ void EndpointConfigurationPanel::setBusy(bool busy) {
     }
     updateStatus();
     updateValidation();
+}
+
+QWidget* EndpointConfigurationPanel::preferredFocusTarget() {
+    return ui::firstAvailableFocusTarget(
+        this,
+        {m_discardConflict, m_type, m_migration, m_apply});
 }
 
 bool EndpointConfigurationPanel::hasUnappliedDrafts(

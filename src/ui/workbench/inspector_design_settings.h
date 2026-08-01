@@ -18,6 +18,7 @@ public:
 
     void addSection(QWidget* section);
     [[nodiscard]] bool isExpanded() const;
+    [[nodiscard]] QWidget* preferredFocusTarget();
     void setExpanded(bool expanded);
     void setDraftNotice(const QString& text,
                         const QString& semanticRole = QStringLiteral("warning"));

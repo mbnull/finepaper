@@ -1,11 +1,14 @@
 #include "ui/workbench/inspector_summary_panel.h"
 
+#include "ui/common/focus_target.h"
 #include "ui/theme/ui_tokens.h"
+#include "ui/layouts/responsive_action_layout.h"
 #include "ui/workbench/workbench_config.h"
 
 #include <QEvent>
 #include <QFrame>
 #include <QLabel>
+#include <QPushButton>
 #include <QSizePolicy>
 #include <QStringList>
 #include <QVBoxLayout>
@@ -110,11 +113,59 @@ InspectorSummaryPanel::InspectorSummaryPanel(QWidget* parent) : QWidget(parent) 
     configureTextLabel(m_selectionDetail, QStringLiteral("finepaper.inspectorSelectionDetail"),
                        QStringLiteral("Selection guidance"));
     selectionLayout->addWidget(m_selectionDetail);
+
+    m_contextActions = new QWidget(this);
+    m_contextActions->setObjectName(
+        QStringLiteral("finepaper.inspectorContextActions"));
+    auto* actionLayout = new ResponsiveActionLayout(m_contextActions);
+    actionLayout->setContentsMargins(0, UiMetrics::spacing8, 0, 0);
+    actionLayout->setSpacing(UiMetrics::spacing8);
+    m_editDomainAssignments = new QPushButton(
+        tr("Edit Domain assignments"), m_contextActions);
+    m_editDomainAssignments->setObjectName(
+        QStringLiteral("finepaper.inspectorEditDomainAssignments"));
+    actionLayout->addWidget(m_editDomainAssignments);
+    m_reviewDiagnostics = new QPushButton(
+        tr("Review diagnostics"), m_contextActions);
+    m_reviewDiagnostics->setObjectName(
+        QStringLiteral("finepaper.inspectorReviewDiagnostics"));
+    actionLayout->addWidget(m_reviewDiagnostics);
+    rootLayout->addWidget(m_contextActions);
     rootLayout->addWidget(m_selectionContext);
+
+    connect(m_editDomainAssignments, &QPushButton::clicked,
+            this, [this] {
+                if (editDomainAssignmentsRequested) {
+                    editDomainAssignmentsRequested();
+                }
+            });
+    connect(m_reviewDiagnostics, &QPushButton::clicked,
+            this, [this] {
+                if (reviewDiagnosticsRequested) {
+                    reviewDiagnosticsRequested();
+                }
+            });
 
     applyRoleFonts();
     setDesignSummary({});
     setSelectionSummary(std::nullopt);
+    setContextActions({});
+}
+
+void InspectorSummaryPanel::setContextActions(
+    const InspectorContextActions& actions) {
+    m_editDomainAssignments->setVisible(actions.editDomainAssignments);
+    m_reviewDiagnostics->setVisible(actions.reviewDiagnostics);
+    m_contextActions->setVisible(
+        actions.editDomainAssignments || actions.reviewDiagnostics);
+    updateGeometry();
+}
+
+QWidget* InspectorSummaryPanel::preferredFocusTarget() {
+    return firstAvailableFocusTarget(
+        this,
+        {m_editDomainAssignments, m_reviewDiagnostics,
+         m_selectionTitle, m_designTitle});
 }
 
 void InspectorSummaryPanel::setDesignSummary(const InspectorDesignSummary& summary) {

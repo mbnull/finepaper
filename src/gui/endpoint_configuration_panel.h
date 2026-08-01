@@ -92,6 +92,7 @@ public:
                     bool busy,
                     quint64 packageCatalogRevision = 0);
     void setBusy(bool busy);
+    [[nodiscard]] QWidget* preferredFocusTarget();
 
     [[nodiscard]] bool hasUnappliedDrafts(
         const QString& designIdentity) const;

@@ -12,6 +12,7 @@
 #include "features/domain/endpoint_domain_assignment_dialog.h"
 #include "features/topology/mesh_resize_dialog.h"
 #include "gui/package_parameter_form.h"
+#include "ui/common/focus_target.h"
 #include "ui/components/empty_state.h"
 #include "ui/layouts/responsive_action_layout.h"
 #include "ui/theme/ui_tokens.h"
@@ -19,6 +20,7 @@
 #include "ui/workbench/inspector_summary_panel.h"
 #include "ui/workbench/workbench_config.h"
 #include "ui/workbench/layout/workbench_layout_controller.h"
+#include "ui/workbench/navigation/workbench_panel_navigator.h"
 #include "ui/workbench/widgets/workbench_dock_title_bar.h"
 #include "storage/json.h"
 
@@ -85,6 +87,8 @@
 
 namespace finepaper {
 namespace {
+
+constexpr int panelNavigationFailureStatusDurationMs = 4000;
 
 QString diagnosticText(const QVector<Diagnostic>& diagnostics) {
     QStringList lines;
@@ -252,19 +256,6 @@ bool setStatusLabel(QLabel* label,
     }
     label->update();
     return textChanged;
-}
-
-QWidget* firstPanelFocusTarget(
-    QWidget* panel,
-    std::initializer_list<QWidget*> candidates) {
-    for (QWidget* candidate : candidates) {
-        if (candidate && candidate->isEnabled()
-            && candidate->focusPolicy() != Qt::NoFocus
-            && candidate->isVisibleTo(panel)) {
-            return candidate;
-        }
-    }
-    return nullptr;
 }
 
 int tableHeaderPresentationHeight(const QTableWidget* table) {
@@ -566,6 +557,10 @@ FinepaperMainWindow::FinepaperMainWindow(RuntimeLocations locations, QWidget* pa
 }
 
 FinepaperMainWindow::~FinepaperMainWindow() {
+    if (m_inspectorSummaryPanel) {
+        m_inspectorSummaryPanel->editDomainAssignmentsRequested = {};
+        m_inspectorSummaryPanel->reviewDiagnosticsRequested = {};
+    }
     if (m_nodeEditor) {
         m_nodeEditor->endpointTypeDropped = {};
         m_nodeEditor->endpointMoveRequested = {};
@@ -1680,6 +1675,7 @@ void FinepaperMainWindow::createDomainDock() {
             QStringLiteral("Update %1 assignments").arg(domainType));
     };
     m_domainManager->draftStateChanged = [this] {
+        updateInspectorContextActions();
         updateUiState();
     };
     m_domainManager->completeConfigurationRequested = [this] {
@@ -1727,8 +1723,10 @@ void FinepaperMainWindow::createResultsDock() {
     m_resultTabs->setSizePolicy(
         QSizePolicy::Expanding, QSizePolicy::Ignored);
 
-    auto* diagnosticsPage = new QWidget;
-    auto* diagnosticsLayout = new QVBoxLayout(diagnosticsPage);
+    m_diagnosticsResultsPage = new QWidget;
+    m_diagnosticsResultsPage->setObjectName(
+        QStringLiteral("finepaper.results.diagnosticsPage"));
+    auto* diagnosticsLayout = new QVBoxLayout(m_diagnosticsResultsPage);
     diagnosticsLayout->setContentsMargins(
         ui::UiMetrics::spacing8, ui::UiMetrics::spacing8,
         ui::UiMetrics::spacing8, ui::UiMetrics::spacing8);
@@ -1760,7 +1758,7 @@ void FinepaperMainWindow::createResultsDock() {
         QSizePolicy::Expanding, QSizePolicy::Ignored);
     m_drcTable->horizontalHeader()->setStretchLastSection(true);
     diagnosticsLayout->addWidget(m_drcTable, 1);
-    m_resultTabs->addTab(diagnosticsPage, workbench::drcTabTitle);
+    m_resultTabs->addTab(m_diagnosticsResultsPage, workbench::drcTabTitle);
 
     m_activityLog = new QPlainTextEdit;
     m_activityLog->setObjectName(QStringLiteral("finepaper.activityLog"));
@@ -1772,8 +1770,10 @@ void FinepaperMainWindow::createResultsDock() {
         QSizePolicy::Expanding, QSizePolicy::Ignored);
     m_resultTabs->addTab(m_activityLog, workbench::activityTabTitle);
 
-    auto* outputPage = new QWidget;
-    auto* outputLayout = new QVBoxLayout(outputPage);
+    m_generationResultsPage = new QWidget;
+    m_generationResultsPage->setObjectName(
+        QStringLiteral("finepaper.results.generationPage"));
+    auto* outputLayout = new QVBoxLayout(m_generationResultsPage);
     outputLayout->setContentsMargins(
         ui::UiMetrics::spacing8, ui::UiMetrics::spacing8,
         ui::UiMetrics::spacing8, ui::UiMetrics::spacing8);
@@ -1790,7 +1790,7 @@ void FinepaperMainWindow::createResultsDock() {
         QStringLiteral("No RTL has been generated for this design revision."),
         QStringLiteral("muted"));
     outputLayout->addWidget(m_generationStatus);
-    m_generationControls = new QWidget(outputPage);
+    m_generationControls = new QWidget(m_generationResultsPage);
     m_generationControls->setObjectName(
         QStringLiteral("finepaper.generationControls"));
     auto* outputControls = new ui::ResponsiveActionLayout(
@@ -1844,7 +1844,8 @@ void FinepaperMainWindow::createResultsDock() {
     m_outputSplitter->setStretchFactor(0, 2);
     m_outputSplitter->setStretchFactor(1, 1);
     outputLayout->addWidget(m_outputSplitter, 1);
-    m_resultTabs->addTab(outputPage, workbench::generationTabTitle);
+    m_resultTabs->addTab(
+        m_generationResultsPage, workbench::generationTabTitle);
 
     m_resultsDock->setWidget(m_resultTabs);
     addDockWidget(Qt::BottomDockWidgetArea, m_resultsDock);
@@ -2057,77 +2058,107 @@ void FinepaperMainWindow::createActions() {
                     4000);
             });
 
-    m_packagePanelAction = new QAction(
-        QStringLiteral("NoC IP && Endpoint Library"), this);
-    m_packagePanelAction->setObjectName(workbench::packageToggleActionName);
-    m_packagePanelAction->setCheckable(true);
-    m_packagePanelAction->setChecked(true);
-    m_packagePanelAction->setShortcut(
-        QKeySequence(QStringLiteral("Ctrl+B")));
-    m_packagePanelAction->setStatusTip(
-        QStringLiteral("Keep the NoC IP and Endpoint panel available"));
-    connect(m_packagePanelAction, &QAction::triggered,
-            this, [this](bool visible) {
-                if (!visible) {
-                    return;
-                }
-                showWorkbenchPanel(m_packageDock);
-                QTimer::singleShot(0, m_packageDock, [this] {
-                    QWidget* focusTarget = m_creationPackageSelector
-                            && m_creationPackageSelector->isEnabled()
-                        ? static_cast<QWidget*>(m_creationPackageSelector)
-                        : static_cast<QWidget*>(m_installPackageButton);
-                    if (focusTarget && focusTarget->isEnabled()
-                        && focusTarget->isVisibleTo(m_packageDock)) {
-                        focusTarget->setFocus(Qt::ShortcutFocusReason);
-                    }
-                });
-            });
-
-    m_inspectorPanelAction = new QAction(QStringLiteral("Inspector"), this);
-    m_inspectorPanelAction->setObjectName(
-        workbench::inspectorToggleActionName);
-    m_inspectorPanelAction->setCheckable(true);
-    m_inspectorPanelAction->setChecked(true);
-    m_inspectorPanelAction->setShortcut(
-        QKeySequence(QStringLiteral("Ctrl+Shift+B")));
-    m_inspectorPanelAction->setStatusTip(
-        QStringLiteral("Keep the right Inspector panel available"));
-    connect(m_inspectorPanelAction, &QAction::triggered,
-            this, [this](bool visible) {
-                if (visible) {
-                    showWorkbenchPanel(m_inspectorDock);
-                }
-            });
-
-    m_domainManagerPanelAction = new QAction(
-        QStringLiteral("Domain Manager"), this);
-    m_domainManagerPanelAction->setObjectName(
-        workbench::domainManagerToggleActionName);
-    m_domainManagerPanelAction->setCheckable(true);
-    m_domainManagerPanelAction->setChecked(true);
-    m_domainManagerPanelAction->setShortcut(
-        QKeySequence(QStringLiteral("Ctrl+Shift+D")));
-    m_domainManagerPanelAction->setStatusTip(
-        QStringLiteral("Keep the Package-driven Domain Manager available"));
-    connect(m_domainManagerPanelAction, &QAction::triggered,
-            this, [this](bool visible) {
-                if (visible) {
-                    showWorkbenchPanel(m_domainDock);
-                }
-            });
-
-    QAction* resultsPanelAction = m_resultsDock->toggleViewAction();
-    resultsPanelAction->setObjectName(workbench::resultsToggleActionName);
-    resultsPanelAction->setText(QStringLiteral("Diagnostics && Output"));
-    resultsPanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+J")));
-    resultsPanelAction->setStatusTip(QStringLiteral("Show or hide the bottom diagnostics panel"));
-    connect(resultsPanelAction, &QAction::triggered,
-            this, [this](bool visible) {
-                if (visible) {
-                    showResultsDock();
-                }
-            });
+    m_panelNavigator = new ui::WorkbenchPanelNavigator(
+        *this,
+        QList<ui::WorkbenchPanelRoute>{
+            {ui::WorkbenchPanelId::Package,
+             m_packageDock,
+             ui::PanelVisibilityMode::ResponsivePreference,
+             [this](ui::WorkbenchPanelIntent) {
+                 return ui::firstAvailableFocusTarget(
+                     m_packageDock,
+                     {m_creationPackageSelector, m_installPackageButton});
+             }},
+            {ui::WorkbenchPanelId::Inspector,
+             m_inspectorDock,
+             ui::PanelVisibilityMode::ResponsivePreference,
+             [this](ui::WorkbenchPanelIntent) {
+                 return ui::firstAvailableFocusTarget(
+                     m_inspectorDock,
+                     {m_endpointConfigurationPanel->preferredFocusTarget(),
+                      m_elementConfigurationPanel->preferredFocusTarget(),
+                      m_inspectorSummaryPanel->preferredFocusTarget(),
+                      m_inspectorDesignSettings->preferredFocusTarget(),
+                      m_inspectorScroll});
+             }},
+            {ui::WorkbenchPanelId::Domain,
+             m_domainDock,
+             ui::PanelVisibilityMode::ResponsivePreference,
+             [this](ui::WorkbenchPanelIntent intent) {
+                 return intent == ui::WorkbenchPanelIntent::EditSelection
+                     ? m_domainManager->preferredAssignmentFocusTarget()
+                     : m_domainManager->preferredFocusTarget();
+             }},
+            {ui::WorkbenchPanelId::Results,
+             m_resultsDock,
+             ui::PanelVisibilityMode::NativeDock,
+             [this](ui::WorkbenchPanelIntent) {
+                 QWidget* pageTarget = nullptr;
+                 QWidget* pageFallback = nullptr;
+                 if (m_resultTabs->currentWidget()
+                     == m_diagnosticsResultsPage) {
+                     pageTarget = m_drcTable->rowCount() > 0
+                         ? static_cast<QWidget*>(m_drcTable)
+                         : static_cast<QWidget*>(m_diagnosticsStatus);
+                 } else if (m_resultTabs->currentWidget()
+                            == m_activityLog) {
+                     pageTarget = m_activityLog;
+                 } else {
+                     pageTarget = m_artifactTable->rowCount() > 0
+                         ? static_cast<QWidget*>(m_artifactTable)
+                         : static_cast<QWidget*>(m_outputRoot);
+                     pageFallback = m_generationStatus;
+                 }
+                 return ui::firstAvailableFocusTarget(
+                     m_resultsDock,
+                     {pageTarget, pageFallback, m_resultTabs->tabBar()});
+             }},
+        });
+    m_packagePanelAction = m_panelNavigator->visibilityAction(
+        ui::WorkbenchPanelId::Package);
+    m_inspectorPanelAction = m_panelNavigator->visibilityAction(
+        ui::WorkbenchPanelId::Inspector);
+    m_domainManagerPanelAction = m_panelNavigator->visibilityAction(
+        ui::WorkbenchPanelId::Domain);
+    connect(
+        m_panelNavigator,
+        &ui::WorkbenchPanelNavigator::panelActivationRequested,
+        this,
+        &FinepaperMainWindow::activateWorkbenchPanel);
+    connect(
+        m_panelNavigator,
+        &ui::WorkbenchPanelNavigator::workspaceFocusRequested,
+        this,
+        &FinepaperMainWindow::focusCurrentCenterView);
+    connect(
+        m_panelNavigator,
+        &ui::WorkbenchPanelNavigator::panelActivationFailed,
+        this,
+        [this](ui::WorkbenchPanelId id, ui::WorkbenchPanelIntent) {
+            const QAction* action = m_panelNavigator
+                ? m_panelNavigator->navigationAction(id) : nullptr;
+            const QString command = action
+                ? action->text() : QStringLiteral("Panel navigation");
+            statusBar()->showMessage(
+                command
+                    + QStringLiteral(
+                        ": panel content did not become ready for focus."),
+                panelNavigationFailureStatusDurationMs);
+        });
+    m_inspectorSummaryPanel->editDomainAssignmentsRequested = [this] {
+        if (m_panelNavigator) {
+            m_panelNavigator->activate(
+                ui::WorkbenchPanelId::Domain,
+                ui::WorkbenchPanelIntent::EditSelection);
+        }
+    };
+    m_inspectorSummaryPanel->reviewDiagnosticsRequested = [this] {
+        if (m_panelNavigator) {
+            m_panelNavigator->activate(
+                ui::WorkbenchPanelId::Results,
+                ui::WorkbenchPanelIntent::ReviewDiagnostics);
+        }
+    };
 
     QMenu* fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
     fileMenu->addAction(m_newAction);
@@ -2161,10 +2192,7 @@ void FinepaperMainWindow::createActions() {
     }
     viewMenu->addSeparator();
     auto* panelsMenu = viewMenu->addMenu(QStringLiteral("Panels"));
-    panelsMenu->addAction(m_packagePanelAction);
-    panelsMenu->addAction(m_inspectorPanelAction);
-    panelsMenu->addAction(m_domainManagerPanelAction);
-    panelsMenu->addAction(resultsPanelAction);
+    m_panelNavigator->addVisibilityActions(*panelsMenu);
     viewMenu->addSeparator();
     viewMenu->addAction(m_canvasFocusAction);
     viewMenu->addSeparator();
@@ -2309,102 +2337,7 @@ void FinepaperMainWindow::createActions() {
     panelNavigationButton->setMenu(panelNavigationMenu);
     panelNavigationMenu->addAction(m_canvasFocusAction);
     panelNavigationMenu->addSeparator();
-    using PanelFocusResolver = std::function<QWidget*()>;
-    const auto addPanelNavigation = [this, panelNavigationMenu](
-        const QString& objectName,
-        const QString& text,
-        QDockWidget* dock,
-        PanelFocusResolver resolveFocusTarget) {
-        auto* action = new QAction(text, panelNavigationMenu);
-        action->setObjectName(objectName);
-        panelNavigationMenu->addAction(action);
-        QObject::connect(
-            action, &QAction::triggered, this,
-            [this, dock, resolveFocusTarget] {
-                showWorkbenchPanel(dock);
-                QTimer::singleShot(
-                    0, dock,
-                    [dock, resolveFocusTarget] {
-                        QWidget* focusTarget = resolveFocusTarget();
-                        if (focusTarget && focusTarget->isEnabled()
-                            && focusTarget->isVisibleTo(dock)) {
-                            focusTarget->setFocus(
-                                Qt::ShortcutFocusReason);
-                        }
-                    });
-            });
-    };
-    addPanelNavigation(
-        workbench::packageNavigationActionName,
-        QStringLiteral("Package Library"), m_packageDock,
-        [this] {
-            return firstPanelFocusTarget(
-                m_packageDock,
-                {m_creationPackageSelector, m_installPackageButton});
-        });
-    addPanelNavigation(
-        workbench::inspectorNavigationActionName,
-        QStringLiteral("Inspector"), m_inspectorDock,
-        [this] {
-            return firstPanelFocusTarget(
-                m_inspectorDock,
-                {m_endpointConfigurationPanel->findChild<QComboBox*>(
-                     QStringLiteral(
-                         "finepaper.endpointConfiguration.type")),
-                 m_elementConfigurationPanel->findChild<QComboBox*>(
-                     QStringLiteral(
-                         "finepaper.elementConfiguration.propertySet")),
-                 m_inspectorDesignSettings->findChild<QToolButton*>(
-                     QStringLiteral(
-                         "finepaper.inspectorDesignSettingsToggle")),
-                 m_inspectorSummaryPanel->findChild<QLabel*>(
-                     QStringLiteral("finepaper.designOverview")),
-                 m_inspectorScroll});
-        });
-    addPanelNavigation(
-        workbench::domainNavigationActionName,
-        QStringLiteral("Domain Manager"), m_domainDock,
-        [this] {
-            return firstPanelFocusTarget(
-                m_domainDock,
-                {m_domainManager->findChild<QPushButton*>(
-                     QStringLiteral(
-                         "finepaper.domainManager.applyAssignment")),
-                 m_domainManager->findChild<QPushButton*>(
-                     QStringLiteral(
-                         "finepaper.domainManager.discardAssignment")),
-                 m_domainManager->findChild<QComboBox*>(
-                     QStringLiteral(
-                         "finepaper.domainManager.typeSelector")),
-                 m_domainManager->findChild<QPushButton*>(
-                     QStringLiteral(
-                         "finepaper.domainManager.completeConfiguration")),
-                 m_domainManager->findChild<QLabel*>(
-                     QStringLiteral("finepaper.domainManager.status"))});
-        });
-    panelNavigationMenu->addSeparator();
-    addPanelNavigation(
-        workbench::resultsNavigationActionName,
-        QStringLiteral("Diagnostics && Output"), m_resultsDock,
-        [this] {
-            QWidget* pageTarget = nullptr;
-            QWidget* pageFallback = nullptr;
-            if (m_resultTabs->currentIndex() == 0) {
-                pageTarget = m_drcTable->rowCount() > 0
-                    ? static_cast<QWidget*>(m_drcTable)
-                    : static_cast<QWidget*>(m_diagnosticsStatus);
-            } else if (m_resultTabs->currentIndex() == 1) {
-                pageTarget = m_activityLog;
-            } else {
-                pageTarget = m_artifactTable->rowCount() > 0
-                    ? static_cast<QWidget*>(m_artifactTable)
-                    : static_cast<QWidget*>(m_outputRoot);
-                pageFallback = m_generationStatus;
-            }
-            return firstPanelFocusTarget(
-                m_resultsDock,
-                {pageTarget, pageFallback, m_resultTabs->tabBar()});
-        });
+    m_panelNavigator->addNavigationActions(*panelNavigationMenu);
     m_mainToolbar->addSeparator();
     m_mainToolbar->addWidget(panelNavigationButton);
 
@@ -2482,10 +2415,27 @@ void FinepaperMainWindow::restoreWorkbenchState() {
     }
     selectCenterView(settings.value(workbench::centerViewSetting,
                                     workbench::editorViewId).toString());
-    m_resultTabs->setCurrentIndex(std::clamp(
-        settings.value(workbench::resultTabSetting, 0).toInt(),
-        0,
-        (std::max)(0, m_resultTabs->count() - 1)));
+    const QVariant savedResultTab = settings.value(
+        workbench::resultTabSetting);
+    QWidget* restoredResultPage = nullptr;
+    const QString savedResultPageId = savedResultTab.toString();
+    for (int index = 0; index < m_resultTabs->count(); ++index) {
+        QWidget* page = m_resultTabs->widget(index);
+        if (page && page->objectName() == savedResultPageId) {
+            restoredResultPage = page;
+            break;
+        }
+    }
+    if (!restoredResultPage && savedResultTab.isValid()) {
+        bool legacyIndexValid = false;
+        const int legacyIndex = savedResultTab.toInt(&legacyIndexValid);
+        if (legacyIndexValid) {
+            restoredResultPage = m_resultTabs->widget(legacyIndex);
+        }
+    }
+    m_resultTabs->setCurrentWidget(
+        restoredResultPage ? restoredResultPage
+                           : m_diagnosticsResultsPage);
     if (m_workbenchLayoutController) {
         m_workbenchLayoutController->restoreUserPanelVisibility(
             settings.value(workbench::panelVisibilitySetting).toMap());
@@ -2522,7 +2472,11 @@ void FinepaperMainWindow::closeEvent(QCloseEvent* event) {
                               && !m_canvasFocusRestoreCenterViewId.isEmpty()
                           ? m_canvasFocusRestoreCenterViewId
                           : m_viewRegistry->currentViewId());
-    settings.setValue(workbench::resultTabSetting, m_resultTabs->currentIndex());
+    const QWidget* currentResultPage = m_resultTabs->currentWidget();
+    settings.setValue(
+        workbench::resultTabSetting,
+        currentResultPage ? currentResultPage->objectName()
+                          : m_diagnosticsResultsPage->objectName());
     if (m_workbenchLayoutController) {
         settings.setValue(
             workbench::panelVisibilitySetting,
@@ -2582,7 +2536,7 @@ void FinepaperMainWindow::reloadPackages() {
         populateDiagnostics({}, QStringLiteral("Package discovery"));
     }
     if (reload.catalogFatal()) {
-        m_resultTabs->setCurrentIndex(0);
+        m_resultTabs->setCurrentWidget(m_diagnosticsResultsPage);
         showResultsDock();
         QString summary = QStringLiteral("Package reload failed.");
         for (const Diagnostic& diagnostic : diagnostics) {
@@ -2594,7 +2548,7 @@ void FinepaperMainWindow::reloadPackages() {
         appendActivity(summary);
         statusBar()->showMessage(summary);
     } else if (!reload.committed()) {
-        m_resultTabs->setCurrentIndex(0);
+        m_resultTabs->setCurrentWidget(m_diagnosticsResultsPage);
         showResultsDock();
         const QString summary = QStringLiteral(
             "Package reload kept the previous catalog because all %1 discovered %2 were rejected.")
@@ -4113,7 +4067,7 @@ void FinepaperMainWindow::presentValidationResult(
     const operations::DesignStamp& stamp) {
     populateDiagnostics(
         result.diagnostics, QStringLiteral("Validation"), stamp);
-    m_resultTabs->setCurrentIndex(0);
+    m_resultTabs->setCurrentWidget(m_diagnosticsResultsPage);
     showResultsDock();
     appendActivity(result.success
                        ? QStringLiteral("Validation completed without errors.")
@@ -4219,7 +4173,7 @@ void FinepaperMainWindow::presentGenerationResult(
     populateGenerationOutputs(result, stamp);
     populateDiagnostics(
         result.diagnostics, QStringLiteral("RTL generation"), stamp);
-    m_resultTabs->setCurrentIndex(2);
+    m_resultTabs->setCurrentWidget(m_generationResultsPage);
     showResultsDock();
     appendActivity(result.success
                        ? QStringLiteral("RTL generation completed: %1 artifact(s).")
@@ -4609,6 +4563,7 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
     if (!m_inspectorSummaryPanel) {
         return;
     }
+    updateInspectorContextActions();
     if (!m_design) {
         m_inspectorSummaryPanel->setSelectionSummary(std::nullopt);
         return;
@@ -4843,6 +4798,23 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
     m_inspectorSummaryPanel->setSelectionSummary(summary);
 }
 
+void FinepaperMainWindow::updateInspectorContextActions() {
+    if (!m_inspectorSummaryPanel) {
+        return;
+    }
+    const PackageDefinition* package = packageForDesign();
+    const bool canEditDomainAssignments = m_design && package
+        && formatVersionSupportsDomains(m_design->formatVersion)
+        && formatVersionSupportsDomains(package->formatVersion)
+        && m_domainManager
+        && m_domainManager->canActivateAssignmentPage();
+    const bool canReviewDiagnostics = m_design
+        && (m_diagnosticsStamp.has_value()
+            || (m_drcTable && m_drcTable->rowCount() > 0));
+    m_inspectorSummaryPanel->setContextActions(
+        {canEditDomainAssignments, canReviewDiagnostics});
+}
+
 void FinepaperMainWindow::adoptDesignResult(
     const DesignResult& result,
     const QString& action,
@@ -5037,7 +5009,12 @@ void FinepaperMainWindow::populateDiagnostics(
         ? QStringLiteral("Diagnostics") : source.trimmed();
     m_diagnosticsStamp = std::move(stamp);
     m_problemReport->setPlainText(diagnosticText(diagnostics));
-    m_resultTabs->setTabText(0, workbench::drcTabTitle);
+    const int diagnosticsTab = m_resultTabs->indexOf(
+        m_diagnosticsResultsPage);
+    if (diagnosticsTab >= 0) {
+        m_resultTabs->setTabText(
+            diagnosticsTab, workbench::drcTabTitle);
+    }
 
     QString status;
     QString role = QStringLiteral("muted");
@@ -5075,6 +5052,7 @@ void FinepaperMainWindow::populateDiagnostics(
     setStatusLabel(m_diagnosticsStatus, status, role);
     setStatusLabel(m_problemReportStatus, status, role);
     updateResultFreshness();
+    updateInspectorContextActions();
     requestResultsDockReadabilityUpdate();
 }
 
@@ -5100,7 +5078,12 @@ void FinepaperMainWindow::populateGenerationOutputs(
     m_generationPublicationKind = result.success
         ? GenerationPublicationKind::Artifacts
         : GenerationPublicationKind::FailedAttempt;
-    m_resultTabs->setTabText(2, workbench::generationTabTitle);
+    const int generationTab = m_resultTabs->indexOf(
+        m_generationResultsPage);
+    if (generationTab >= 0) {
+        m_resultTabs->setTabText(
+            generationTab, workbench::generationTabTitle);
+    }
     setStatusLabel(
         m_generationStatus,
         result.success
@@ -5122,7 +5105,7 @@ void FinepaperMainWindow::showDiagnostics(const QVector<Diagnostic>& diagnostics
                                           bool modalOnError) {
     populateDiagnostics(diagnostics, title);
     if (modalOnError && hasErrors(diagnostics)) {
-        m_resultTabs->setCurrentIndex(0);
+        m_resultTabs->setCurrentWidget(m_diagnosticsResultsPage);
         showResultsDock();
         QMessageBox::critical(this, title, diagnosticText(diagnostics));
     }
@@ -5156,6 +5139,35 @@ void FinepaperMainWindow::showWorkbenchPanel(QDockWidget* dock) {
         dock->show();
     }
     dock->raise();
+}
+
+void FinepaperMainWindow::activateWorkbenchPanel(
+    ui::WorkbenchPanelId id,
+    ui::WorkbenchPanelIntent intent) {
+    QDockWidget* dock = m_panelNavigator
+        ? m_panelNavigator->dock(id) : nullptr;
+    switch (id) {
+    case ui::WorkbenchPanelId::Package:
+        break;
+    case ui::WorkbenchPanelId::Inspector:
+        break;
+    case ui::WorkbenchPanelId::Domain:
+        if (intent == ui::WorkbenchPanelIntent::EditSelection
+            && m_domainManager) {
+            m_domainManager->activateAssignmentPage();
+        }
+        break;
+    case ui::WorkbenchPanelId::Results:
+        if (intent == ui::WorkbenchPanelIntent::ReviewDiagnostics
+            && m_resultTabs) {
+            m_resultTabs->setCurrentWidget(m_diagnosticsResultsPage);
+        }
+        break;
+    }
+    showWorkbenchPanel(dock);
+    if (dock == m_resultsDock) {
+        requestResultsDockReadabilityUpdate();
+    }
 }
 
 std::optional<ui::WorkbenchPanelRole>
@@ -5362,7 +5374,7 @@ void FinepaperMainWindow::rebuildCompactDomainLayerMenu() {
 void FinepaperMainWindow::focusCanvasWorkspace() {
     if (m_editorEmptyStateOverlay
         && m_editorEmptyStateOverlay->isVisibleTo(this)) {
-        QWidget* focusTarget = firstPanelFocusTarget(
+        QWidget* focusTarget = ui::firstAvailableFocusTarget(
             m_editorEmptyStateOverlay,
             {m_emptyCreateButton, m_emptyOpenButton, m_emptyInstallButton});
         if (focusTarget) {
@@ -5570,8 +5582,18 @@ void FinepaperMainWindow::clearPublishedResults() {
         m_problemReport->clear();
     }
     if (m_resultTabs) {
-        m_resultTabs->setTabText(0, workbench::drcTabTitle);
-        m_resultTabs->setTabText(2, workbench::generationTabTitle);
+        const int diagnosticsTab = m_resultTabs->indexOf(
+            m_diagnosticsResultsPage);
+        const int generationTab = m_resultTabs->indexOf(
+            m_generationResultsPage);
+        if (diagnosticsTab >= 0) {
+            m_resultTabs->setTabText(
+                diagnosticsTab, workbench::drcTabTitle);
+        }
+        if (generationTab >= 0) {
+            m_resultTabs->setTabText(
+                generationTab, workbench::generationTabTitle);
+        }
     }
     setStatusLabel(
         m_diagnosticsStatus,
@@ -5585,6 +5607,7 @@ void FinepaperMainWindow::clearPublishedResults() {
         m_generationStatus,
         QStringLiteral("No RTL has been generated for this design revision."),
         QStringLiteral("muted"));
+    updateInspectorContextActions();
     requestResultsDockReadabilityUpdate();
 }
 
@@ -5616,8 +5639,13 @@ void FinepaperMainWindow::updateResultFreshness() {
         if (m_resultTabs) {
             const QString tabText = QStringLiteral("%1 (out of date)")
                 .arg(workbench::drcTabTitle);
-            layoutChanged |= m_resultTabs->tabText(0) != tabText;
-            m_resultTabs->setTabText(0, tabText);
+            const int diagnosticsTab = m_resultTabs->indexOf(
+                m_diagnosticsResultsPage);
+            if (diagnosticsTab >= 0) {
+                layoutChanged |=
+                    m_resultTabs->tabText(diagnosticsTab) != tabText;
+                m_resultTabs->setTabText(diagnosticsTab, tabText);
+            }
         }
     }
     if (m_generationStamp && *m_generationStamp != current) {
@@ -5659,8 +5687,13 @@ void FinepaperMainWindow::updateResultFreshness() {
         if (m_resultTabs) {
             const QString tabText = QStringLiteral("%1 (out of date)")
                 .arg(workbench::generationTabTitle);
-            layoutChanged |= m_resultTabs->tabText(2) != tabText;
-            m_resultTabs->setTabText(2, tabText);
+            const int generationTab = m_resultTabs->indexOf(
+                m_generationResultsPage);
+            if (generationTab >= 0) {
+                layoutChanged |=
+                    m_resultTabs->tabText(generationTab) != tabText;
+                m_resultTabs->setTabText(generationTab, tabText);
+            }
         }
     }
     if (layoutChanged) {

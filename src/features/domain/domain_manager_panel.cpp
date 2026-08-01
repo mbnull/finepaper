@@ -2,6 +2,7 @@
 
 #include "features/domain/domain_instance_dialog.h"
 #include "features/domain/presentation/domain_text.h"
+#include "ui/common/focus_target.h"
 #include "ui/theme/ui_tokens.h"
 
 #include <QAbstractItemView>
@@ -165,6 +166,8 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     m_tabs->setObjectName(QStringLiteral("finepaper.domainManager.tabs"));
 
     auto* instancesPage = new QWidget;
+    instancesPage->setObjectName(
+        QStringLiteral("finepaper.domainManager.instancesPage"));
     auto* instancesLayout = new QVBoxLayout(instancesPage);
     instancesLayout->setContentsMargins(
         0, ui::UiMetrics::spacing8, 0, 0);
@@ -210,8 +213,10 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     instancesLayout->addLayout(instanceButtons);
     m_tabs->addTab(instancesPage, QStringLiteral("Instances / Legend"));
 
-    auto* assignmentPage = new QWidget;
-    auto* assignmentLayout = new QVBoxLayout(assignmentPage);
+    m_assignmentPage = new QWidget;
+    m_assignmentPage->setObjectName(
+        QStringLiteral("finepaper.domainManager.assignmentPage"));
+    auto* assignmentLayout = new QVBoxLayout(m_assignmentPage);
     assignmentLayout->setContentsMargins(
         0, ui::UiMetrics::spacing8, 0, 0);
     auto* selectionButtons = new QHBoxLayout;
@@ -273,7 +278,7 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     assignmentButtons->addWidget(m_discardAssignment, 1, 1);
     assignmentButtons->setColumnStretch(1, 1);
     assignmentLayout->addLayout(assignmentButtons);
-    m_tabs->addTab(assignmentPage, QStringLiteral("Assign selection"));
+    m_tabs->addTab(m_assignmentPage, QStringLiteral("Assign selection"));
 
     root->addWidget(m_tabs, 1);
 
@@ -420,8 +425,86 @@ void DomainManagerPanel::setDiagnostics(
     m_diagnostics->setVisible(!summary.isEmpty());
 }
 
+bool DomainManagerPanel::canActivateAssignmentPage() const {
+    return m_assignmentEdited
+        || assignableDomainTypeForSelection().has_value();
+}
+
+void DomainManagerPanel::activateAssignmentPage() {
+    if (!m_assignmentEdited) {
+        const std::optional<QString> assignableType =
+            assignableDomainTypeForSelection();
+        if (!assignableType) {
+            return;
+        }
+        const int typeIndex = m_typeSelector->findData(*assignableType);
+        if (typeIndex >= 0
+            && typeIndex != m_typeSelector->currentIndex()) {
+            m_typeSelector->setCurrentIndex(typeIndex);
+        }
+    }
+    if (m_tabs && m_assignmentPage) {
+        m_tabs->setCurrentWidget(m_assignmentPage);
+    }
+}
+
+QWidget* DomainManagerPanel::preferredFocusTarget() {
+    if ((!m_design || !m_package || m_typeSelector->count() == 0)
+        && m_status) {
+        return ui::firstAvailableFocusTarget(this, {m_status});
+    }
+    return ui::firstAvailableFocusTarget(
+        this,
+        {m_typeSelector, m_instances, m_completeConfiguration});
+}
+
+QWidget* DomainManagerPanel::preferredAssignmentFocusTarget() {
+    return ui::firstAvailableFocusTarget(
+        this,
+        {m_applyAssignment, m_singleAssignment, m_multipleAssignment,
+         m_typeSelector, m_discardAssignment, m_completeConfiguration});
+}
+
 void DomainManagerPanel::discardPendingAssignmentChanges() {
     discardAssignment();
+}
+
+std::optional<QString>
+DomainManagerPanel::assignableDomainTypeForSelection() const {
+    if (!m_design || !m_package || m_selection.isEmpty()
+        || !formatVersionSupportsDomains(m_design->formatVersion)
+        || !formatVersionSupportsDomains(m_package->formatVersion)) {
+        return std::nullopt;
+    }
+
+    const auto aggregateIsAssignable = [](
+        const DomainAssignmentAggregate& aggregate) {
+        return aggregate.eligibleElements > 0
+            && !aggregate.domainIds.isEmpty()
+            && aggregate.assignmentRulesAreValid();
+    };
+    const auto typeIsAssignable = [this, &aggregateIsAssignable](
+                                      const QString& typeId) {
+        if (typeId.isEmpty() || !m_package->domainType(typeId)) {
+            return false;
+        }
+        const DomainAssignmentAggregate aggregate =
+            buildDomainAssignmentAggregate(
+                *m_design, *m_package, m_selection, typeId);
+        return aggregateIsAssignable(aggregate);
+    };
+
+    QString currentType = currentDomainType();
+    if (m_assignment.domainType == currentType
+        && aggregateIsAssignable(m_assignment)) {
+        return currentType;
+    }
+    for (const DomainTypeDefinition& type : m_package->domainTypes) {
+        if (type.id != currentType && typeIsAssignable(type.id)) {
+            return type.id;
+        }
+    }
+    return std::nullopt;
 }
 
 QString DomainManagerPanel::currentDomainType() const {

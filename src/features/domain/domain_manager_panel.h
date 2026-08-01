@@ -41,6 +41,10 @@ public:
     void setCanvasDomainType(const QString& domainType);
     void setBusy(bool busy);
     void setDiagnostics(const QVector<Diagnostic>& diagnostics);
+    [[nodiscard]] bool canActivateAssignmentPage() const;
+    void activateAssignmentPage();
+    [[nodiscard]] QWidget* preferredFocusTarget();
+    [[nodiscard]] QWidget* preferredAssignmentFocusTarget();
 
     [[nodiscard]] QString currentDomainType() const;
     [[nodiscard]] bool hasPendingAssignmentChanges() const {
@@ -66,6 +70,8 @@ public:
 private:
     [[nodiscard]] const DomainTypeDefinition* selectedType() const;
     [[nodiscard]] const DomainDefinition* selectedDomain() const;
+    [[nodiscard]] std::optional<QString>
+        assignableDomainTypeForSelection() const;
     void rebuildTypeSelector(const QString& preferredType);
     void refreshCurrentType();
     void refreshInstances();
@@ -105,6 +111,7 @@ private:
     QComboBox* m_typeSelector = nullptr;
     QPushButton* m_showOnCanvas = nullptr;
     QTabWidget* m_tabs = nullptr;
+    QWidget* m_assignmentPage = nullptr;
     QTableWidget* m_instances = nullptr;
     QPushButton* m_addDomain = nullptr;
     QPushButton* m_editDomain = nullptr;
