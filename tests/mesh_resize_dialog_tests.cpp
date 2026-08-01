@@ -1,4 +1,5 @@
 #include "features/topology/mesh_resize_dialog.h"
+#include "features/topology/topology_text.h"
 
 #include <QApplication>
 #include <QComboBox>
@@ -182,6 +183,29 @@ const DomainMembership* membershipFor(
                 == ElementRef{ElementKind::Router, routerId};
         });
     return found == memberships.cend() ? nullptr : &*found;
+}
+
+void configurableTopologyTextPreservesPercentPlaceholders() {
+    const QString routerId = QStringLiteral("router %2 / %3 / %4");
+    check(
+        topology_text::meshResizeRouterListText(routerId, 7, 9, false)
+            == QStringLiteral(
+                "router %2 / %3 / %4  ·  (7, 9)  ·  needs assignment"),
+        QStringLiteral(
+            "Mesh resize Router rows preserve placeholder-like identifier text"));
+    check(
+        topology_text::meshResizeRouterHeadingText(routerId, 7, 9)
+            == QStringLiteral(
+                "router %2 / %3 / %4 at Mesh coordinate (7, 9)"),
+        QStringLiteral(
+            "Mesh resize headings preserve placeholder-like Router identifiers"));
+
+    const QString domainLabel = QStringLiteral("Power %2 / Clock %3");
+    check(
+        topology_text::compactDomainLegendEntryText(domainLabel, 4)
+            == QStringLiteral("Power %2 / Clock %3 · 4 total"),
+        QStringLiteral(
+            "compact Domain legends preserve placeholder-like Package labels"));
 }
 
 void arbitraryTypesAndPerRouterAssignmentsAreComplete() {
@@ -533,6 +557,7 @@ void endpointDetachIsAlwaysAHardBlocker() {
 
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
+    configurableTopologyTextPreservesPercentPlaceholders();
     arbitraryTypesAndPerRouterAssignmentsAreComplete();
     missingRequiredInstancesRemainBlocked();
     exactImpactConfirmationIsExplicitAndEfficient();

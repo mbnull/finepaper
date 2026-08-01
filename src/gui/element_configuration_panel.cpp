@@ -1,9 +1,11 @@
 #include "gui/element_configuration_panel.h"
 
 #include "application/element_configuration.h"
+#include "package/parameter_schema_identity.h"
 #include "ui/common/schema_value_editor.h"
 
 #include <QComboBox>
+#include <QCollator>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -153,6 +155,16 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
     m_overrideState->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(m_overrideState);
 
+    m_draftStatus = new QLabel(this);
+    m_draftStatus->setObjectName(
+        QStringLiteral("finepaper.elementConfiguration.draftStatus"));
+    m_draftStatus->setProperty(
+        "finepaperRole", QStringLiteral("warning"));
+    m_draftStatus->setWordWrap(true);
+    m_draftStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_draftStatus->hide();
+    layout->addWidget(m_draftStatus);
+
     m_formContent = new QWidget(this);
     m_formContent->setObjectName(
         QStringLiteral("finepaper.elementConfiguration.form"));
@@ -176,12 +188,23 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
     m_reset = new QPushButton(QStringLiteral("Reset to Package Defaults"), this);
     m_reset->setObjectName(
         QStringLiteral("finepaper.elementConfiguration.reset"));
+    m_discardDraft = new QPushButton(
+        QStringLiteral("Discard Unapplied Changes"), this);
+    m_discardDraft->setObjectName(
+        QStringLiteral("finepaper.elementConfiguration.discardDraft"));
+    m_discardDraft->setProperty(
+        "finepaperRole", QStringLiteral("quiet"));
+    m_discardDraft->hide();
     buttons->addWidget(m_apply);
     buttons->addWidget(m_reset);
+    buttons->addWidget(m_discardDraft);
     layout->addLayout(buttons);
 
     connect(m_propertySetSelector, &QComboBox::currentIndexChanged,
-            this, [this] { rebuildForm(); });
+            this, [this] {
+                captureCurrentDraft();
+                rebuildForm();
+            });
     connect(m_apply, &QPushButton::clicked, this, [this] {
         const ElementPropertySetDefinition* propertySet = currentPropertySet();
         if (!m_projection.element || !propertySet || !applyRequested) {
@@ -198,6 +221,13 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
         }
         resetRequested(*m_projection.element, propertySet->id);
     });
+    connect(m_discardDraft, &QPushButton::clicked, this, [this] {
+        if (!m_projection.element || m_currentPropertySetId.isEmpty()) {
+            return;
+        }
+        discardDraft(
+            m_designIdentity, *m_projection.element, m_currentPropertySetId);
+    });
 
     setContext(nullptr, nullptr, std::nullopt);
 }
@@ -206,11 +236,14 @@ void ElementConfigurationPanel::setContext(
     const NocDesign* design,
     const PackageDefinition* package,
     std::optional<ElementRef> selection,
-    bool busy) {
+    bool busy,
+    QString designIdentity) {
+    captureCurrentDraft();
     const QString preferredPropertySet =
         m_propertySetSelector->currentData().toString();
     m_design = design;
     m_package = package;
+    m_designIdentity = std::move(designIdentity);
     m_busy = busy;
     m_projection = projectElementConfigurationPanel(
         design, package, std::move(selection));
@@ -226,6 +259,130 @@ void ElementConfigurationPanel::setBusy(bool busy) {
     m_busy = busy;
     showProjectionMessage();
     updateButtons();
+}
+
+bool ElementConfigurationPanel::hasUnappliedDrafts(
+    const QString& designIdentity) const {
+    const auto drafts = m_drafts.constFind(designIdentity);
+    return drafts != m_drafts.cend() && !drafts->isEmpty();
+}
+
+bool ElementConfigurationPanel::hasUnappliedDraft(
+    const QString& designIdentity,
+    const ElementRef& element) const {
+    const auto drafts = m_drafts.constFind(designIdentity);
+    return drafts != m_drafts.cend()
+        && std::any_of(
+            drafts->cbegin(), drafts->cend(),
+            [&element](const CachedDraft& draft) {
+                return draft.element == element;
+            });
+}
+
+QStringList ElementConfigurationPanel::unappliedDraftDescriptions(
+    const QString& designIdentity) const {
+    QStringList descriptions;
+    const auto drafts = m_drafts.constFind(designIdentity);
+    if (drafts == m_drafts.cend()) {
+        return descriptions;
+    }
+    descriptions.reserve(drafts->size());
+    for (const CachedDraft& draft : *drafts) {
+        QString propertySetLabel = draft.propertySetId;
+        if (m_package) {
+            if (const ElementPropertySetDefinition* propertySet =
+                    m_package->elementPropertySet(draft.propertySetId)) {
+                propertySetLabel = propertySet->label.trimmed().isEmpty()
+                    ? propertySet->id : propertySet->label;
+            }
+        }
+        descriptions.append(
+            QStringLiteral("%1 %2 — %3")
+                .arg(elementKindLabel(draft.element.kind),
+                     draft.element.id,
+                     propertySetLabel));
+    }
+    QCollator collator;
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    collator.setNumericMode(true);
+    std::sort(
+        descriptions.begin(), descriptions.end(),
+        [&collator](const QString& left, const QString& right) {
+            const int comparison = collator.compare(left, right);
+            return comparison == 0 ? left < right : comparison < 0;
+        });
+    return descriptions;
+}
+
+void ElementConfigurationPanel::discardDraft(
+    const QString& designIdentity,
+    const ElementRef& element,
+    const QString& propertySetId) {
+    auto drafts = m_drafts.find(designIdentity);
+    if (drafts == m_drafts.end()) {
+        return;
+    }
+    const qsizetype removed = drafts->removeIf(
+        [&element, &propertySetId](const CachedDraft& draft) {
+            return draft.element == element
+                && draft.propertySetId == propertySetId;
+        });
+    if (removed == 0) {
+        return;
+    }
+    if (drafts->isEmpty()) {
+        m_drafts.erase(drafts);
+    }
+    if (m_designIdentity == designIdentity && m_projection.element
+        && *m_projection.element == element
+        && m_currentPropertySetId == propertySetId) {
+        rebuildForm();
+    }
+    notifyDraftStateChanged();
+}
+
+void ElementConfigurationPanel::discardDraftsForElement(
+    const QString& designIdentity,
+    const ElementRef& element) {
+    auto drafts = m_drafts.find(designIdentity);
+    if (drafts == m_drafts.end()) {
+        return;
+    }
+    const qsizetype removed = drafts->removeIf(
+        [&element](const CachedDraft& draft) {
+            return draft.element == element;
+        });
+    if (removed == 0) {
+        return;
+    }
+    if (drafts->isEmpty()) {
+        m_drafts.erase(drafts);
+    }
+    if (m_designIdentity == designIdentity && m_projection.element
+        && *m_projection.element == element) {
+        rebuildForm();
+    }
+    notifyDraftStateChanged();
+}
+
+void ElementConfigurationPanel::clearDraftsForDesign(
+    const QString& designIdentity) {
+    if (m_drafts.remove(designIdentity) == 0) {
+        return;
+    }
+    if (m_designIdentity == designIdentity) {
+        rebuildForm();
+    }
+    notifyDraftStateChanged();
+}
+
+void ElementConfigurationPanel::clearDrafts() {
+    if (m_drafts.isEmpty()) {
+        return;
+    }
+    m_drafts.clear();
+    rebuildForm();
+    notifyDraftStateChanged();
 }
 
 void ElementConfigurationPanel::rebuildPropertySetSelector(
@@ -256,8 +413,12 @@ void ElementConfigurationPanel::rebuildPropertySetSelector(
 void ElementConfigurationPanel::rebuildForm() {
     clearForm();
     m_resolved = false;
+    m_draftConflict = false;
+    m_currentPropertySetId.clear();
+    m_currentSchemaIdentity.clear();
     m_initialEffectiveValues = {};
     m_overrideValues = {};
+    m_initialEditorState.clear();
 
     const ElementPropertySetDefinition* propertySet = currentPropertySet();
     if (!m_projection.ready() || !m_projection.element || !m_design
@@ -278,6 +439,9 @@ void ElementConfigurationPanel::rebuildForm() {
     }
 
     m_resolved = true;
+    m_currentPropertySetId = propertySet->id;
+    m_currentSchemaIdentity = elementPropertySchemaIdentity(
+        propertySet->properties);
     m_initialEffectiveValues = resolved.properties;
     m_overrideValues = resolved.overrideProperties;
     m_rows.reserve(propertySet->properties.size());
@@ -318,6 +482,8 @@ void ElementConfigurationPanel::rebuildForm() {
                   .arg(m_overrideValues.size() == 1
                            ? QStringLiteral("property")
                            : QStringLiteral("properties")));
+    m_initialEditorState = currentEditorState();
+    restoreCachedDraft();
     updateButtons();
 }
 
@@ -327,23 +493,184 @@ void ElementConfigurationPanel::clearForm() {
     }
     m_rows.clear();
     m_overrideState->clear();
+    if (m_draftStatus) {
+        m_draftStatus->clear();
+        m_draftStatus->hide();
+    }
 }
 
 void ElementConfigurationPanel::updateButtons() {
     const bool editable = m_projection.ready() && m_resolved && !m_busy;
     const QStringList errors = localErrors();
+    const QHash<QString, SchemaValueEditorDraft> editorState =
+        currentEditorState();
     const bool changed = editable
-        && effectiveValues() != m_initialEffectiveValues;
+        && editorState != m_initialEditorState;
     m_propertySetSelector->setEnabled(m_projection.ready() && !m_busy);
-    m_scroll->setEnabled(editable);
-    m_apply->setEnabled(editable && errors.isEmpty() && changed);
-    m_reset->setEnabled(editable && !m_overrideValues.isEmpty());
+    m_scroll->setEnabled(editable && !m_draftConflict);
+    m_apply->setEnabled(
+        editable && !m_draftConflict && errors.isEmpty() && changed);
+    m_reset->setEnabled(
+        editable && !m_draftConflict && !m_overrideValues.isEmpty());
+    m_discardDraft->setVisible(changed || m_draftConflict);
+    m_discardDraft->setEnabled(!m_busy && (changed || m_draftConflict));
     if (editable && !errors.isEmpty()) {
         m_apply->setToolTip(errors.join(QLatin1Char('\n')));
     } else if (editable && !changed) {
         m_apply->setToolTip(QStringLiteral("No effective value has changed."));
     } else {
         m_apply->setToolTip({});
+    }
+    if (m_draftStatus) {
+        m_draftStatus->setVisible(changed || m_draftConflict);
+        if (m_draftConflict) {
+            m_draftStatus->setProperty(
+                "finepaperRole", QStringLiteral("error"));
+            m_draftStatus->setText(QStringLiteral(
+                "Draft conflict: the durable element configuration or Package "
+                "schema changed after this draft was created. The draft is "
+                "preserved read-only; discard it before editing the new source "
+                "values."));
+        } else if (changed) {
+            m_draftStatus->setProperty(
+                "finepaperRole", QStringLiteral("warning"));
+            m_draftStatus->setText(
+                errors.isEmpty()
+                    ? QStringLiteral(
+                          "Unapplied element changes. Apply them before Save, "
+                          "Validate, or Generate RTL, or explicitly discard "
+                          "the draft when prompted.")
+                    : QStringLiteral(
+                          "This unapplied element draft has validation errors. "
+                          "Correct them or discard the draft before continuing."));
+        }
+    }
+    captureCurrentDraft(editorState);
+}
+
+void ElementConfigurationPanel::captureCurrentDraft() {
+    if (m_updating || m_draftConflict || m_designIdentity.isEmpty()
+        || !m_projection.element || m_currentPropertySetId.isEmpty()
+        || !m_resolved) {
+        return;
+    }
+    captureCurrentDraft(currentEditorState());
+}
+
+void ElementConfigurationPanel::captureCurrentDraft(
+    const QHash<QString, SchemaValueEditorDraft>& editorState) {
+    if (m_updating || m_draftConflict || m_designIdentity.isEmpty()
+        || !m_projection.element || m_currentPropertySetId.isEmpty()
+        || !m_resolved) {
+        return;
+    }
+
+    QVector<CachedDraft>* designDrafts = nullptr;
+    auto existingDesign = m_drafts.find(m_designIdentity);
+    if (existingDesign != m_drafts.end()) {
+        designDrafts = &*existingDesign;
+    }
+    const auto matchingDraft = [&](const CachedDraft& draft) {
+        return draft.element == *m_projection.element
+            && draft.propertySetId == m_currentPropertySetId;
+    };
+
+    if (editorState == m_initialEditorState) {
+        if (!designDrafts) {
+            return;
+        }
+        const qsizetype removed = designDrafts->removeIf(matchingDraft);
+        if (removed == 0) {
+            return;
+        }
+        if (designDrafts->isEmpty()) {
+            m_drafts.erase(existingDesign);
+        }
+        notifyDraftStateChanged();
+        return;
+    }
+
+    CachedDraft draft = {
+        *m_projection.element,
+        m_currentPropertySetId,
+        m_currentSchemaIdentity,
+        m_initialEffectiveValues,
+        m_overrideValues,
+        editorState,
+    };
+    if (!designDrafts) {
+        existingDesign = m_drafts.insert(
+            m_designIdentity, QVector<CachedDraft>{});
+        designDrafts = &*existingDesign;
+    }
+    const auto existing = std::find_if(
+        designDrafts->begin(), designDrafts->end(), matchingDraft);
+    if (existing != designDrafts->end()) {
+        if (*existing == draft) {
+            return;
+        }
+        *existing = std::move(draft);
+    } else {
+        designDrafts->append(std::move(draft));
+    }
+    notifyDraftStateChanged();
+}
+
+void ElementConfigurationPanel::restoreCachedDraft() {
+    if (m_designIdentity.isEmpty() || !m_projection.element
+        || m_currentPropertySetId.isEmpty()) {
+        return;
+    }
+    auto designDrafts = m_drafts.find(m_designIdentity);
+    if (designDrafts == m_drafts.end()) {
+        return;
+    }
+    const auto draft = std::find_if(
+        designDrafts->begin(), designDrafts->end(),
+        [this](const CachedDraft& value) {
+            return value.element == *m_projection.element
+                && value.propertySetId == m_currentPropertySetId;
+        });
+    if (draft == designDrafts->end()) {
+        return;
+    }
+    bool schemaCompatible = !m_currentSchemaIdentity.isEmpty()
+        && draft->sourceSchemaIdentity == m_currentSchemaIdentity
+        && draft->editorState.size() == m_initialEditorState.size();
+    if (schemaCompatible) {
+        for (auto state = m_initialEditorState.cbegin();
+             state != m_initialEditorState.cend(); ++state) {
+            if (!draft->editorState.contains(state.key())) {
+                schemaCompatible = false;
+                break;
+            }
+        }
+    }
+    m_draftConflict = draft->sourceEffectiveValues
+            != m_initialEffectiveValues
+        || draft->sourceOverrideValues != m_overrideValues
+        || !schemaCompatible;
+    if (schemaCompatible) {
+        m_updating = true;
+        for (PropertyRow& row : m_rows) {
+            const auto state = draft->editorState.constFind(row.definition.id);
+            if (state != draft->editorState.cend()) {
+                row.editor->setDraftState(*state);
+            }
+        }
+        m_updating = false;
+    }
+}
+
+void ElementConfigurationPanel::notifyDraftStateChanged() {
+    const bool draftPending = !m_designIdentity.isEmpty()
+        && hasUnappliedDrafts(m_designIdentity);
+    if (m_reportedDraftPending == draftPending) {
+        return;
+    }
+    m_reportedDraftPending = draftPending;
+    if (draftStateChanged) {
+        draftStateChanged();
     }
 }
 
@@ -358,6 +685,22 @@ QJsonObject ElementConfigurationPanel::effectiveValues() const {
         }
     }
     return values;
+}
+
+QHash<QString, SchemaValueEditorDraft>
+ElementConfigurationPanel::currentEditorState() const {
+    QHash<QString, SchemaValueEditorDraft> state;
+    state.reserve(m_rows.size());
+    for (const PropertyRow& row : m_rows) {
+        if (row.editor) {
+            state.insert(row.definition.id, row.editor->draftState());
+        }
+    }
+    return state;
+}
+
+bool ElementConfigurationPanel::isModified() const {
+    return currentEditorState() != m_initialEditorState;
 }
 
 QStringList ElementConfigurationPanel::localErrors() const {

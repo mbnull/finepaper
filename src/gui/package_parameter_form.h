@@ -17,6 +17,13 @@ namespace finepaper {
 
 using PackageParameterDraft = QHash<QString, SchemaValueEditorDraft>;
 
+struct PackageParameterEditorSnapshot {
+    QJsonObject values;
+    PackageParameterDraft draftValues;
+    QStringList localErrors;
+    bool modified = false;
+};
+
 // Generic editor for the complete ParameterDefinition schema used by design
 // and Endpoint parameters.  It deliberately knows nothing about concrete
 // parameter ids: type widgets, defaults, validation, units, descriptions and
@@ -35,9 +42,16 @@ public:
     [[nodiscard]] QJsonObject values() const;
     [[nodiscard]] PackageParameterDraft draftValues() const;
     [[nodiscard]] QStringList localErrors() const;
+    [[nodiscard]] PackageParameterEditorSnapshot editorSnapshot() const;
     [[nodiscard]] bool locallyValid() const { return localErrors().isEmpty(); }
     [[nodiscard]] bool isEmpty() const { return m_controls.isEmpty(); }
-    [[nodiscard]] bool isModified() const { return values() != m_baselineValues; }
+    [[nodiscard]] const QString& schemaIdentity() const {
+        return m_schemaIdentity;
+    }
+    // Compare the complete editor draft rather than only its JSON projection.
+    // A temporarily invalid token (for example "1e") is still a user change
+    // that must be protected from selection and document transitions.
+    [[nodiscard]] bool isModified() const;
 
     std::function<void()> valueChanged;
 
@@ -52,9 +66,10 @@ private:
     void notifyValueChanged();
 
     QString m_objectNamePrefix;
+    QString m_schemaIdentity;
     QVector<ParameterDefinition> m_definitions;
     QVector<Control> m_controls;
-    QJsonObject m_baselineValues;
+    PackageParameterDraft m_baselineDraftValues;
     QVBoxLayout* m_rootLayout = nullptr;
     QWidget* m_content = nullptr;
 };

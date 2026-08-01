@@ -81,6 +81,8 @@ QString workbenchStyleSheet(const QPalette& palette) {
     const QString accentHover = cssColor(token.accentHover);
     const QString accentPressed = cssColor(token.accentPressed);
     const QString accentSubtle = cssColor(token.accentSubtle);
+    const QString success = cssColor(token.success);
+    const QString warning = cssColor(token.warning);
     const QString error = cssColor(token.error);
     const QString canvas = cssColor(token.canvas);
 
@@ -381,6 +383,15 @@ QString workbenchStyleSheet(const QPalette& palette) {
         << "}\n"
         << "QLabel[finepaperRole=\"muted\"] {"
         << " color: " << muted << ";"
+        << "}\n"
+        << "QLabel[finepaperRole=\"success\"] {"
+        << " color: " << success << "; font-weight: 600;"
+        << "}\n"
+        << "QLabel[finepaperRole=\"warning\"] {"
+        << " color: " << warning << "; font-weight: 600;"
+        << "}\n"
+        << "QLabel[finepaperRole=\"error\"] {"
+        << " color: " << error << "; font-weight: 600;"
         << "}\n";
 
     out << "QPushButton[finepaperRole=\"primary\"],"

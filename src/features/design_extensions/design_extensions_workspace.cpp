@@ -16,7 +16,6 @@
 #include <QSet>
 #include <QShortcut>
 #include <QSplitter>
-#include <QStyle>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -174,7 +173,7 @@ QString domainReferenceSummary(
             const QString name = domain->name.simplified();
             const QString label = name.isEmpty() || name == domain->id
                 ? domain->id
-                : QStringLiteral("%1 — %2").arg(domain->id).arg(name);
+                : QStringLiteral("%1 — %2").arg(domain->id, name);
             const qsizetype separatorCharacters = candidateLabels.isEmpty()
                 ? 0 : 2;
             if (label.size() + separatorCharacters
@@ -459,13 +458,11 @@ void DesignExtensionsWorkspace::rebuildEntries() {
         }
 
         if (!schemaReady) {
-            entry.statusKind = Entry::StatusKind::Warning;
             entry.status = entry.configured
                 ? QStringLiteral("Unsupported schema · Read-only")
                 : QStringLiteral("Unavailable · Unsupported schema");
             entry.statusDetails = firstSchemaIssue(definition);
         } else if (entry.configured && !storedValueValid) {
-            entry.statusKind = Entry::StatusKind::Warning;
             entry.status = entry.editable
                 ? QStringLiteral("Invalid value · Repair available")
                 : QStringLiteral("Invalid value · Read-only");
@@ -477,13 +474,11 @@ void DesignExtensionsWorkspace::rebuildEntries() {
                             "Open the JSON editor to repair its Package schema or Design Domain references before validation or generation."))
                 : editorUnavailableReason(definition);
         } else if (!entry.editable) {
-            entry.statusKind = Entry::StatusKind::ReadOnly;
             entry.status = entry.configured
                 ? QStringLiteral("Configured · Read-only")
                 : QStringLiteral("Not configured · No supported editor");
             entry.statusDetails = editorUnavailableReason(definition);
         } else if (entry.configured) {
-            entry.statusKind = Entry::StatusKind::Configured;
             entry.status = QStringLiteral("Configured · Editable");
             entry.statusDetails = definition.domainReferences.isEmpty()
                 ? QStringLiteral(
@@ -516,7 +511,6 @@ void DesignExtensionsWorkspace::rebuildEntries() {
         entry.title = id;
         entry.value = m_packageData.value(id);
         entry.configured = true;
-        entry.statusKind = Entry::StatusKind::Warning;
         entry.status = m_hasPackage
             ? QStringLiteral("Undeclared Package data · Read-only")
             : QStringLiteral("Package unavailable · Read-only");
@@ -552,28 +546,12 @@ void DesignExtensionsWorkspace::rebuildList() {
         }
         auto* item = new QListWidgetItem(
             QStringLiteral("%1\n%2")
-                .arg(entry.title)
-                .arg(entry.status),
+                .arg(entry.title, entry.status),
             m_list);
-        switch (entry.statusKind) {
-        case Entry::StatusKind::Configured:
-            item->setIcon(style()->standardIcon(QStyle::SP_DialogApplyButton));
-            break;
-        case Entry::StatusKind::ReadOnly:
-            item->setIcon(style()->standardIcon(QStyle::SP_MessageBoxInformation));
-            break;
-        case Entry::StatusKind::Warning:
-            item->setIcon(style()->standardIcon(QStyle::SP_MessageBoxWarning));
-            break;
-        case Entry::StatusKind::Normal:
-            item->setIcon(style()->standardIcon(QStyle::SP_FileIcon));
-            break;
-        }
         item->setData(Qt::UserRole, entry.id);
         item->setToolTip(
             QStringLiteral("%1\nNamespace: %2")
-                .arg(entry.statusDetails)
-                .arg(entry.id));
+                .arg(entry.statusDetails, entry.id));
         if (entry.id == selectedId) {
             m_list->setCurrentItem(item);
         }

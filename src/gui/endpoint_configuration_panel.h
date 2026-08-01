@@ -80,7 +80,8 @@ public:
                     const PackageDefinition* package,
                     QString designIdentity,
                     std::optional<QString> endpointId,
-                    bool busy);
+                    bool busy,
+                    quint64 packageCatalogRevision = 0);
     void setBusy(bool busy);
 
     [[nodiscard]] bool hasUnappliedDrafts(
@@ -113,7 +114,9 @@ private:
     struct CachedDraft {
         QString sourceType;
         QJsonObject sourceParameters;
+        QString sourceSchemaIdentity;
         QString targetType;
+        QString targetSchemaIdentity;
         EndpointParameterMigration migration =
             EndpointParameterMigration::ResetToDefaults;
         QJsonObject desiredParameters;
@@ -122,10 +125,16 @@ private:
         bool operator==(const CachedDraft&) const = default;
     };
 
+    void handleTargetSelectionChanged(const QString& selectionName);
+    void restoreAcceptedTargetSelection();
     void rebuildTargetParameters();
     void updateValidation();
-    void updateTypeChangeSummary();
+    void updateTypeChangeSummary(const QJsonObject& desiredParameters);
+    void updateStatus();
+    void setConflictState(bool conflicted, const QString& details = {});
     void captureCurrentDraft();
+    void captureCurrentDraft(
+        const PackageParameterEditorSnapshot& snapshot);
     void resetVisibleDraft();
     void notifyDraftStateChanged();
     void apply();
@@ -140,14 +149,24 @@ private:
     std::optional<EndpointTypeChangePlan> m_baseTypeChangePlan;
     const NocDesign* m_contextDesign = nullptr;
     const PackageDefinition* m_contextPackage = nullptr;
+    QString m_contextSchemaIdentity;
+    quint64 m_contextCatalogRevision = 0;
     QString m_designIdentity;
+    QHash<QString, QString> m_parameterSchemaIdentities;
     QHash<QString, QHash<QString, CachedDraft>> m_drafts;
     bool m_hasContext = false;
     bool m_busy = false;
     bool m_updating = false;
     bool m_restoringDraft = false;
+    bool m_conflicted = false;
+    bool m_reportedDraftPending = false;
+    QString m_activeTargetType;
+    EndpointParameterMigration m_activeMigration =
+        EndpointParameterMigration::ResetToDefaults;
 
     QLabel* m_status = nullptr;
+    QLabel* m_conflictStatus = nullptr;
+    QPushButton* m_discardConflict = nullptr;
     QWidget* m_editor = nullptr;
     QLabel* m_id = nullptr;
     QComboBox* m_type = nullptr;

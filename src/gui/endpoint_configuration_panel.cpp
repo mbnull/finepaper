@@ -2,6 +2,7 @@
 
 #include "features/domain/endpoint_domain_assignment_dialog.h"
 #include "gui/package_parameter_form.h"
+#include "package/parameter_schema_identity.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -76,6 +77,35 @@ QString compactJsonValue(const QJsonValue& value) {
         json = json.mid(1, json.size() - 2);
     }
     return QString::fromUtf8(json);
+}
+
+QHash<QString, QString> endpointParameterSchemaIdentities(
+    const PackageDefinition* package) {
+    QHash<QString, QString> identities;
+    if (!package) {
+        return identities;
+    }
+    identities.reserve(package->endpointTypes.size());
+    for (const EndpointTypeDefinition& type : package->endpointTypes) {
+        identities.insert(
+            type.id, parameterSchemaIdentity(type.parameters));
+    }
+    return identities;
+}
+
+QString endpointPackageSchemaIdentity(
+    const QHash<QString, QString>& identities) {
+    QStringList typeIds = identities.keys();
+    std::sort(typeIds.begin(), typeIds.end());
+    QJsonArray schemas;
+    for (const QString& typeId : typeIds) {
+        schemas.append(QJsonObject{
+            {QStringLiteral("id"), typeId},
+            {QStringLiteral("schema"), identities.value(typeId)},
+        });
+    }
+    return QString::fromUtf8(
+        QJsonDocument(schemas).toJson(QJsonDocument::Compact));
 }
 
 } // namespace
@@ -301,6 +331,22 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     m_status->setTextFormat(Qt::RichText);
     root->addWidget(m_status);
 
+    m_conflictStatus = new QLabel(this);
+    m_conflictStatus->setObjectName(
+        QStringLiteral("finepaper.endpointConfiguration.conflictStatus"));
+    m_conflictStatus->setTextFormat(Qt::PlainText);
+    m_conflictStatus->setWordWrap(true);
+    m_conflictStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_conflictStatus->hide();
+    root->addWidget(m_conflictStatus);
+
+    m_discardConflict = new QPushButton(
+        QStringLiteral("Discard Preserved Draft"), this);
+    m_discardConflict->setObjectName(
+        QStringLiteral("finepaper.endpointConfiguration.discardConflict"));
+    m_discardConflict->hide();
+    root->addWidget(m_discardConflict);
+
     m_editor = new QWidget(this);
     m_editor->setObjectName(
         QStringLiteral("finepaper.endpointConfiguration.editor"));
@@ -396,12 +442,19 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     editorLayout->addWidget(m_apply);
     root->addWidget(m_editor);
 
-    connect(m_type, &QComboBox::currentIndexChanged,
-            this, [this] { rebuildTargetParameters(); });
-    connect(m_migration, &QComboBox::currentIndexChanged,
-            this, [this] { rebuildTargetParameters(); });
+    connect(m_type, &QComboBox::currentIndexChanged, this, [this] {
+        handleTargetSelectionChanged(QStringLiteral("Endpoint type"));
+    });
+    connect(m_migration, &QComboBox::currentIndexChanged, this, [this] {
+        handleTargetSelectionChanged(QStringLiteral("migration strategy"));
+    });
     m_parameters->valueChanged = [this] { updateValidation(); };
     connect(m_apply, &QPushButton::clicked, this, [this] { apply(); });
+    connect(m_discardConflict, &QPushButton::clicked, this, [this] {
+        if (m_endpoint) {
+            discardDraft(m_designIdentity, m_endpoint->id);
+        }
+    });
     setContext(nullptr, nullptr, {}, std::nullopt, false);
 }
 
@@ -410,10 +463,21 @@ void EndpointConfigurationPanel::setContext(
     const PackageDefinition* package,
     QString designIdentity,
     std::optional<QString> endpointId,
-    bool busy) {
+    bool busy,
+    quint64 packageCatalogRevision) {
     captureCurrentDraft();
+    const bool canReuseSchemaIdentities =
+        m_contextPackage == package
+        && m_contextCatalogRevision == packageCatalogRevision;
+    QHash<QString, QString> nextSchemaIdentities =
+        canReuseSchemaIdentities
+        ? m_parameterSchemaIdentities
+        : endpointParameterSchemaIdentities(package);
+    const QString nextSchemaIdentity = canReuseSchemaIdentities
+        ? m_contextSchemaIdentity
+        : endpointPackageSchemaIdentity(nextSchemaIdentities);
 
-    std::optional<EndpointInstance> nextEndpoint;
+    std::optional<EndpointInstance> nextEndpoint = std::nullopt;
     if (design && endpointId) {
         const auto endpoint = std::find_if(
             design->endpoints.cbegin(), design->endpoints.cend(),
@@ -426,6 +490,8 @@ void EndpointConfigurationPanel::setContext(
     }
     if (m_hasContext && m_designIdentity == designIdentity
         && m_contextPackage == package
+        && m_contextCatalogRevision == packageCatalogRevision
+        && m_contextSchemaIdentity == nextSchemaIdentity
         && sameEndpoint(m_endpoint, nextEndpoint)) {
         m_contextDesign = design;
         if (nextEndpoint) {
@@ -439,13 +505,17 @@ void EndpointConfigurationPanel::setContext(
 
     m_contextDesign = design;
     m_contextPackage = package;
+    m_contextSchemaIdentity = nextSchemaIdentity;
+    m_contextCatalogRevision = packageCatalogRevision;
     m_designIdentity = std::move(designIdentity);
     m_hasContext = true;
     m_busy = busy;
     m_endpoint = std::move(nextEndpoint);
     m_package = package
         ? std::optional<PackageDefinition>(*package) : std::nullopt;
+    m_parameterSchemaIdentities = std::move(nextSchemaIdentities);
     m_baseTypeChangePlan.reset();
+    setConflictState(false);
 
     if (!design) {
         m_status->setText(QStringLiteral(
@@ -473,30 +543,43 @@ void EndpointConfigurationPanel::setContext(
         return;
     }
 
-    m_status->setText(
-        busy
-            ? QStringLiteral("Read-only while another operation is running.")
-            : QStringLiteral("Editing Endpoint <b>%1</b>.")
-                  .arg(m_endpoint->id.toHtmlEscaped()));
+    updateStatus();
     m_editor->show();
     m_editor->setEnabled(!busy);
     m_id->setText(m_endpoint->id);
 
-    std::optional<CachedDraft> cachedDraft;
-    bool removedStaleDraft = false;
+    std::optional<CachedDraft> cachedDraft = std::nullopt;
+    QString draftConflictDetails;
     auto designDrafts = m_drafts.find(m_designIdentity);
     if (designDrafts != m_drafts.end()) {
         const auto draft = designDrafts->find(m_endpoint->id);
         if (draft != designDrafts->end()) {
-            if (draft->sourceType == m_endpoint->type
-                && draft->sourceParameters == m_endpoint->parameters) {
+            const bool sourceMatches = draft->sourceType == m_endpoint->type
+                && draft->sourceParameters == m_endpoint->parameters;
+            const bool schemaMatches =
+                draft->sourceSchemaIdentity
+                    == m_parameterSchemaIdentities.value(draft->sourceType)
+                && draft->targetSchemaIdentity
+                    == m_parameterSchemaIdentities.value(draft->targetType);
+            if (sourceMatches && schemaMatches) {
                 cachedDraft = *draft;
             } else {
-                designDrafts->erase(draft);
-                removedStaleDraft = true;
-                if (designDrafts->isEmpty()) {
-                    m_drafts.erase(designDrafts);
+                QStringList reasons;
+                if (!sourceMatches) {
+                    reasons.append(QStringLiteral(
+                        "The Endpoint type or durable parameter values changed "
+                        "after this draft was created."));
                 }
+                if (!schemaMatches) {
+                    reasons.append(QStringLiteral(
+                        "The Package parameter schema used by this draft is no "
+                        "longer available or has changed."));
+                }
+                draftConflictDetails = QStringLiteral(
+                    "%1 The unapplied draft is still preserved. Current durable "
+                    "values are shown below read-only; discard the preserved "
+                    "draft before editing this Endpoint again.")
+                    .arg(reasons.join(QLatin1Char(' ')));
             }
         }
     }
@@ -522,15 +605,12 @@ void EndpointConfigurationPanel::setContext(
         if (targetIndex >= 0) {
             m_type->setCurrentIndex(targetIndex);
         } else {
+            draftConflictDetails = QStringLiteral(
+                "The target Endpoint type used by this draft is no longer "
+                "declared by the Package. The unapplied draft is still "
+                "preserved. Current durable values are shown below read-only; "
+                "discard the preserved draft before editing this Endpoint again.");
             cachedDraft.reset();
-            auto drafts = m_drafts.find(m_designIdentity);
-            if (drafts != m_drafts.end()) {
-                drafts->remove(m_endpoint->id);
-                if (drafts->isEmpty()) {
-                    m_drafts.erase(drafts);
-                }
-                removedStaleDraft = true;
-            }
         }
     }
     if (cachedDraft) {
@@ -541,7 +621,8 @@ void EndpointConfigurationPanel::setContext(
         }
     }
     m_updating = false;
-    m_restoringDraft = cachedDraft.has_value();
+    m_restoringDraft = cachedDraft.has_value()
+        || !draftConflictDetails.isEmpty();
     rebuildTargetParameters();
     if (cachedDraft) {
         m_updating = true;
@@ -549,26 +630,37 @@ void EndpointConfigurationPanel::setContext(
         m_updating = false;
         m_restoringDraft = false;
         updateValidation();
+    } else if (!draftConflictDetails.isEmpty()) {
+        m_restoringDraft = false;
+        setConflictState(true, draftConflictDetails);
+        updateValidation();
     } else {
         m_restoringDraft = false;
-    }
-    if (removedStaleDraft) {
-        notifyDraftStateChanged();
     }
 }
 
 void EndpointConfigurationPanel::setBusy(bool busy) {
+    if (m_busy == busy) {
+        return;
+    }
     m_busy = busy;
     if (m_editor) {
         m_editor->setEnabled(!busy);
     }
-    if (m_endpoint && m_status) {
-        m_status->setText(
-            busy
-                ? QStringLiteral("Read-only while another operation is running.")
-                : QStringLiteral("Editing Endpoint <b>%1</b>.")
-                      .arg(m_endpoint->id.toHtmlEscaped()));
+    const bool editorInputsEnabled = !busy && !m_conflicted;
+    if (m_type) {
+        m_type->setEnabled(editorInputsEnabled);
     }
+    if (m_migration) {
+        m_migration->setEnabled(editorInputsEnabled);
+    }
+    if (m_parameters) {
+        m_parameters->setEnabled(editorInputsEnabled);
+    }
+    if (m_discardConflict) {
+        m_discardConflict->setEnabled(m_conflicted && !busy);
+    }
+    updateStatus();
     updateValidation();
 }
 
@@ -627,6 +719,72 @@ void EndpointConfigurationPanel::clearDrafts() {
     notifyDraftStateChanged();
 }
 
+void EndpointConfigurationPanel::handleTargetSelectionChanged(
+    const QString& selectionName) {
+    if (m_updating || !m_endpoint || !m_type || !m_migration
+        || !m_parameters) {
+        return;
+    }
+
+    const QString nextTargetType = m_type->currentData().toString();
+    const EndpointParameterMigration nextMigration = selectedMigration();
+    if (nextTargetType == m_activeTargetType
+        && nextMigration == m_activeMigration) {
+        return;
+    }
+    if (m_conflicted) {
+        restoreAcceptedTargetSelection();
+        return;
+    }
+
+    if (m_parameters->isModified()) {
+        QMessageBox confirmation(
+            QMessageBox::Warning,
+            QStringLiteral("Discard Endpoint Parameter Edits?"),
+            QStringLiteral(
+                "The current Endpoint parameter fields contain unapplied "
+                "edits. Changing the %1 rebuilds those fields and would "
+                "discard their current values.\n\n"
+                "Discard only these parameter-field edits and continue "
+                "switching, or cancel to keep both the selection and edits.")
+                .arg(selectionName),
+            QMessageBox::Discard | QMessageBox::Cancel,
+            this);
+        confirmation.setObjectName(QStringLiteral(
+            "finepaper.endpointConfiguration.parameterSwitchConfirmation"));
+        confirmation.setDefaultButton(QMessageBox::Cancel);
+        confirmation.setEscapeButton(QMessageBox::Cancel);
+        if (QPushButton* discardButton = qobject_cast<QPushButton*>(
+                confirmation.button(QMessageBox::Discard))) {
+            discardButton->setText(
+                QStringLiteral("Discard Parameter Edits and Switch"));
+        }
+        if (confirmation.exec() != QMessageBox::Discard) {
+            restoreAcceptedTargetSelection();
+            return;
+        }
+    }
+
+    rebuildTargetParameters();
+}
+
+void EndpointConfigurationPanel::restoreAcceptedTargetSelection() {
+    if (!m_type || !m_migration) {
+        return;
+    }
+    m_updating = true;
+    const int targetIndex = m_type->findData(m_activeTargetType);
+    if (targetIndex >= 0) {
+        m_type->setCurrentIndex(targetIndex);
+    }
+    const int migrationIndex = m_migration->findData(
+        static_cast<int>(m_activeMigration));
+    if (migrationIndex >= 0) {
+        m_migration->setCurrentIndex(migrationIndex);
+    }
+    m_updating = false;
+}
+
 void EndpointConfigurationPanel::rebuildTargetParameters() {
     if (m_updating || !m_endpoint || !m_package || !m_parameters) {
         return;
@@ -652,6 +810,8 @@ void EndpointConfigurationPanel::rebuildTargetParameters() {
     } else {
         m_parameters->setSchema(type->parameters, parameterDefaults(*type));
     }
+    m_activeTargetType = targetType;
+    m_activeMigration = selectedMigration();
     m_updating = false;
     updateValidation();
 }
@@ -660,10 +820,10 @@ void EndpointConfigurationPanel::updateValidation() {
     if (m_updating || !m_diagnostics || !m_apply) {
         return;
     }
-    QStringList errors;
-    if (m_parameters) {
-        errors += m_parameters->localErrors();
-    }
+    const PackageParameterEditorSnapshot snapshot = m_parameters
+        ? m_parameters->editorSnapshot()
+        : PackageParameterEditorSnapshot{};
+    QStringList errors = snapshot.localErrors;
     const bool changingType = m_endpoint && m_type
         && m_type->currentData().toString() != m_endpoint->type;
     if (changingType) {
@@ -675,17 +835,73 @@ void EndpointConfigurationPanel::updateValidation() {
     }
     m_apply->setEnabled(
         m_endpoint.has_value() && m_package.has_value() && !m_busy
+        && !m_conflicted
         && errors.isEmpty()
-        && (changingType || (m_parameters && m_parameters->isModified())));
-    m_diagnostics->setText(
-        errors.isEmpty()
-            ? QStringLiteral("Endpoint parameters satisfy the Package schema.")
-            : errors.join(QLatin1Char('\n')));
-    updateTypeChangeSummary();
-    captureCurrentDraft();
+        && (changingType || snapshot.modified));
+    if (m_conflicted) {
+        m_diagnostics->setText(QStringLiteral(
+            "Apply is unavailable while the preserved draft conflicts with "
+            "the current Endpoint source or Package schema."));
+    } else {
+        m_diagnostics->setText(
+            errors.isEmpty()
+                ? QStringLiteral(
+                      "Endpoint parameters satisfy the Package schema.")
+                : errors.join(QLatin1Char('\n')));
+    }
+    updateTypeChangeSummary(snapshot.values);
+    captureCurrentDraft(snapshot);
 }
 
-void EndpointConfigurationPanel::updateTypeChangeSummary() {
+void EndpointConfigurationPanel::updateStatus() {
+    if (!m_status || !m_endpoint) {
+        return;
+    }
+    if (m_conflicted) {
+        m_status->setText(QStringLiteral(
+            "<b>Preserved draft conflict — read-only</b><br>"
+            "The Endpoint source or Package schema changed after this draft "
+            "was created for <code>%1</code>.")
+            .arg(m_endpoint->id.toHtmlEscaped()));
+    } else if (m_busy) {
+        m_status->setText(
+            QStringLiteral("Read-only while another operation is running."));
+    } else {
+        m_status->setText(QStringLiteral("Editing Endpoint <b>%1</b>.")
+                              .arg(m_endpoint->id.toHtmlEscaped()));
+    }
+}
+
+void EndpointConfigurationPanel::setConflictState(
+    bool conflicted,
+    const QString& details) {
+    m_conflicted = conflicted;
+    if (m_conflictStatus) {
+        m_conflictStatus->setText(conflicted ? details : QString());
+        m_conflictStatus->setVisible(conflicted);
+    }
+    if (m_discardConflict) {
+        m_discardConflict->setVisible(conflicted);
+        m_discardConflict->setEnabled(conflicted && !m_busy);
+    }
+    const bool editorInputsEnabled = !m_busy && !conflicted;
+    if (m_type) {
+        m_type->setEnabled(editorInputsEnabled);
+    }
+    if (m_migration) {
+        m_migration->setEnabled(editorInputsEnabled);
+    }
+    if (m_parameters) {
+        m_parameters->setEnabled(editorInputsEnabled);
+    }
+    if (conflicted && m_apply) {
+        m_apply->setEnabled(false);
+    }
+    updateStatus();
+}
+
+void EndpointConfigurationPanel::updateTypeChangeSummary(
+    const QJsonObject& desiredParameters) {
     if (!m_typeChangeSummary || !m_endpoint || !m_type || !m_parameters) {
         return;
     }
@@ -708,7 +924,7 @@ void EndpointConfigurationPanel::updateTypeChangeSummary() {
     }
 
     const QJsonObject before = m_endpoint->parameters;
-    const QJsonObject after = m_parameters->values();
+    const QJsonObject& after = desiredParameters;
     QSet<QString> keySet;
     for (auto it = before.constBegin(); it != before.constEnd(); ++it) {
         keySet.insert(it.key());
@@ -775,19 +991,32 @@ void EndpointConfigurationPanel::updateTypeChangeSummary() {
 
 void EndpointConfigurationPanel::captureCurrentDraft() {
     if (m_updating || m_restoringDraft || m_designIdentity.isEmpty()
-        || !m_endpoint || !m_type || !m_parameters) {
+        || m_conflicted || !m_endpoint || !m_type || !m_parameters) {
+        return;
+    }
+    captureCurrentDraft(m_parameters->editorSnapshot());
+}
+
+void EndpointConfigurationPanel::captureCurrentDraft(
+    const PackageParameterEditorSnapshot& snapshot) {
+    if (m_updating || m_restoringDraft || m_designIdentity.isEmpty()
+        || m_conflicted || !m_endpoint || !m_type || !m_parameters) {
         return;
     }
 
     CachedDraft draft;
     draft.sourceType = m_endpoint->type;
     draft.sourceParameters = m_endpoint->parameters;
+    draft.sourceSchemaIdentity = m_parameterSchemaIdentities.value(
+        draft.sourceType);
     draft.targetType = m_type->currentData().toString();
+    draft.targetSchemaIdentity = m_parameterSchemaIdentities.value(
+        draft.targetType);
     draft.migration = selectedMigration();
-    draft.desiredParameters = m_parameters->values();
-    draft.editorState = m_parameters->draftValues();
+    draft.desiredParameters = snapshot.values;
+    draft.editorState = snapshot.draftValues;
     const bool hasChange = draft.targetType != draft.sourceType
-        || draft.desiredParameters != draft.sourceParameters;
+        || snapshot.modified;
 
     auto designDrafts = m_drafts.find(m_designIdentity);
     if (!hasChange) {
@@ -818,6 +1047,7 @@ void EndpointConfigurationPanel::resetVisibleDraft() {
     if (!m_endpoint || !m_type || !m_migration) {
         return;
     }
+    setConflictState(false);
     m_restoringDraft = true;
     m_updating = true;
     const int currentType = m_type->findData(m_endpoint->type);
@@ -836,13 +1066,19 @@ void EndpointConfigurationPanel::resetVisibleDraft() {
 }
 
 void EndpointConfigurationPanel::notifyDraftStateChanged() {
+    const bool draftPending = !m_designIdentity.isEmpty()
+        && hasUnappliedDrafts(m_designIdentity);
+    if (m_reportedDraftPending == draftPending) {
+        return;
+    }
+    m_reportedDraftPending = draftPending;
     if (draftStateChanged) {
         draftStateChanged();
     }
 }
 
 void EndpointConfigurationPanel::apply() {
-    if (m_busy || !m_endpoint || !m_package || !m_parameters
+    if (m_busy || m_conflicted || !m_endpoint || !m_package || !m_parameters
         || !m_parameters->locallyValid()) {
         return;
     }

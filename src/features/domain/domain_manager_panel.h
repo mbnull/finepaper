@@ -47,6 +47,8 @@ public:
     }
     void discardPendingAssignmentChanges();
 
+    std::function<void()> draftStateChanged;
+
     std::function<QVector<Diagnostic>(const DomainDefinition&)>
         validateAddDomain;
     std::function<QVector<Diagnostic>(const QString&, const DomainDefinition&)>
@@ -79,6 +81,7 @@ private:
     void discardAssignment();
     void handleAssignmentItemChanged(QListWidgetItem* item);
     void updateSingleAssignmentEdited();
+    void notifyDraftStateChanged();
     [[nodiscard]] QString selectedDomainId() const;
 
     const NocDesign* m_design = nullptr;

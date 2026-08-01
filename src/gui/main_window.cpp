@@ -48,13 +48,16 @@
 #include <QProgressBar>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QScopedValueRollback>
 #include <QSet>
 #include <QSettings>
 #include <QSignalBlocker>
+#include <QSizePolicy>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStackedLayout>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QToolBar>
@@ -178,6 +181,48 @@ QTableWidgetItem* readOnlyItem(const QString& text) {
     return item;
 }
 
+void setStatusLabel(QLabel* label,
+                    const QString& text,
+                    const QString& semanticRole) {
+    if (!label) {
+        return;
+    }
+    label->setTextFormat(Qt::PlainText);
+    label->setText(text);
+    if (label->property("finepaperRole").toString() == semanticRole) {
+        return;
+    }
+    label->setProperty("finepaperRole", semanticRole);
+    if (QStyle* style = label->style()) {
+        style->unpolish(label);
+        style->polish(label);
+    }
+    label->update();
+}
+
+QString ignoredRunReason(
+    operations::CompletionDisposition disposition) {
+    switch (disposition) {
+    case operations::CompletionDisposition::StaleRevision:
+        return QStringLiteral("the design has a newer revision");
+    case operations::CompletionDisposition::DifferentSession:
+        return QStringLiteral("a different design session is open");
+    case operations::CompletionDisposition::StaleCatalog:
+        return QStringLiteral("the Package catalog was reloaded");
+    case operations::CompletionDisposition::Superseded:
+        return QStringLiteral("a newer operation superseded it");
+    case operations::CompletionDisposition::Current:
+        break;
+    }
+    return QStringLiteral("it no longer matches the current workbench state");
+}
+
+QString designRevisionText(const operations::DesignStamp& stamp) {
+    return QString::fromUtf8("“") + stamp.designName
+        + QStringLiteral("”, revision ")
+        + QString::number(stamp.revision);
+}
+
 QWidget* placeholderPage(const QString& title, const QString& description, QLabel** summary) {
     auto* page = new QWidget;
     auto* layout = new QVBoxLayout(page);
@@ -190,6 +235,7 @@ QWidget* placeholderPage(const QString& title, const QString& description, QLabe
         ui::fontForRole(ui::UiFontRole::Title, heading->font()));
     layout->addWidget(heading);
     auto* text = new QLabel(description);
+    text->setTextFormat(Qt::PlainText);
     text->setWordWrap(true);
     text->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(text);
@@ -265,6 +311,7 @@ public:
         layout->addLayout(form);
 
         m_packageDetails = new QLabel;
+        m_packageDetails->setTextFormat(Qt::RichText);
         m_packageDetails->setObjectName(QStringLiteral("finepaper.newDesignPackageDetails"));
         m_packageDetails->setWordWrap(true);
         m_packageDetails->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -331,11 +378,11 @@ private:
             QStringLiteral("<b>%1</b><br>%2@%3<br>Mesh: %4–%5 rows × %6–%7 columns")
                 .arg(package->name.toHtmlEscaped(),
                      package->id.toHtmlEscaped(),
-                     package->version.toHtmlEscaped())
-                .arg(package->mesh.minimumRows)
-                .arg(package->mesh.maximumRows)
-                .arg(package->mesh.minimumColumns)
-                .arg(package->mesh.maximumColumns));
+                     package->version.toHtmlEscaped(),
+                     QString::number(package->mesh.minimumRows),
+                     QString::number(package->mesh.maximumRows),
+                     QString::number(package->mesh.minimumColumns),
+                     QString::number(package->mesh.maximumColumns)));
         updateAcceptState();
     }
 
@@ -429,6 +476,7 @@ FinepaperMainWindow::~FinepaperMainWindow() {
         m_domainManager->updateDomainRequested = {};
         m_domainManager->removeDomainRequested = {};
         m_domainManager->assignmentPatchRequested = {};
+        m_domainManager->draftStateChanged = {};
         m_domainManager->completeConfigurationRequested = {};
         m_domainManager->showDomainLayerRequested = {};
         m_domainManager->selectElementsRequested = {};
@@ -444,6 +492,7 @@ FinepaperMainWindow::~FinepaperMainWindow() {
     if (m_elementConfigurationPanel) {
         m_elementConfigurationPanel->applyRequested = {};
         m_elementConfigurationPanel->resetRequested = {};
+        m_elementConfigurationPanel->draftStateChanged = {};
     }
     if (m_endpointConfigurationPanel) {
         m_endpointConfigurationPanel->draftStateChanged = {};
@@ -675,11 +724,22 @@ void FinepaperMainWindow::createCentralViews() {
     problemHeading->setProperty("finepaperRole", QStringLiteral("title"));
     problemHeading->setFont(
         ui::fontForRole(ui::UiFontRole::Title, problemHeading->font()));
+    m_problemReportStatus = new QLabel;
+    m_problemReportStatus->setObjectName(
+        QStringLiteral("finepaper.problemReportStatus"));
+    m_problemReportStatus->setWordWrap(true);
+    m_problemReportStatus->setTextInteractionFlags(
+        Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    setStatusLabel(
+        m_problemReportStatus,
+        QStringLiteral("Run Validate to create a report for the current design."),
+        QStringLiteral("muted"));
     m_problemReport = new QPlainTextEdit;
     m_problemReport->setReadOnly(true);
     m_problemReport->setPlaceholderText(
         QStringLiteral("Run validation to create a readable problem report."));
     problemLayout->addWidget(problemHeading);
+    problemLayout->addWidget(m_problemReportStatus);
     problemLayout->addWidget(m_problemReport, 1);
     m_viewRegistry->addView(
         {workbench::problemReportViewId, workbench::problemReportViewTitle}, problemPage);
@@ -907,7 +967,17 @@ void FinepaperMainWindow::createPackageDock() {
         "finepaperRole", QStringLiteral("primary"));
     layout->addWidget(m_addEndpointButton);
 
-    m_packageDock->setWidget(content);
+    auto* packageScroll = new QScrollArea(m_packageDock);
+    packageScroll->setObjectName(
+        QStringLiteral("finepaper.packageLibraryScroll"));
+    packageScroll->setAccessibleName(
+        QStringLiteral("NoC IP and Endpoint library content"));
+    packageScroll->setWidgetResizable(true);
+    packageScroll->setFrameShape(QFrame::NoFrame);
+    packageScroll->setHorizontalScrollBarPolicy(
+        Qt::ScrollBarAlwaysOff);
+    packageScroll->setWidget(content);
+    m_packageDock->setWidget(packageScroll);
     addDockWidget(Qt::LeftDockWidgetArea, m_packageDock);
 
     connect(m_installPackageButton, &QPushButton::clicked,
@@ -1038,6 +1108,7 @@ void FinepaperMainWindow::createInspectorDock() {
     m_designOverview = new QLabel(QStringLiteral("No design is open."));
     m_designOverview->setObjectName(
         QStringLiteral("finepaper.designOverview"));
+    m_designOverview->setTextFormat(Qt::RichText);
     m_designOverview->setWordWrap(true);
     m_designOverview->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_designOverview->setProperty(
@@ -1067,6 +1138,7 @@ void FinepaperMainWindow::createInspectorDock() {
     m_selectionGroup->setObjectName(workbench::selectionInspectorName);
     auto* selectionLayout = new QVBoxLayout(m_selectionGroup);
     m_selectionSummary = new QLabel(QStringLiteral("Nothing selected."));
+    m_selectionSummary->setTextFormat(Qt::RichText);
     m_selectionSummary->setWordWrap(true);
     m_selectionSummary->setTextInteractionFlags(Qt::TextSelectableByMouse);
     selectionLayout->addWidget(m_selectionSummary);
@@ -1105,6 +1177,15 @@ void FinepaperMainWindow::createInspectorDock() {
     auto* parameterGroupLayout = new QVBoxLayout(m_parameterGroup);
     m_parameterForm = new PackageParameterForm(
         QStringLiteral("finepaper.parameter"), m_parameterGroup);
+    m_parameterDraftStatus = new QLabel(m_parameterGroup);
+    m_parameterDraftStatus->setObjectName(
+        QStringLiteral("finepaper.parameterDraftStatus"));
+    m_parameterDraftStatus->setWordWrap(true);
+    m_parameterDraftStatus->setTextInteractionFlags(
+        Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    m_parameterDraftStatus->setProperty(
+        "finepaperRole", QStringLiteral("warning"));
+    m_parameterDraftStatus->hide();
     auto* parameterScroll = new QScrollArea;
     parameterScroll->setWidgetResizable(true);
     parameterScroll->setFrameShape(QFrame::NoFrame);
@@ -1113,8 +1194,19 @@ void FinepaperMainWindow::createInspectorDock() {
     m_applyParametersButton->setObjectName(QStringLiteral("finepaper.applyParameters"));
     m_applyParametersButton->setProperty(
         "finepaperRole", QStringLiteral("primary"));
+    m_discardParametersButton = new QPushButton(
+        QStringLiteral("Discard Unapplied Changes"));
+    m_discardParametersButton->setObjectName(
+        QStringLiteral("finepaper.discardParameters"));
+    m_discardParametersButton->setProperty(
+        "finepaperRole", QStringLiteral("quiet"));
+    m_discardParametersButton->hide();
+    auto* parameterButtons = new QHBoxLayout;
+    parameterButtons->addWidget(m_applyParametersButton);
+    parameterButtons->addWidget(m_discardParametersButton);
+    parameterGroupLayout->addWidget(m_parameterDraftStatus);
     parameterGroupLayout->addWidget(parameterScroll, 1);
-    parameterGroupLayout->addWidget(m_applyParametersButton);
+    parameterGroupLayout->addLayout(parameterButtons);
     layout->addWidget(m_parameterGroup, 1);
 
     inspectorScroll->setWidget(content);
@@ -1123,7 +1215,15 @@ void FinepaperMainWindow::createInspectorDock() {
 
     connect(m_applyParametersButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::applyParameters);
-    m_parameterForm->valueChanged = [this] { updateUiState(); };
+    connect(m_discardParametersButton, &QPushButton::clicked,
+            this, &FinepaperMainWindow::discardParameterDraft);
+    m_parameterForm->valueChanged = [this] {
+        if (m_updatingParameterForm) {
+            return;
+        }
+        captureParameterDraft();
+        updateUiState();
+    };
     connect(m_resizeMeshButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::resizeMesh);
     m_elementConfigurationPanel->applyRequested = [this](
@@ -1139,11 +1239,13 @@ void FinepaperMainWindow::createInspectorDock() {
         }
         const DesignResult result = m_application.setElementConfiguration(
             *m_design,
-            std::move(element),
+            element,
             propertySet,
             effectiveValues);
         if (result.success) {
             discardPendingDomainChanges();
+            m_elementConfigurationPanel->discardDraft(
+                m_designSessionIdentity, element, propertySet);
         }
         adoptDesignResult(
             result,
@@ -1161,14 +1263,21 @@ void FinepaperMainWindow::createInspectorDock() {
             return;
         }
         const DesignResult result = m_application.clearElementConfiguration(
-            *m_design, std::move(element), propertySet);
+            *m_design, element, propertySet);
         if (result.success) {
             discardPendingDomainChanges();
+            m_elementConfigurationPanel->discardDraft(
+                m_designSessionIdentity, element, propertySet);
         }
         adoptDesignResult(
             result,
             QStringLiteral("Reset Element Configuration"),
             DesignRefreshScope::InspectorOnly);
+    };
+    m_elementConfigurationPanel->draftStateChanged = [this] {
+        if (!m_batchingInspectorDraftChanges) {
+            updateUiState();
+        }
     };
     m_endpointConfigurationPanel->planTypeChangeRequested = [this](
         QString endpointId,
@@ -1186,7 +1295,9 @@ void FinepaperMainWindow::createInspectorDock() {
             parameterPatch);
     };
     m_endpointConfigurationPanel->draftStateChanged = [this] {
-        updateUiState();
+        if (!m_batchingInspectorDraftChanges) {
+            updateUiState();
+        }
     };
     m_endpointConfigurationPanel->updateParametersRequested = [this](
         QString endpointId,
@@ -1223,6 +1334,12 @@ void FinepaperMainWindow::createInspectorDock() {
                 QStringLiteral("Changing an Endpoint type"))) {
             return;
         }
+        const ElementRef attachment{
+            ElementKind::EndpointAttachment, endpointId};
+        if (!confirmDiscardElementDrafts(
+                QStringLiteral("Changing the Endpoint type"), attachment)) {
+            return;
+        }
         const DesignResult result = m_application.changeEndpointType(
             *m_design,
             endpointId,
@@ -1234,6 +1351,8 @@ void FinepaperMainWindow::createInspectorDock() {
             discardPendingDomainChanges();
             m_endpointConfigurationPanel->discardDraft(
                 m_designSessionIdentity, endpointId);
+            m_elementConfigurationPanel->discardDraftsForElement(
+                m_designSessionIdentity, attachment);
         }
         adoptDesignResult(
             result,
@@ -1351,6 +1470,9 @@ void FinepaperMainWindow::createDomainDock() {
             result,
             QStringLiteral("Update %1 assignments").arg(domainType));
     };
+    m_domainManager->draftStateChanged = [this] {
+        updateUiState();
+    };
     m_domainManager->completeConfigurationRequested = [this] {
         const PackageDefinition* package = packageForDesign();
         if (!m_design || !package
@@ -1389,6 +1511,27 @@ void FinepaperMainWindow::createResultsDock() {
     m_resultTabs->setAccessibleName(
         QStringLiteral("Diagnostics and generation results"));
     m_resultTabs->setDocumentMode(true);
+    m_resultTabs->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Ignored);
+
+    auto* diagnosticsPage = new QWidget;
+    auto* diagnosticsLayout = new QVBoxLayout(diagnosticsPage);
+    diagnosticsLayout->setContentsMargins(
+        ui::UiMetrics::spacing8, ui::UiMetrics::spacing8,
+        ui::UiMetrics::spacing8, ui::UiMetrics::spacing8);
+    m_diagnosticsStatus = new QLabel;
+    m_diagnosticsStatus->setObjectName(
+        QStringLiteral("finepaper.diagnosticsStatus"));
+    m_diagnosticsStatus->setAccessibleName(
+        QStringLiteral("Diagnostic result status"));
+    m_diagnosticsStatus->setWordWrap(true);
+    m_diagnosticsStatus->setTextInteractionFlags(
+        Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    setStatusLabel(
+        m_diagnosticsStatus,
+        QStringLiteral("No diagnostics have been published for this design."),
+        QStringLiteral("muted"));
+    diagnosticsLayout->addWidget(m_diagnosticsStatus);
 
     m_drcTable = new QTableWidget;
     m_drcTable->setObjectName(QStringLiteral("finepaper.drcTable"));
@@ -1399,14 +1542,21 @@ void FinepaperMainWindow::createResultsDock() {
         QStringLiteral("Message"), QStringLiteral("Location")});
     m_drcTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_drcTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_drcTable->setMinimumHeight(0);
+    m_drcTable->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Ignored);
     m_drcTable->horizontalHeader()->setStretchLastSection(true);
-    m_resultTabs->addTab(m_drcTable, workbench::drcTabTitle);
+    diagnosticsLayout->addWidget(m_drcTable, 1);
+    m_resultTabs->addTab(diagnosticsPage, workbench::drcTabTitle);
 
     m_activityLog = new QPlainTextEdit;
     m_activityLog->setObjectName(QStringLiteral("finepaper.activityLog"));
     m_activityLog->setAccessibleName(QStringLiteral("Workbench activity log"));
     m_activityLog->setReadOnly(true);
     m_activityLog->setMaximumBlockCount(5000);
+    m_activityLog->setMinimumHeight(0);
+    m_activityLog->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Ignored);
     m_resultTabs->addTab(m_activityLog, workbench::activityTabTitle);
 
     auto* outputPage = new QWidget;
@@ -1414,6 +1564,19 @@ void FinepaperMainWindow::createResultsDock() {
     outputLayout->setContentsMargins(
         ui::UiMetrics::spacing8, ui::UiMetrics::spacing8,
         ui::UiMetrics::spacing8, ui::UiMetrics::spacing8);
+    m_generationStatus = new QLabel;
+    m_generationStatus->setObjectName(
+        QStringLiteral("finepaper.generationStatus"));
+    m_generationStatus->setAccessibleName(
+        QStringLiteral("RTL generation result status"));
+    m_generationStatus->setWordWrap(true);
+    m_generationStatus->setTextInteractionFlags(
+        Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    setStatusLabel(
+        m_generationStatus,
+        QStringLiteral("No RTL has been generated for this design revision."),
+        QStringLiteral("muted"));
+    outputLayout->addWidget(m_generationStatus);
     auto* outputControls = new QHBoxLayout;
     m_outputRoot = new QLineEdit(m_locations.defaultOutputRoot);
     m_outputRoot->setObjectName(QStringLiteral("finepaper.outputRoot"));
@@ -1441,9 +1604,15 @@ void FinepaperMainWindow::createResultsDock() {
         QStringLiteral("Path"), QStringLiteral("Primary")});
     m_artifactTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_artifactTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_artifactTable->setMinimumHeight(0);
+    m_artifactTable->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Ignored);
     m_artifactTable->horizontalHeader()->setStretchLastSection(true);
     m_generationDetails = new QPlainTextEdit;
     m_generationDetails->setReadOnly(true);
+    m_generationDetails->setMinimumHeight(0);
+    m_generationDetails->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Ignored);
     outputSplitter->addWidget(m_artifactTable);
     outputSplitter->addWidget(m_generationDetails);
     outputSplitter->setStretchFactor(0, 2);
@@ -1856,7 +2025,7 @@ void FinepaperMainWindow::closeEvent(QCloseEvent* event) {
         return;
     }
     discardPendingDomainChanges();
-    discardPendingEndpointDrafts();
+    discardPendingInspectorDrafts();
     QSettings settings;
     settings.setValue(workbench::geometrySetting, saveGeometry());
     settings.setValue(workbench::windowStateSetting, saveState());
@@ -1881,22 +2050,39 @@ void FinepaperMainWindow::reloadPackages() {
             QStringLiteral("Reloading Packages"))) {
         return;
     }
-    if (!confirmDiscardPendingEndpointDrafts(
+    if (!confirmDiscardPendingInspectorDrafts(
             QStringLiteral("Reloading Packages"))) {
         return;
     }
-    discardPendingDomainChanges();
-    discardPendingEndpointDrafts();
-    const QVector<Diagnostic> diagnostics = m_application.reloadPackages(m_locations.packageRoots);
+    FinepaperApplication candidateApplication = m_application;
+    const QVector<Diagnostic> diagnostics =
+        candidateApplication.reloadPackages(m_locations.packageRoots);
+    if (!hasErrors(diagnostics)) {
+        // Panels borrow PackageDefinition objects from the current catalog.
+        // Consume the authorized drafts while those borrowed contexts are
+        // still valid, detach every borrowed pointer, then replace the catalog
+        // as one transaction.
+        discardPendingDomainChanges();
+        discardPendingInspectorDrafts();
+        detachPackageBorrowingPanels();
+        m_application = std::move(candidateApplication);
+        advanceCatalogRevision();
+    }
     if (m_design) {
         refreshDesignViews();
     } else {
         updatePackageControls();
     }
-    showDiagnostics(diagnostics, QStringLiteral("Package discovery"), false);
+    if (!diagnostics.isEmpty()) {
+        showDiagnostics(
+            diagnostics, QStringLiteral("Package discovery"), false);
+    } else if (!m_diagnosticsStamp
+               && m_diagnosticsSource == QStringLiteral("Package discovery")) {
+        populateDiagnostics({}, QStringLiteral("Package discovery"));
+    }
     if (hasErrors(diagnostics)) {
         m_resultTabs->setCurrentIndex(0);
-        m_resultsDock->show();
+        showResultsDock();
         QString summary = QStringLiteral("Package reload failed.");
         for (const Diagnostic& diagnostic : diagnostics) {
             if (diagnostic.severity == QStringLiteral("error")) {
@@ -1910,8 +2096,8 @@ void FinepaperMainWindow::reloadPackages() {
         const qsizetype packageCount = runtimePackages().size();
         appendActivity(
             QStringLiteral("Reloaded %1 NoC IP %2; the current design Package is missing.")
-                .arg(packageCount)
-                .arg(packageCount == 1
+                .arg(QString::number(packageCount),
+                     packageCount == 1
                          ? QStringLiteral("Package")
                          : QStringLiteral("Packages")));
         statusBar()->showMessage(
@@ -1924,13 +2110,12 @@ void FinepaperMainWindow::reloadPackages() {
             : QStringLiteral("Packages");
         const QString summary = diagnostics.isEmpty()
             ? QStringLiteral("Loaded %1 NoC IP %2.")
-                  .arg(packageCount)
-                  .arg(packageNoun)
+                  .arg(QString::number(packageCount), packageNoun)
             : QStringLiteral("Loaded %1 NoC IP %2 with %3 %4.")
-                  .arg(packageCount)
-                  .arg(packageNoun)
-                  .arg(diagnostics.size())
-                  .arg(diagnostics.size() == 1
+                  .arg(QString::number(packageCount),
+                       packageNoun,
+                       QString::number(diagnostics.size()),
+                       diagnostics.size() == 1
                            ? QStringLiteral("warning")
                            : QStringLiteral("warnings"));
         appendActivity(summary);
@@ -2034,15 +2219,17 @@ bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
             QStringLiteral("Installing a Package"))) {
         return false;
     }
-    if (!confirmDiscardPendingEndpointDrafts(
+    if (!confirmDiscardPendingInspectorDrafts(
             QStringLiteral("Installing a Package"))) {
         return false;
     }
     discardPendingDomainChanges();
-    discardPendingEndpointDrafts();
+    discardPendingInspectorDrafts();
+    detachPackageBorrowingPanels();
 
     m_application = std::move(candidateApplication);
     m_locations = std::move(candidateLocations);
+    advanceCatalogRevision();
 
     QSettings settings;
     const QString selectedRoot = normalizedAbsolutePath(package.package->rootPath);
@@ -2069,7 +2256,13 @@ bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
     } else {
         updatePackageControls();
     }
-    showDiagnostics(diagnostics, QStringLiteral("Install Package"));
+    if (!diagnostics.isEmpty()) {
+        showDiagnostics(diagnostics, QStringLiteral("Install Package"));
+    } else if (!m_diagnosticsStamp
+               && (m_diagnosticsSource == QStringLiteral("Package discovery")
+                   || m_diagnosticsSource == QStringLiteral("Install Package"))) {
+        populateDiagnostics({}, QStringLiteral("Install Package"));
+    }
 
     appendActivity(QStringLiteral("Installed runtime Package %1 from %2.")
                        .arg(package.package->key(), package.package->rootPath));
@@ -2137,6 +2330,24 @@ void FinepaperMainWindow::updatePackageControls() {
     updateDomainManager();
     updateDesignExtensionsWorkspace();
     updateUiState();
+}
+
+void FinepaperMainWindow::detachPackageBorrowingPanels() {
+    // These panels deliberately borrow catalog objects to avoid duplicating
+    // large schemas. Their contexts must not span replacement of
+    // m_application, which owns the catalog storage.
+    if (m_domainManager) {
+        m_domainManager->setContext(nullptr, nullptr, nullptr, {});
+    }
+    if (m_elementConfigurationPanel) {
+        m_elementConfigurationPanel->setContext(
+            nullptr, nullptr, std::nullopt, m_operationBusy, {});
+    }
+    if (m_endpointConfigurationPanel) {
+        m_endpointConfigurationPanel->setContext(
+            nullptr, nullptr, {}, std::nullopt, m_operationBusy,
+            currentDesignStamp().catalogRevision);
+    }
 }
 
 void FinepaperMainWindow::updateEditorEmptyState() {
@@ -2326,11 +2537,16 @@ void FinepaperMainWindow::updateUiState() {
     const bool hasDesignMetadata = hasDesign && packageForDesign();
     const bool hasDesignRuntime = hasDesign && runtimePackageForDesign();
     const bool hasRunnablePackages = !m_runtimeAvailablePackageKeys.isEmpty();
-    const bool hasEndpointDrafts = m_endpointConfigurationPanel
-        && !m_designSessionIdentity.isEmpty()
-        && m_endpointConfigurationPanel->hasUnappliedDrafts(
-            m_designSessionIdentity);
-    setWindowModified(m_dirty || hasEndpointDrafts);
+    const bool hasInspectorDrafts = hasPendingInspectorDrafts();
+    const bool hasDomainDrafts =
+        (m_domainManager
+         && m_domainManager->hasPendingAssignmentChanges())
+        || (m_domainConfigurationWorkspace
+            && m_domainConfigurationWorkspace->hasPendingChanges());
+    const bool hasPendingDrafts = hasInspectorDrafts || hasDomainDrafts;
+    const bool hasParameterDraft = m_parameterDraft
+        && m_parameterDraft->designIdentity == m_designSessionIdentity;
+    setWindowModified(m_dirty || hasPendingDrafts);
     updateEditorEmptyState();
 
     if (m_newAction) {
@@ -2348,7 +2564,7 @@ void FinepaperMainWindow::updateUiState() {
 
     if (m_saveAction) {
         m_saveAction->setEnabled(
-            hasDesign && (m_dirty || hasEndpointDrafts) && !m_operationBusy);
+            hasDesign && (m_dirty || hasPendingDrafts) && !m_operationBusy);
     }
     if (m_saveAsAction) {
         m_saveAsAction->setEnabled(hasDesign && !m_operationBusy);
@@ -2402,7 +2618,12 @@ void FinepaperMainWindow::updateUiState() {
         m_parameterGroup->setVisible(
             hasDesignMetadata && m_parameterForm
             && !m_parameterForm->isEmpty());
-        m_parameterGroup->setEnabled(hasDesignMetadata && !m_operationBusy);
+        m_parameterGroup->setEnabled(hasDesignMetadata);
+    }
+    if (m_parameterForm) {
+        m_parameterForm->setEnabled(
+            hasDesignMetadata && !m_operationBusy
+            && !m_parameterDraftConflict);
     }
     if (m_topologyGroup) {
         m_topologyGroup->setVisible(hasDesign);
@@ -2427,7 +2648,37 @@ void FinepaperMainWindow::updateUiState() {
         m_applyParametersButton->setEnabled(
             hasDesignMetadata && !m_operationBusy && m_parameterForm
             && !m_parameterForm->isEmpty() && m_parameterForm->locallyValid()
-            && m_parameterForm->isModified());
+            && m_parameterForm->isModified() && !m_parameterDraftConflict);
+    }
+    if (m_discardParametersButton) {
+        m_discardParametersButton->setVisible(hasParameterDraft);
+        m_discardParametersButton->setEnabled(
+            hasParameterDraft && !m_operationBusy);
+    }
+    if (m_parameterDraftStatus) {
+        m_parameterDraftStatus->setVisible(hasParameterDraft);
+        if (hasParameterDraft) {
+            setStatusLabel(
+                m_parameterDraftStatus,
+                m_parameterDraftConflict
+                    ? QStringLiteral(
+                          "Draft conflict: the durable NoC parameters or "
+                          "Package schema changed after this draft was created. "
+                          "The draft is preserved read-only; discard it before "
+                          "editing the new source values.")
+                    : m_parameterForm && m_parameterForm->locallyValid()
+                    ? QStringLiteral(
+                          "Unapplied NoC parameter changes. Apply them before "
+                          "Save, Validate, or Generate RTL, or explicitly "
+                          "discard the draft when prompted.")
+                    : QStringLiteral(
+                          "The unapplied NoC parameter draft has validation "
+                          "errors. Correct them or discard the draft before "
+                          "continuing."),
+                m_parameterDraftConflict
+                    ? QStringLiteral("error")
+                    : QStringLiteral("warning"));
+        }
     }
     if (m_endpointConfigurationPanel) {
         m_endpointConfigurationPanel->setBusy(m_operationBusy);
@@ -2487,6 +2738,153 @@ void FinepaperMainWindow::setDirty(bool dirty) {
     updateUiState();
 }
 
+void FinepaperMainWindow::captureParameterDraft() {
+    if (m_updatingParameterForm || !m_parameterForm || !m_design
+        || m_designSessionIdentity.isEmpty()) {
+        return;
+    }
+    if (!m_parameterForm->isModified()) {
+        if (m_parameterDraft
+            && m_parameterDraft->designIdentity
+                == m_designSessionIdentity) {
+            m_parameterDraft.reset();
+        }
+        return;
+    }
+    m_parameterDraft = ParameterDraftState{
+        m_designSessionIdentity,
+        m_design->parameters,
+        m_parameterForm->schemaIdentity(),
+        m_parameterForm->draftValues(),
+    };
+}
+
+void FinepaperMainWindow::discardParameterDraft() {
+    m_parameterDraft.reset();
+    m_parameterDraftConflict = false;
+    if (m_parameterForm) {
+        m_updatingParameterForm = true;
+        m_parameterForm->setValues(
+            m_design ? m_design->parameters : QJsonObject{});
+        m_updatingParameterForm = false;
+    }
+    if (!m_batchingInspectorDraftChanges) {
+        updateUiState();
+    }
+}
+
+bool FinepaperMainWindow::hasPendingInspectorDrafts() const {
+    const bool parameterPending = m_parameterDraft
+        && m_parameterDraft->designIdentity == m_designSessionIdentity;
+    const bool endpointPending = m_endpointConfigurationPanel
+        && !m_designSessionIdentity.isEmpty()
+        && m_endpointConfigurationPanel->hasUnappliedDrafts(
+            m_designSessionIdentity);
+    const bool elementPending = m_elementConfigurationPanel
+        && !m_designSessionIdentity.isEmpty()
+        && m_elementConfigurationPanel->hasUnappliedDrafts(
+            m_designSessionIdentity);
+    return parameterPending || endpointPending || elementPending;
+}
+
+QStringList FinepaperMainWindow::pendingInspectorDraftDescriptions() const {
+    QStringList pending;
+    if (m_parameterDraft
+        && m_parameterDraft->designIdentity == m_designSessionIdentity) {
+        pending.append(QStringLiteral("NoC parameters"));
+    }
+    if (m_elementConfigurationPanel
+        && !m_designSessionIdentity.isEmpty()) {
+        for (const QString& description
+             : m_elementConfigurationPanel->unappliedDraftDescriptions(
+                   m_designSessionIdentity)) {
+            pending.append(QStringLiteral("Element: %1").arg(description));
+        }
+    }
+    if (m_endpointConfigurationPanel
+        && !m_designSessionIdentity.isEmpty()) {
+        for (const QString& endpointId
+             : m_endpointConfigurationPanel->unappliedDraftEndpointIds(
+                   m_designSessionIdentity)) {
+            pending.append(
+                QStringLiteral("Endpoint: %1").arg(endpointId));
+        }
+    }
+    return pending;
+}
+
+bool FinepaperMainWindow::confirmDiscardPendingInspectorDrafts(
+    const QString& action) {
+    const QStringList pending = pendingInspectorDraftDescriptions();
+    if (pending.isEmpty()) {
+        return true;
+    }
+    QMessageBox confirmation(
+        QMessageBox::Warning,
+        QStringLiteral("Unapplied Inspector changes"),
+        QStringLiteral(
+            "%1 would use or replace the durable Design while these "
+            "Inspector drafts have not been applied:\n\n• %2\n\n"
+            "Return to the Inspector and Apply them, or explicitly discard "
+            "the listed drafts. Unapplied values are never saved, validated, "
+            "or generated silently.")
+            .arg(action, pending.join(QStringLiteral("\n• "))),
+        QMessageBox::Discard | QMessageBox::Cancel,
+        this);
+    confirmation.setObjectName(
+        QStringLiteral("finepaper.pendingInspectorDraftConfirmation"));
+    confirmation.setTextFormat(Qt::PlainText);
+    confirmation.setDefaultButton(QMessageBox::Cancel);
+    confirmation.setEscapeButton(QMessageBox::Cancel);
+    return confirmation.exec() == QMessageBox::Discard;
+}
+
+void FinepaperMainWindow::discardPendingInspectorDrafts() {
+    {
+        QScopedValueRollback<bool> batching(
+            m_batchingInspectorDraftChanges, true);
+        discardParameterDraft();
+        if (m_endpointConfigurationPanel
+            && !m_designSessionIdentity.isEmpty()) {
+            m_endpointConfigurationPanel->clearDraftsForDesign(
+                m_designSessionIdentity);
+        }
+        if (m_elementConfigurationPanel
+            && !m_designSessionIdentity.isEmpty()) {
+            m_elementConfigurationPanel->clearDraftsForDesign(
+                m_designSessionIdentity);
+        }
+    }
+    updateUiState();
+}
+
+bool FinepaperMainWindow::confirmDiscardElementDrafts(
+    const QString& action,
+    const ElementRef& element) {
+    if (!m_elementConfigurationPanel
+        || m_designSessionIdentity.isEmpty()
+        || !m_elementConfigurationPanel->hasUnappliedDraft(
+            m_designSessionIdentity, element)) {
+        return true;
+    }
+    QMessageBox confirmation(
+        QMessageBox::Warning,
+        QStringLiteral("Unapplied element configuration"),
+        QStringLiteral(
+            "%1 would invalidate an unapplied configuration draft for %2. "
+            "Return to the Element Configuration Inspector and Apply it, or "
+            "explicitly discard it if this operation succeeds.")
+            .arg(action, element.id),
+        QMessageBox::Discard | QMessageBox::Cancel,
+        this);
+    confirmation.setObjectName(
+        QStringLiteral("finepaper.pendingElementDraftConfirmation"));
+    confirmation.setTextFormat(Qt::PlainText);
+    confirmation.setDefaultButton(QMessageBox::Cancel);
+    confirmation.setEscapeButton(QMessageBox::Cancel);
+    return confirmation.exec() == QMessageBox::Discard;
+}
+
 bool FinepaperMainWindow::confirmDiscardPendingDomainChanges(
     const QString& action) {
     const bool assignmentPending = m_domainManager
@@ -2519,6 +2917,7 @@ bool FinepaperMainWindow::confirmDiscardPendingDomainChanges(
         this);
     confirmation.setObjectName(
         QStringLiteral("finepaper.pendingDomainChangesConfirmation"));
+    confirmation.setTextFormat(Qt::PlainText);
     confirmation.setDefaultButton(QMessageBox::Cancel);
     if (confirmation.exec() != QMessageBox::Discard) {
         return false;
@@ -2546,6 +2945,7 @@ bool FinepaperMainWindow::confirmDiscardPendingDomainWorkspace(
         this);
     confirmation.setObjectName(QStringLiteral(
         "finepaper.pendingDomainWorkspaceConfirmation"));
+    confirmation.setTextFormat(Qt::PlainText);
     confirmation.setDefaultButton(QMessageBox::Cancel);
     return confirmation.exec() == QMessageBox::Discard;
 }
@@ -2561,48 +2961,6 @@ void FinepaperMainWindow::discardPendingDomainWorkspace() {
     if (m_domainConfigurationWorkspace) {
         m_domainConfigurationWorkspace->discardPendingChanges();
     }
-}
-
-bool FinepaperMainWindow::confirmDiscardPendingEndpointDrafts(
-    const QString& action) {
-    if (!m_endpointConfigurationPanel
-        || m_designSessionIdentity.isEmpty()
-        || !m_endpointConfigurationPanel->hasUnappliedDrafts(
-            m_designSessionIdentity)) {
-        return true;
-    }
-
-    const QStringList endpointIds =
-        m_endpointConfigurationPanel->unappliedDraftEndpointIds(
-            m_designSessionIdentity);
-    QMessageBox confirmation(
-        QMessageBox::Warning,
-        QStringLiteral("Unapplied Endpoint configuration"),
-        QStringLiteral(
-            "%1 would use or replace the durable Design while the following "
-            "Endpoint configuration draft(s) have not been applied:\n\n%2\n\n"
-            "Return to the Endpoint Inspector and Apply them, or explicitly "
-            "discard the drafts now. Unapplied values are never saved, "
-            "validated, or generated silently.")
-            .arg(action, endpointIds.join(QStringLiteral(", "))),
-        QMessageBox::Discard | QMessageBox::Cancel,
-        this);
-    confirmation.setObjectName(
-        QStringLiteral("finepaper.pendingEndpointDraftConfirmation"));
-    confirmation.setDefaultButton(QMessageBox::Cancel);
-    if (confirmation.exec() != QMessageBox::Discard) {
-        return false;
-    }
-    return true;
-}
-
-void FinepaperMainWindow::discardPendingEndpointDrafts() {
-    if (!m_endpointConfigurationPanel
-        || m_designSessionIdentity.isEmpty()) {
-        return;
-    }
-    m_endpointConfigurationPanel->clearDraftsForDesign(
-        m_designSessionIdentity);
 }
 
 bool FinepaperMainWindow::canSaveDetachedEndpointDrafts() {
@@ -2633,7 +2991,7 @@ bool FinepaperMainWindow::maybeSave() {
     if (!m_dirty || !m_design) {
         return confirmDiscardPendingDomainChanges(
                    QStringLiteral("Continuing"))
-            && confirmDiscardPendingEndpointDrafts(
+            && confirmDiscardPendingInspectorDrafts(
                    QStringLiteral("Continuing"));
     }
     const QMessageBox::StandardButton choice = QMessageBox::warning(
@@ -2652,7 +3010,7 @@ bool FinepaperMainWindow::maybeSave() {
     }
     return confirmDiscardPendingDomainChanges(
                QStringLiteral("Continuing"))
-        && confirmDiscardPendingEndpointDrafts(
+        && confirmDiscardPendingInspectorDrafts(
                QStringLiteral("Continuing"));
 }
 
@@ -2781,9 +3139,9 @@ void FinepaperMainWindow::createDesign() {
     }
     if (result.success) {
         discardPendingDomainChanges();
-        discardPendingEndpointDrafts();
+        discardPendingInspectorDrafts();
         m_designPath.clear();
-        beginDesignSession();
+        beginDesignSession(result.design.name);
     }
     adoptDesignResult(result, QStringLiteral("Create Mesh"));
     selectCenterView(workbench::editorViewId);
@@ -2802,7 +3160,7 @@ void FinepaperMainWindow::resizeMesh() {
             QStringLiteral("Resizing the Mesh"))) {
         return;
     }
-    if (!confirmDiscardPendingEndpointDrafts(
+    if (!confirmDiscardPendingInspectorDrafts(
             QStringLiteral("Resizing the Mesh"))) {
         return;
     }
@@ -2817,11 +3175,12 @@ void FinepaperMainWindow::resizeMesh() {
         dialog.impactConfirmation());
     if (result.success) {
         discardPendingDomainChanges();
-        discardPendingEndpointDrafts();
+        discardPendingInspectorDrafts();
     }
     adoptDesignResult(
         result,
-        QStringLiteral("Resize Mesh to %1 × %2").arg(rows).arg(columns));
+        QStringLiteral("Resize Mesh to %1 × %2")
+            .arg(QString::number(rows), QString::number(columns)));
 }
 
 void FinepaperMainWindow::openDesign() {
@@ -2846,10 +3205,11 @@ bool FinepaperMainWindow::openDesignFile(const QString& path) {
         showDiagnostics(loaded.diagnostics, QStringLiteral("Open design"));
         return false;
     }
-    discardPendingDomainChanges();
-    discardPendingEndpointDrafts();
-    beginDesignSession();
     m_design = loaded.design;
+    discardPendingDomainChanges();
+    discardPendingInspectorDrafts();
+    beginDesignSession(m_design->name);
+    advanceDesignRevision();
     m_designPath = path;
     refreshDesignViews();
     setDirty(false);
@@ -2909,7 +3269,7 @@ bool FinepaperMainWindow::saveDesignTo(const QString& path) {
             QStringLiteral("Saving the design"))) {
         return false;
     }
-    if (!confirmDiscardPendingEndpointDrafts(
+    if (!confirmDiscardPendingInspectorDrafts(
             QStringLiteral("Saving the design"))) {
         return false;
     }
@@ -2922,7 +3282,7 @@ bool FinepaperMainWindow::saveDesignTo(const QString& path) {
         return false;
     }
     discardPendingDomainChanges();
-    discardPendingEndpointDrafts();
+    discardPendingInspectorDrafts();
     m_designPath = path;
     setDirty(false);
     appendActivity(QStringLiteral("Saved design %1.").arg(path));
@@ -2945,47 +3305,92 @@ void FinepaperMainWindow::validateDesign() {
             QStringLiteral("Validating the design"))) {
         return;
     }
-    if (!confirmDiscardPendingEndpointDrafts(
+    if (!confirmDiscardPendingInspectorDrafts(
             QStringLiteral("Validating the design"))) {
         return;
     }
-    discardPendingDomainChanges();
-    discardPendingEndpointDrafts();
     FinepaperApplication application = m_application;
     NocDesign design = *m_design;
+    const operations::RunTicket ticket = m_runState.beginRun(
+        operations::RunKind::Validation);
     auto* watcher = new QFutureWatcher<ValidationResult>(this);
     m_validationWatcher = watcher;
     connect(watcher, &QFutureWatcher<ValidationResult>::finished,
-            this, [this, watcher] {
+            this, [this, watcher, ticket] {
                 const ValidationResult result = watcher->result();
+                const operations::CompletionDisposition disposition =
+                    m_runState.disposition(ticket);
+                const bool finishedActiveRun = m_runState.finishRun(ticket);
                 if (m_validationWatcher == watcher) {
                     m_validationWatcher = nullptr;
                 }
                 watcher->deleteLater();
-                setOperationBusy(false);
-                presentValidationResult(result);
+                if (finishedActiveRun) {
+                    setOperationBusy(false);
+                }
+                if (disposition != operations::CompletionDisposition::Current) {
+                    const QString reason = ignoredRunReason(disposition);
+                    appendActivity(
+                        QStringLiteral("Ignored validation result for ")
+                        + designRevisionText(ticket.input)
+                        + QStringLiteral(": ") + reason
+                        + QStringLiteral("."));
+                    if (finishedActiveRun) {
+                        const QString status =
+                            QStringLiteral(
+                                "Result not published — validation for ")
+                            + designRevisionText(ticket.input)
+                            + QStringLiteral(" finished after ") + reason
+                            + QStringLiteral(". Run Validate again.");
+                        setStatusLabel(
+                            m_diagnosticsStatus,
+                            status,
+                            QStringLiteral("warning"));
+                        setStatusLabel(
+                            m_problemReportStatus,
+                            status,
+                            QStringLiteral("warning"));
+                    }
+                    return;
+                }
+                presentValidationResult(result, ticket.input);
             });
     appendActivity(QStringLiteral("Starting validation and Package DRC."));
     setOperationBusy(true, QStringLiteral("Validating design…"));
+    setStatusLabel(
+        m_diagnosticsStatus,
+        QStringLiteral("Running — validating ")
+            + designRevisionText(ticket.input) + QStringLiteral("."),
+        QStringLiteral("warning"));
+    setStatusLabel(
+        m_problemReportStatus,
+        QStringLiteral(
+            "Validation is running for ")
+            + designRevisionText(ticket.input)
+            + QStringLiteral(
+                ". Any report below belongs to the previous completed run "
+                "until this one finishes."),
+        QStringLiteral("warning"));
     watcher->setFuture(QtConcurrent::run(
         [application = std::move(application), design = std::move(design)]() mutable {
             return application.validate(design, true);
         }));
+    discardPendingDomainChanges();
+    discardPendingInspectorDrafts();
 }
 
-void FinepaperMainWindow::presentValidationResult(const ValidationResult& result) {
-    populateDiagnostics(result.diagnostics);
-    m_problemReport->setPlainText(diagnosticText(result.diagnostics));
+void FinepaperMainWindow::presentValidationResult(
+    const ValidationResult& result,
+    const operations::DesignStamp& stamp) {
+    populateDiagnostics(
+        result.diagnostics, QStringLiteral("Validation"), stamp);
     m_resultTabs->setCurrentIndex(0);
-    m_resultsDock->show();
+    showResultsDock();
     appendActivity(result.success
                        ? QStringLiteral("Validation completed without errors.")
                        : QStringLiteral("Validation found errors."));
     statusBar()->showMessage(result.success ? QStringLiteral("Design is valid.")
                                             : QStringLiteral("Validation found errors."));
-    if (!result.success) {
-        selectCenterView(workbench::problemReportViewId);
-    }
 }
 
 void FinepaperMainWindow::generateDesign() {
@@ -3009,41 +3414,79 @@ void FinepaperMainWindow::generateDesign() {
             QStringLiteral("Generating RTL"))) {
         return;
     }
-    if (!confirmDiscardPendingEndpointDrafts(
+    if (!confirmDiscardPendingInspectorDrafts(
             QStringLiteral("Generating RTL"))) {
         return;
     }
-    discardPendingDomainChanges();
-    discardPendingEndpointDrafts();
     appendActivity(QStringLiteral("Starting RTL generation in %1.").arg(root));
     FinepaperApplication application = m_application;
     NocDesign design = *m_design;
+    const operations::RunTicket ticket = m_runState.beginRun(
+        operations::RunKind::Generation, root);
     auto* watcher = new QFutureWatcher<GenerationResult>(this);
     m_generationWatcher = watcher;
     connect(watcher, &QFutureWatcher<GenerationResult>::finished,
-            this, [this, watcher] {
+            this, [this, watcher, ticket] {
                 const GenerationResult result = watcher->result();
+                const operations::CompletionDisposition disposition =
+                    m_runState.disposition(ticket);
+                const bool finishedActiveRun = m_runState.finishRun(ticket);
                 if (m_generationWatcher == watcher) {
                     m_generationWatcher = nullptr;
                 }
                 watcher->deleteLater();
-                setOperationBusy(false);
-                presentGenerationResult(result);
+                if (finishedActiveRun) {
+                    setOperationBusy(false);
+                }
+                if (disposition != operations::CompletionDisposition::Current) {
+                    const QString reason = ignoredRunReason(disposition);
+                    appendActivity(
+                        QStringLiteral("Ignored RTL generation result for ")
+                        + designRevisionText(ticket.input)
+                        + QStringLiteral(": ") + reason
+                        + QStringLiteral(
+                            ". The requested output root was ")
+                        + ticket.outputRoot + QStringLiteral("."));
+                    if (finishedActiveRun) {
+                        setStatusLabel(
+                            m_generationStatus,
+                            QStringLiteral(
+                                "Result not published — RTL generation for ")
+                                + designRevisionText(ticket.input)
+                                + QStringLiteral(" finished after ") + reason
+                                + QStringLiteral(
+                                    ". Generate RTL again."),
+                            QStringLiteral("warning"));
+                    }
+                    return;
+                }
+                presentGenerationResult(result, ticket.input);
             });
     setOperationBusy(true, QStringLiteral("Generating RTL…"));
+    setStatusLabel(
+        m_generationStatus,
+        QStringLiteral("Running — generating RTL for ")
+            + designRevisionText(ticket.input) + QStringLiteral(", in ")
+            + ticket.outputRoot + QStringLiteral("."),
+        QStringLiteral("warning"));
     watcher->setFuture(QtConcurrent::run(
         [application = std::move(application),
          design = std::move(design),
          root]() mutable {
             return application.generate(design, GenerationOptions{root});
         }));
+    discardPendingDomainChanges();
+    discardPendingInspectorDrafts();
 }
 
-void FinepaperMainWindow::presentGenerationResult(const GenerationResult& result) {
-    populateGenerationOutputs(result);
-    populateDiagnostics(result.diagnostics);
+void FinepaperMainWindow::presentGenerationResult(
+    const GenerationResult& result,
+    const operations::DesignStamp& stamp) {
+    populateGenerationOutputs(result, stamp);
+    populateDiagnostics(
+        result.diagnostics, QStringLiteral("RTL generation"), stamp);
     m_resultTabs->setCurrentIndex(2);
-    m_resultsDock->show();
+    showResultsDock();
     appendActivity(result.success
                        ? QStringLiteral("RTL generation completed: %1 artifact(s).")
                              .arg(result.artifacts.size())
@@ -3051,9 +3494,6 @@ void FinepaperMainWindow::presentGenerationResult(const GenerationResult& result
                              .arg(result.exitCode));
     statusBar()->showMessage(result.success ? QStringLiteral("RTL generated.")
                                             : QStringLiteral("RTL generation failed."));
-    if (!result.success) {
-        showDiagnostics(result.diagnostics, QStringLiteral("Generate RTL"));
-    }
 }
 
 attachment::CreateEndpointResult FinepaperMainWindow::addEndpoint(
@@ -3166,12 +3606,12 @@ bool FinepaperMainWindow::removeEndpoint(
             QStringLiteral(
                 "Delete Endpoint %1 and its attachment from this design? "
                 "Unapplied Endpoint configuration for it will also be discarded.")
-                .arg(endpointId.toHtmlEscaped()),
+                .arg(endpointId),
             QMessageBox::Yes | QMessageBox::Cancel,
             this);
         confirmation.setObjectName(
             QStringLiteral("finepaper.deleteEndpointConfirmation"));
-        confirmation.setTextFormat(Qt::RichText);
+        confirmation.setTextFormat(Qt::PlainText);
         confirmation.setDefaultButton(QMessageBox::Cancel);
         confirmation.setEscapeButton(QMessageBox::Cancel);
         if (QPushButton* deleteButton = qobject_cast<QPushButton*>(
@@ -3188,12 +3628,21 @@ bool FinepaperMainWindow::removeEndpoint(
             QStringLiteral("Removing an Endpoint"))) {
         return false;
     }
+    const ElementRef attachment{
+        ElementKind::EndpointAttachment, endpointId};
+    if (discardConfigurationDraft
+        && !confirmDiscardElementDrafts(
+            QStringLiteral("Deleting the Endpoint"), attachment)) {
+        return false;
+    }
     const DesignResult result = m_application.removeEndpoint(*m_design, endpointId);
     if (result.success) {
         discardPendingDomainChanges();
         if (discardConfigurationDraft && m_endpointConfigurationPanel) {
             m_endpointConfigurationPanel->discardDraft(
                 m_designSessionIdentity, endpointId);
+            m_elementConfigurationPanel->discardDraftsForElement(
+                m_designSessionIdentity, attachment);
         }
     }
     adoptDesignResult(result, QStringLiteral("Remove Endpoint %1").arg(endpointId));
@@ -3231,8 +3680,8 @@ FinepaperMainWindow::AttachmentSlotChoice FinepaperMainWindow::chooseAttachmentS
     auto* layout = new QVBoxLayout(&dialog);
     auto* prompt = new QLabel(
         QStringLiteral("Router (%1, %2) slot")
-            .arg(target.router.x)
-            .arg(target.router.y),
+            .arg(QString::number(target.router.x),
+                 QString::number(target.router.y)),
         &dialog);
     auto* selector = new QComboBox(&dialog);
     selector->setObjectName(QStringLiteral("finepaper.attachmentSlotSelector"));
@@ -3243,8 +3692,7 @@ FinepaperMainWindow::AttachmentSlotChoice FinepaperMainWindow::chooseAttachmentS
         const QString label = choice.label == choice.id
             ? choice.id
             : QStringLiteral("%1 — %2")
-                  .arg(choice.label)
-                  .arg(choice.id);
+                  .arg(choice.label, choice.id);
         selector->addItem(label, choice.id);
     }
     auto* buttons = new QDialogButtonBox(
@@ -3262,7 +3710,7 @@ FinepaperMainWindow::AttachmentSlotChoice FinepaperMainWindow::chooseAttachmentS
 void FinepaperMainWindow::applyParameters() {
     if (m_operationBusy || !m_design || !packageForDesign()
         || !m_parameterForm || !m_parameterForm->locallyValid()
-        || !m_parameterForm->isModified()) {
+        || !m_parameterForm->isModified() || m_parameterDraftConflict) {
         return;
     }
     if (!confirmDiscardPendingDomainChanges(
@@ -3273,6 +3721,15 @@ void FinepaperMainWindow::applyParameters() {
         *m_design, m_parameterForm->values());
     if (result.success) {
         discardPendingDomainChanges();
+        // Commit the accepted editor state before adoptDesignResult() rebuilds
+        // the Inspector. Otherwise captureParameterDraft() observes the old
+        // baseline during refresh and recreates a ghost draft for the value
+        // that has just become durable.
+        m_updatingParameterForm = true;
+        m_parameterForm->setValues(result.design.parameters);
+        m_updatingParameterForm = false;
+        m_parameterDraft.reset();
+        m_parameterDraftConflict = false;
     }
     adoptDesignResult(result, QStringLiteral("Apply Parameters"));
 }
@@ -3304,7 +3761,8 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
             m_design ? &*m_design : nullptr,
             packageForDesign(),
             selectedElement,
-            m_operationBusy);
+            m_operationBusy,
+            m_designSessionIdentity);
     }
     if (m_endpointConfigurationPanel) {
         std::optional<QString> endpointId = std::nullopt;
@@ -3318,7 +3776,8 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
             packageForDesign(),
             m_designSessionIdentity,
             std::move(endpointId),
-            m_operationBusy);
+            m_operationBusy,
+            currentDesignStamp().catalogRevision);
     }
     m_selectedRouter.reset();
     if (selection.items.size() == 1
@@ -3373,9 +3832,9 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
             : QString();
         m_selectionSummary->setText(
             QStringLiteral("<b>%1 items selected</b><br>%2%3")
-                .arg(selection.items.size())
-                .arg(counts.join(QStringLiteral(" · ")))
-                .arg(meshNote));
+                .arg(QString::number(selection.items.size()),
+                     counts.join(QStringLiteral(" · ")),
+                     meshNote));
         return;
     }
 
@@ -3387,9 +3846,9 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
                            "Router identity and every Router-to-Router Link are derived from "
                            "the fixed Mesh. Dragging changes only this local Workspace layout; "
                            "Router creation, deletion, and manual rewiring are not exposed.")
-                .arg(item.id.toHtmlEscaped())
-                .arg(position ? position->x : -1)
-                .arg(position ? position->y : -1));
+                .arg(item.id.toHtmlEscaped(),
+                     QString::number(position ? position->x : -1),
+                     QString::number(position ? position->y : -1)));
         return;
     }
     const auto endpoint = m_design
@@ -3404,10 +3863,12 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
             QStringLiteral("<b>Endpoint %1</b><br>Type: %2<br>Router: (%3, %4)<br>"
                            "Slot: %5<br>Moving the node changes only its Workspace position; "
                            "the attachment changes only through an explicit connection action.")
-                .arg(endpoint->id.toHtmlEscaped(), endpoint->type.toHtmlEscaped())
-                .arg(endpoint->attachment.router.x)
-                .arg(endpoint->attachment.router.y)
-                .arg(endpoint->attachment.slot.value_or(QStringLiteral("automatic"))
+                .arg(endpoint->id.toHtmlEscaped(),
+                     endpoint->type.toHtmlEscaped(),
+                     QString::number(endpoint->attachment.router.x),
+                     QString::number(endpoint->attachment.router.y),
+                     endpoint->attachment.slot
+                         .value_or(QStringLiteral("automatic"))
                          .toHtmlEscaped()));
         return;
     }
@@ -3441,12 +3902,13 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
                                "Slot: %4<br>This semantic attachment may be disconnected or "
                                "reassigned explicitly. Endpoint canvas placement remains "
                                "independent Workspace state.%5")
-                    .arg(endpoint->id.toHtmlEscaped())
-                    .arg(endpoint->attachment.router.x)
-                    .arg(endpoint->attachment.router.y)
-                    .arg(endpoint->attachment.slot.value_or(QStringLiteral("automatic"))
-                             .toHtmlEscaped())
-                    .arg(crossingText));
+                    .arg(endpoint->id.toHtmlEscaped(),
+                         QString::number(endpoint->attachment.router.x),
+                         QString::number(endpoint->attachment.router.y),
+                         endpoint->attachment.slot
+                             .value_or(QStringLiteral("automatic"))
+                             .toHtmlEscaped(),
+                         crossingText));
         } else {
             m_selectionSummary->setText(
                 QStringLiteral("<b>Endpoint Attachment %1</b>%2")
@@ -3477,6 +3939,7 @@ void FinepaperMainWindow::adoptDesignResult(
         return;
     }
     m_design = result.design;
+    advanceDesignRevision();
     if (scope == DesignRefreshScope::DomainsOnly) {
         m_nodeEditor->syncDesignState(*m_design);
         refreshDomainViews();
@@ -3500,7 +3963,9 @@ void FinepaperMainWindow::adoptDomainResult(
     if (m_domainManager) {
         m_domainManager->setDiagnostics(result.diagnostics);
     }
-    showDiagnostics(result.diagnostics, action, false);
+    if (!result.diagnostics.isEmpty()) {
+        showDiagnostics(result.diagnostics, action, false);
+    }
     if (!result.success) {
         appendActivity(action + QStringLiteral(" failed."));
         statusBar()->showMessage(action + QStringLiteral(" failed."), 6000);
@@ -3566,19 +4031,19 @@ void FinepaperMainWindow::refreshDesignViews() {
                        "<p><b>Endpoints</b><br>%6</p>%7")
             .arg(m_design->name.toHtmlEscaped(),
                  m_design->package.id.toHtmlEscaped(),
-                 m_design->package.version.toHtmlEscaped())
-            .arg(m_design->topology.rows)
-            .arg(m_design->topology.columns)
-            .arg(m_design->endpoints.size())
-            .arg(availabilityNote));
+                 m_design->package.version.toHtmlEscaped(),
+                 QString::number(m_design->topology.rows),
+                 QString::number(m_design->topology.columns),
+                 QString::number(m_design->endpoints.size()),
+                 availabilityNote));
     m_performanceSummary->setText(
         QStringLiteral("NoC %1 currently contains a %2 × %3 Mesh and %4 Endpoint(s). "
                        "This view is reserved for Package or IP Engine performance results; "
                        "the NodeEditor remains the source interaction surface.")
-            .arg(m_design->name.toHtmlEscaped())
-            .arg(m_design->topology.rows)
-            .arg(m_design->topology.columns)
-            .arg(m_design->endpoints.size()));
+            .arg(m_design->name,
+                 QString::number(m_design->topology.rows),
+                 QString::number(m_design->topology.columns),
+                 QString::number(m_design->endpoints.size())));
 
     if (!packageMetadataAvailable) {
         statusBar()->showMessage(
@@ -3593,17 +4058,49 @@ void FinepaperMainWindow::refreshDesignViews() {
 }
 
 void FinepaperMainWindow::rebuildParameterEditors() {
+    captureParameterDraft();
     const PackageDefinition* package = packageForDesign();
+    m_updatingParameterForm = true;
     if (!m_design || !package) {
         m_parameterForm->setSchema({}, {});
+        m_parameterDraftConflict = m_parameterDraft.has_value();
+        m_updatingParameterForm = false;
         updateUiState();
         return;
     }
     m_parameterForm->setSchema(package->parameters, m_design->parameters);
+    m_parameterDraftConflict = false;
+    if (m_parameterDraft
+        && m_parameterDraft->designIdentity == m_designSessionIdentity) {
+        const PackageParameterDraft baseline = m_parameterForm->draftValues();
+        bool schemaCompatible =
+            m_parameterDraft->sourceSchemaIdentity
+                == m_parameterForm->schemaIdentity()
+            && baseline.size() == m_parameterDraft->editorState.size();
+        if (schemaCompatible) {
+            for (auto value = baseline.cbegin(); value != baseline.cend(); ++value) {
+                if (!m_parameterDraft->editorState.contains(value.key())) {
+                    schemaCompatible = false;
+                    break;
+                }
+            }
+        }
+        const bool sourceCompatible =
+            m_parameterDraft->sourceValues == m_design->parameters;
+        if (schemaCompatible) {
+            m_parameterForm->setDraftValues(
+                m_parameterDraft->editorState);
+        }
+        m_parameterDraftConflict = !schemaCompatible || !sourceCompatible;
+    }
+    m_updatingParameterForm = false;
     updateUiState();
 }
 
-void FinepaperMainWindow::populateDiagnostics(const QVector<Diagnostic>& diagnostics) {
+void FinepaperMainWindow::populateDiagnostics(
+    const QVector<Diagnostic>& diagnostics,
+    const QString& source,
+    std::optional<operations::DesignStamp> stamp) {
     m_drcTable->clearContents();
     m_drcTable->setRowCount(diagnostics.size());
     for (qsizetype row = 0; row < diagnostics.size(); ++row) {
@@ -3615,9 +4112,53 @@ void FinepaperMainWindow::populateDiagnostics(const QVector<Diagnostic>& diagnos
     }
     m_drcTable->resizeColumnsToContents();
     m_drcTable->horizontalHeader()->setStretchLastSection(true);
+    m_diagnosticsSource = source.trimmed().isEmpty()
+        ? QStringLiteral("Diagnostics") : source.trimmed();
+    m_diagnosticsStamp = std::move(stamp);
+    m_problemReport->setPlainText(diagnosticText(diagnostics));
+    m_resultTabs->setTabText(0, workbench::drcTabTitle);
+
+    QString status;
+    QString role = QStringLiteral("muted");
+    if (m_diagnosticsStamp) {
+        const qsizetype errorCount = std::count_if(
+            diagnostics.cbegin(), diagnostics.cend(),
+            [](const Diagnostic& diagnostic) {
+                return diagnostic.severity == QStringLiteral("error");
+            });
+        if (diagnostics.isEmpty()) {
+            status = QStringLiteral("Current result — ")
+                + m_diagnosticsSource + QStringLiteral(" passed for ")
+                + designRevisionText(*m_diagnosticsStamp)
+                + QStringLiteral(", with 0 problems.");
+            role = QStringLiteral("success");
+        } else {
+            status = QStringLiteral("Current result — ")
+                + m_diagnosticsSource + QStringLiteral(" for ")
+                + designRevisionText(*m_diagnosticsStamp)
+                + QStringLiteral(": ")
+                + QString::number(diagnostics.size())
+                + QStringLiteral(" diagnostic(s), ")
+                + QString::number(errorCount)
+                + QStringLiteral(" error(s).");
+            role = errorCount > 0
+                ? QStringLiteral("error") : QStringLiteral("warning");
+        }
+    } else {
+        status = m_diagnosticsSource + QStringLiteral(" published ")
+            + QString::number(diagnostics.size())
+            + QStringLiteral(
+                " workspace diagnostic(s); this report is not bound to a "
+                "design revision.");
+    }
+    setStatusLabel(m_diagnosticsStatus, status, role);
+    setStatusLabel(m_problemReportStatus, status, role);
+    updateResultFreshness();
 }
 
-void FinepaperMainWindow::populateGenerationOutputs(const GenerationResult& result) {
+void FinepaperMainWindow::populateGenerationOutputs(
+    const GenerationResult& result,
+    const operations::DesignStamp& stamp) {
     m_artifactTable->clearContents();
     m_artifactTable->setRowCount(result.artifacts.size());
     for (qsizetype row = 0; row < result.artifacts.size(); ++row) {
@@ -3633,16 +4174,33 @@ void FinepaperMainWindow::populateGenerationOutputs(const GenerationResult& resu
     m_generationDetails->setPlainText(
         QString::fromUtf8(QJsonDocument(generationResultToJson(result))
                               .toJson(QJsonDocument::Indented)));
+    m_generationStamp = stamp;
+    m_generationPublicationKind = result.success
+        ? GenerationPublicationKind::Artifacts
+        : GenerationPublicationKind::FailedAttempt;
+    m_resultTabs->setTabText(2, workbench::generationTabTitle);
+    setStatusLabel(
+        m_generationStatus,
+        result.success
+            ? QStringLiteral("Current artifacts — generated for ")
+                  + designRevisionText(stamp) + QStringLiteral(": ")
+                  + QString::number(result.artifacts.size())
+                  + QStringLiteral(" artifact(s).")
+            : QStringLiteral("Current generation attempt — ")
+                  + designRevisionText(stamp)
+                  + QStringLiteral(" failed with exit code ")
+                  + QString::number(result.exitCode) + QStringLiteral("."),
+        result.success ? QStringLiteral("success") : QStringLiteral("error"));
+    updateResultFreshness();
 }
 
 void FinepaperMainWindow::showDiagnostics(const QVector<Diagnostic>& diagnostics,
                                           const QString& title,
                                           bool modalOnError) {
-    populateDiagnostics(diagnostics);
-    m_problemReport->setPlainText(diagnosticText(diagnostics));
+    populateDiagnostics(diagnostics, title);
     if (modalOnError && hasErrors(diagnostics)) {
         m_resultTabs->setCurrentIndex(0);
-        m_resultsDock->show();
+        showResultsDock();
         QMessageBox::critical(this, title, diagnosticText(diagnostics));
     }
 }
@@ -3660,22 +4218,147 @@ void FinepaperMainWindow::showWorkspaceStatusMessage() {
     }
 }
 
+void FinepaperMainWindow::showResultsDock() {
+    if (!m_resultsDock) {
+        return;
+    }
+    m_resultsDock->show();
+    resizeDocks(
+        {m_resultsDock},
+        {workbench::defaultResultsDockHeight},
+        Qt::Vertical);
+}
+
 void FinepaperMainWindow::selectCenterView(const QString& id) {
     if (!m_viewRegistry->select(id)) {
         m_viewRegistry->select(workbench::editorViewId);
     }
 }
 
-void FinepaperMainWindow::beginDesignSession() {
+void FinepaperMainWindow::beginDesignSession(const QString& designName) {
     ++m_designSessionSerial;
     m_designSessionIdentity = QStringLiteral("design-session-%1")
         .arg(m_designSessionSerial);
     m_workspaceStatusMessage.clear();
+    m_runState.beginSession(designName);
+    m_parameterDraft.reset();
+    m_parameterDraftConflict = false;
     if (m_nodeEditor) {
         m_nodeEditor->beginDocumentSession(m_designSessionIdentity);
     }
     if (m_endpointConfigurationPanel) {
         m_endpointConfigurationPanel->clearDrafts();
+    }
+    if (m_elementConfigurationPanel) {
+        m_elementConfigurationPanel->clearDrafts();
+    }
+    clearPublishedResults();
+}
+
+operations::DesignStamp FinepaperMainWindow::currentDesignStamp() const {
+    return m_runState.currentStamp();
+}
+
+void FinepaperMainWindow::advanceDesignRevision() {
+    m_runState.advanceDesignRevision(
+        m_design ? m_design->name : QString());
+    updateResultFreshness();
+}
+
+void FinepaperMainWindow::advanceCatalogRevision() {
+    m_runState.advanceCatalogRevision();
+    updateResultFreshness();
+}
+
+void FinepaperMainWindow::clearPublishedResults() {
+    m_diagnosticsStamp.reset();
+    m_generationStamp.reset();
+    m_generationPublicationKind = GenerationPublicationKind::None;
+    m_diagnosticsSource.clear();
+    if (m_drcTable) {
+        m_drcTable->clearContents();
+        m_drcTable->setRowCount(0);
+    }
+    if (m_artifactTable) {
+        m_artifactTable->clearContents();
+        m_artifactTable->setRowCount(0);
+    }
+    if (m_generationDetails) {
+        m_generationDetails->clear();
+    }
+    if (m_problemReport) {
+        m_problemReport->clear();
+    }
+    if (m_resultTabs) {
+        m_resultTabs->setTabText(0, workbench::drcTabTitle);
+        m_resultTabs->setTabText(2, workbench::generationTabTitle);
+    }
+    setStatusLabel(
+        m_diagnosticsStatus,
+        QStringLiteral("No diagnostics have been published for this design."),
+        QStringLiteral("muted"));
+    setStatusLabel(
+        m_problemReportStatus,
+        QStringLiteral("Run Validate to create a report for the current design."),
+        QStringLiteral("muted"));
+    setStatusLabel(
+        m_generationStatus,
+        QStringLiteral("No RTL has been generated for this design revision."),
+        QStringLiteral("muted"));
+}
+
+void FinepaperMainWindow::updateResultFreshness() {
+    const operations::DesignStamp current = currentDesignStamp();
+    if (m_diagnosticsStamp && *m_diagnosticsStamp != current) {
+        const QString status = QStringLiteral("Out of date — ")
+            + m_diagnosticsSource + QStringLiteral(" belongs to ")
+            + designRevisionText(*m_diagnosticsStamp)
+            + QStringLiteral("; the current design is revision ")
+            + QString::number(current.revision)
+            + QStringLiteral(
+                " or uses a reloaded Package runtime. Run Validate again "
+                "before relying on this report.");
+        setStatusLabel(
+            m_diagnosticsStatus, status, QStringLiteral("warning"));
+        setStatusLabel(
+            m_problemReportStatus, status, QStringLiteral("warning"));
+        if (m_resultTabs) {
+            m_resultTabs->setTabText(
+                0, QStringLiteral("%1 (out of date)")
+                       .arg(workbench::drcTabTitle));
+        }
+    }
+    if (m_generationStamp && *m_generationStamp != current) {
+        const bool failedAttempt =
+            m_generationPublicationKind
+            == GenerationPublicationKind::FailedAttempt;
+        const QString status = failedAttempt
+            ? QStringLiteral(
+                  "Out of date — a failed generation attempt belongs to ")
+                  + designRevisionText(*m_generationStamp)
+                  + QStringLiteral("; the current design is revision ")
+                  + QString::number(current.revision)
+                  + QStringLiteral(
+                      " or uses a reloaded Package runtime. Generate RTL "
+                      "again after resolving the failure.")
+            : QStringLiteral(
+                  "Out of date — these artifacts were generated for ")
+                  + designRevisionText(*m_generationStamp)
+                  + QStringLiteral("; the current design is revision ")
+                  + QString::number(current.revision)
+                  + QStringLiteral(
+                      " or uses a reloaded Package runtime. Generate RTL "
+                      "again before delivery.");
+        setStatusLabel(
+            m_generationStatus,
+            status,
+            failedAttempt ? QStringLiteral("error")
+                          : QStringLiteral("warning"));
+        if (m_resultTabs) {
+            m_resultTabs->setTabText(
+                2, QStringLiteral("%1 (out of date)")
+                       .arg(workbench::generationTabTitle));
+        }
     }
 }
 
@@ -3688,7 +4371,8 @@ QString FinepaperMainWindow::nextEndpointId(const QString& endpointType) const {
     }
     int suffix = 0;
     while (true) {
-        const QString candidate = QStringLiteral("%1_%2").arg(base).arg(suffix);
+        const QString candidate = QStringLiteral("%1_%2")
+            .arg(base, QString::number(suffix));
         bool exists = false;
         if (m_design) {
             for (const EndpointInstance& endpoint : m_design->endpoints) {

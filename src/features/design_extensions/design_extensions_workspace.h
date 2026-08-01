@@ -39,13 +39,6 @@ protected:
 
 private:
     struct Entry {
-        enum class StatusKind {
-            Normal,
-            Configured,
-            ReadOnly,
-            Warning,
-        };
-
         QString id;
         QString title;
         QString description;
@@ -56,7 +49,6 @@ private:
         bool configured = false;
         bool editable = false;
         bool removable = false;
-        StatusKind statusKind = StatusKind::Normal;
     };
 
     void rebuildEntries();

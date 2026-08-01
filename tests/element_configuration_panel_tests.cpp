@@ -124,6 +124,179 @@ NocDesign designFixture() {
     return design;
 }
 
+QLineEdit* pipelineEditor(ElementConfigurationPanel& panel) {
+    return panel.findChild<QLineEdit*>(
+        QStringLiteral("finepaper.schemaValue.pipeline.scalar.text"));
+}
+
+void editPipeline(ElementConfigurationPanel& panel, const QString& text) {
+    QLineEdit* editor = pipelineEditor(panel);
+    check(editor != nullptr,
+          QStringLiteral("Element draft fixture exposes the pipeline editor"));
+    if (!editor) {
+        return;
+    }
+    editor->setText(text);
+    QMetaObject::invokeMethod(
+        editor,
+        "textEdited",
+        Qt::DirectConnection,
+        Q_ARG(QString, text));
+    QApplication::processEvents();
+}
+
+void draftsSurviveContextChangesAndFailClosedOnConflicts() {
+    const PackageDefinition package = packageFixture();
+    const NocDesign design = designFixture();
+    const ElementRef router{
+        ElementKind::Router, QStringLiteral("r-0-0")};
+    const ElementRef link{
+        ElementKind::RouterLink,
+        linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))};
+    const QString sessionA = QStringLiteral("element-session-a");
+    const QString sessionB = QStringLiteral("element-session-b");
+
+    ElementConfigurationPanel panel;
+    panel.resize(520, 520);
+    panel.show();
+    panel.setContext(&design, &package, router, false, sessionA);
+    QApplication::processEvents();
+
+    editPipeline(panel, QStringLiteral("6"));
+    auto* apply = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    check(apply && apply->isEnabled()
+              && panel.hasUnappliedDrafts(sessionA)
+              && panel.hasUnappliedDraft(sessionA, router),
+          QStringLiteral(
+              "a valid Element edit creates a session-scoped Router draft"));
+
+    panel.setContext(&design, &package, link, false, sessionA);
+    QApplication::processEvents();
+    check(pipelineEditor(panel)
+              && pipelineEditor(panel)->text() == QStringLiteral("2"),
+          QStringLiteral(
+              "switching selection shows the selected Link's authoritative value"));
+    panel.setContext(&design, &package, router, false, sessionA);
+    QApplication::processEvents();
+    apply = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    check(pipelineEditor(panel)
+              && pipelineEditor(panel)->text() == QStringLiteral("6")
+              && apply && apply->isEnabled(),
+          QStringLiteral(
+              "returning to a Router restores its unapplied Element draft"));
+
+    editPipeline(panel, QStringLiteral("1e"));
+    apply = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    check(apply && !apply->isEnabled()
+              && panel.hasUnappliedDraft(sessionA, router),
+          QStringLiteral(
+              "an invalid numeric token remains an explicit non-applicable draft"));
+    panel.setContext(&design, &package, link, false, sessionA);
+    panel.setContext(&design, &package, router, false, sessionA);
+    QApplication::processEvents();
+    auto* draftStatus = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.elementConfiguration.draftStatus"));
+    check(pipelineEditor(panel)
+              && pipelineEditor(panel)->text() == QStringLiteral("1e")
+              && draftStatus && draftStatus->isVisible()
+              && draftStatus->text().contains(
+                  QStringLiteral("validation errors")),
+          QStringLiteral(
+              "selection changes restore an invalid Element token verbatim"));
+
+    panel.setContext(&design, &package, router, false, sessionB);
+    QApplication::processEvents();
+    check(pipelineEditor(panel)
+              && pipelineEditor(panel)->text() == QStringLiteral("4")
+              && !panel.hasUnappliedDrafts(sessionB)
+              && panel.hasUnappliedDraft(sessionA, router),
+          QStringLiteral(
+              "a different document session cannot observe the previous session's Element draft"));
+    panel.setContext(&design, &package, router, false, sessionA);
+    QApplication::processEvents();
+    check(pipelineEditor(panel)
+              && pipelineEditor(panel)->text() == QStringLiteral("1e"),
+          QStringLiteral(
+              "returning to the original session restores only that session's raw draft"));
+
+    NocDesign changedDesign = design;
+    changedDesign.elementConfigurations.front().properties.insert(
+        QStringLiteral("pipeline"), 5);
+    panel.setContext(&changedDesign, &package, router, false, sessionA);
+    QApplication::processEvents();
+    apply = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    draftStatus = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.elementConfiguration.draftStatus"));
+    auto* discard = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.discardDraft"));
+    check(pipelineEditor(panel)
+              && pipelineEditor(panel)->text() == QStringLiteral("1e")
+              && panel.hasUnappliedDraft(sessionA, router)
+              && apply && !apply->isEnabled()
+              && draftStatus && draftStatus->isVisible()
+              && draftStatus->property("finepaperRole").toString()
+                  == QStringLiteral("error")
+              && draftStatus->text().contains(
+                  QStringLiteral("Draft conflict"))
+              && discard && discard->isVisible() && discard->isEnabled(),
+          QStringLiteral(
+              "an authoritative source change preserves the draft read-only and exposes an explicit conflict"));
+
+    if (discard) {
+        discard->click();
+        QApplication::processEvents();
+    }
+    apply = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    draftStatus = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.elementConfiguration.draftStatus"));
+    discard = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.discardDraft"));
+    check(!panel.hasUnappliedDrafts(sessionA)
+              && pipelineEditor(panel)
+              && pipelineEditor(panel)->text() == QStringLiteral("5")
+              && apply && !apply->isEnabled()
+              && draftStatus && !draftStatus->isVisible()
+              && discard && !discard->isVisible(),
+          QStringLiteral(
+              "explicit conflict discard loads the new authoritative value and clears only the session draft"));
+
+    editPipeline(panel, QStringLiteral("7"));
+    PackageDefinition changedPackage = package;
+    changedPackage.elementPropertySets.front().properties.front().maximum = 5;
+    panel.setContext(
+        &changedDesign, &changedPackage, router, false, sessionA);
+    QApplication::processEvents();
+    apply = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    draftStatus = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.elementConfiguration.draftStatus"));
+    discard = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.discardDraft"));
+    check(panel.hasUnappliedDraft(sessionA, router)
+              && pipelineEditor(panel)
+              && pipelineEditor(panel)->text() == QStringLiteral("5")
+              && apply && !apply->isEnabled()
+              && draftStatus && draftStatus->isVisible()
+              && draftStatus->text().contains(QStringLiteral("Package schema"))
+              && discard && discard->isEnabled(),
+          QStringLiteral(
+              "a semantic Package schema change preserves the old Element draft as a read-only conflict"));
+    if (discard) {
+        discard->click();
+        QApplication::processEvents();
+    }
+    check(!panel.hasUnappliedDrafts(sessionA)
+              && pipelineEditor(panel)
+              && pipelineEditor(panel)->text() == QStringLiteral("5"),
+          QStringLiteral(
+              "discarding a schema-conflicted Element draft accepts the new schema and durable value"));
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -217,8 +390,8 @@ int main(int argc, char** argv) {
               && !apply->isEnabled() && reset->isEnabled(),
           QStringLiteral("Router Inspector keeps the Mesh boundary visible and avoids no-op apply"));
 
-    std::optional<QJsonObject> appliedValues;
-    std::optional<QString> appliedSet;
+    std::optional<QJsonObject> appliedValues = std::nullopt;
+    std::optional<QString> appliedSet = std::nullopt;
     panel.applyRequested = [&](ElementRef element,
                                QString propertySetId,
                                QJsonObject values) {
@@ -242,7 +415,7 @@ int main(int argc, char** argv) {
               && appliedValues->value(QStringLiteral("pipeline")).toInt() == 6,
           QStringLiteral("Apply emits schema-generic effective values for atomic mutation"));
 
-    std::optional<QString> resetSet;
+    std::optional<QString> resetSet = std::nullopt;
     panel.resetRequested = [&](ElementRef element, QString propertySetId) {
         check(element == router,
               QStringLiteral("Reset retains the exact semantic Router identity"));
@@ -268,6 +441,7 @@ int main(int argc, char** argv) {
     check(formLayoutWarningCount.load(std::memory_order_relaxed) == 0,
           QStringLiteral(
               "rebuilding the Package-driven form never probes an invalid QFormLayout row"));
+    draftsSurviveContextChangesAndFailClosedOnConflicts();
     qInstallMessageHandler(previousMessageHandler);
     messageHandlerToForward.store(nullptr, std::memory_order_release);
 

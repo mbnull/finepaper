@@ -1,5 +1,7 @@
 #include "features/topology/mesh_resize_dialog.h"
 
+#include "features/topology/topology_text.h"
+
 #include <QAbstractItemView>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -42,7 +44,7 @@ QString domainLabel(const MeshResizePlan& plan, const QString& id) {
         || found->name == found->id) {
         return id;
     }
-    return QStringLiteral("%1 — %2").arg(found->name, found->id);
+    return found->name + QStringLiteral(" — ") + found->id;
 }
 
 QString cardinalityLabel(DomainCardinality cardinality) {
@@ -153,12 +155,11 @@ QStringList errorDiagnosticText(const QVector<Diagnostic>& diagnostics) {
 }
 
 QString routerItemText(const MeshResizeRouterPlan& router, bool complete) {
-    return QStringLiteral("%1  ·  (%2, %3)  ·  %4")
-        .arg(router.element.id)
-        .arg(router.position.x)
-        .arg(router.position.y)
-        .arg(complete ? QStringLiteral("complete")
-                      : QStringLiteral("needs assignment"));
+    return topology_text::meshResizeRouterListText(
+        router.element.id,
+        router.position.x,
+        router.position.y,
+        complete);
 }
 
 const MeshResizeRouterPlan* findRouter(const MeshResizePlan& plan,
@@ -640,10 +641,8 @@ void MeshResizeDialog::rebuildAssignmentEditor() {
     const MeshResizeRouterPlan* router = findRouter(m_plan, routerId);
     auto* heading = new QLabel(
         router
-            ? QStringLiteral("%1 at Mesh coordinate (%2, %3)")
-                  .arg(routerId)
-                  .arg(router->position.x)
-                  .arg(router->position.y)
+            ? topology_text::meshResizeRouterHeadingText(
+                  routerId, router->position.x, router->position.y)
             : routerId,
         content);
     heading->setObjectName(

@@ -1,6 +1,7 @@
 #include "gui/main_window.h"
 #include "features/topology/animated_graphics_view.h"
 #include "features/domain/domain_manager_panel.h"
+#include "gui/element_configuration_panel.h"
 #include "gui/endpoint_configuration_panel.h"
 #include "features/topology/noc_editor_style.h"
 #include "features/topology/noc_node_editor.h"
@@ -707,13 +708,13 @@ void chooseMessageBoxButton(QMessageBox::StandardButton button, int attempts = 1
     QTimer::singleShot(0, [button, attempts] {
         for (QWidget* widget : QApplication::topLevelWidgets()) {
             auto* messageBox = qobject_cast<QMessageBox*>(widget);
-            if (!messageBox) {
+            if (!messageBox || !messageBox->isVisible()) {
                 continue;
             }
             if (QAbstractButton* target = messageBox->button(button)) {
                 target->click();
+                return;
             }
-            return;
         }
         if (attempts > 1) {
             QTimer::singleShot(
@@ -795,11 +796,13 @@ void respondToNewDesignDialog(
 void respondToMeshResizeDialog(
     bool accept = false,
     std::optional<int> rows = std::nullopt,
-    std::optional<int> columns = std::nullopt) {
-    QTimer::singleShot(0, [accept, rows, columns] {
+    std::optional<int> columns = std::nullopt,
+    int attempts = 100) {
+    QTimer::singleShot(0, [accept, rows, columns, attempts] {
         for (QWidget* widget : QApplication::topLevelWidgets()) {
             auto* dialog = qobject_cast<QDialog*>(widget);
             if (!dialog
+                || !dialog->isVisible()
                 || dialog->objectName()
                     != QStringLiteral("finepaper.meshResizeDialog")) {
                 continue;
@@ -834,10 +837,18 @@ void respondToMeshResizeDialog(
                 if (QAbstractButton* button = buttons->button(
                         accept ? QDialogButtonBox::Ok
                                : QDialogButtonBox::Cancel)) {
-                    button->click();
+                    if (button->isEnabled()) {
+                        button->click();
+                        return;
+                    }
                 }
             }
-            return;
+        }
+        if (attempts > 1) {
+            QTimer::singleShot(10, [accept, rows, columns, attempts] {
+                respondToMeshResizeDialog(
+                    accept, rows, columns, attempts - 1);
+            });
         }
     });
 }
@@ -1652,7 +1663,12 @@ int main(int argc, char** argv) {
               "the no-design canvas offers Create and Open CTAs when a runnable NoC IP is installed"));
     restoreRequestedClientSize();
     captureSmokeScreenshot(window, QStringLiteral("no-design"), requestedTheme);
-    createDesignThroughDialog(window, QStringLiteral("finepaper.noc@1.0.0"));
+    const QString provenanceDesignName =
+        QStringLiteral("NoC %2-%3-%4-%5");
+    createDesignThroughDialog(
+        window,
+        QStringLiteral("finepaper.noc@1.0.0"),
+        provenanceDesignName);
     restoreRequestedClientSize();
     check(window.isWindowModified(),
           QStringLiteral("creating a design marks the workbench dirty"));
@@ -1680,6 +1696,12 @@ int main(int argc, char** argv) {
           QStringLiteral("Mesh resize entry points follow active Package metadata"));
     auto* designOverview = window.findChild<QLabel*>(
         QStringLiteral("finepaper.designOverview"));
+    check(designOverview
+              && designOverview->text().contains(provenanceDesignName)
+              && !designOverview->text().contains(QStringLiteral("%6"))
+              && !designOverview->text().contains(QStringLiteral("%7")),
+          QStringLiteral(
+              "Inspector overview formats arbitrary design names without reinterpreting placeholder text"));
     const QString overviewBeforeCancelledResize = designOverview
         ? designOverview->text() : QString();
     const bool modifiedBeforeCancelledResize = window.isWindowModified();
@@ -3186,6 +3208,23 @@ int main(int argc, char** argv) {
         check(waitUntil([&window] { return !window.operationBusy(); }),
               QStringLiteral("GUI validation finishes asynchronously without blocking the event loop"));
     }
+    auto* diagnosticsStatus = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.diagnosticsStatus"));
+    auto* problemReportStatus = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.problemReportStatus"));
+    check(diagnosticsStatus
+              && diagnosticsStatus->text().contains(
+                  QStringLiteral("Current result"))
+              && diagnosticsStatus->text().contains(
+                  QString::fromUtf8("“") + provenanceDesignName
+                  + QString::fromUtf8("”"))
+              && diagnosticsStatus->textFormat() == Qt::PlainText
+              && problemReportStatus
+              && problemReportStatus->text().contains(
+                  QStringLiteral("Current result"))
+              && problemReportStatus->textFormat() == Qt::PlainText,
+          QStringLiteral(
+              "validation publishes literal plain-text provenance for arbitrary design names"));
 
     auto* outputPath = window.findChild<QLineEdit*>(QStringLiteral("finepaper.outputRoot"));
     if (outputPath) {
@@ -3199,12 +3238,108 @@ int main(int argc, char** argv) {
               QStringLiteral("GUI generation finishes asynchronously without blocking the event loop"));
     }
 
+    auto* generationStatus = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.generationStatus"));
+    check(generationStatus
+              && generationStatus->text().contains(
+                  QStringLiteral("Current artifacts"))
+              && generationStatus->text().contains(
+                  QString::fromUtf8("“") + provenanceDesignName
+                  + QString::fromUtf8("”"))
+              && generationStatus->textFormat() == Qt::PlainText,
+          QStringLiteral(
+              "generation publishes literal plain-text provenance for arbitrary design names"));
+
     auto* artifacts = window.findChild<QTableWidget*>(QStringLiteral("finepaper.artifactTable"));
     check(artifacts && artifacts->rowCount() > 0,
           QStringLiteral("GUI generation flow reports real RTL artifacts"));
     if (artifacts && artifacts->rowCount() > 0) {
         const QString artifactPath = artifacts->item(0, 2)->text();
         check(!artifactPath.isEmpty(), QStringLiteral("reported GUI artifact has a path"));
+    }
+
+    const bool movedAfterResults = nodeEditor && nodeEditor->endpointMoveRequested
+        ? nodeEditor->endpointMoveRequested(
+              QStringLiteral("master_0"),
+              finepaper::NocAttachmentTarget{
+                  finepaper::RouterPosition{1, 0}, std::nullopt})
+        : false;
+    application.processEvents();
+    auto* resultTabsAfterMutation = window.findChild<QTabWidget*>(
+        QStringLiteral("finepaper.resultTabs"));
+    check(movedAfterResults && diagnosticsStatus && generationStatus
+              && diagnosticsStatus->text().contains(
+                  QStringLiteral("Out of date"))
+              && generationStatus->text().contains(
+                  QStringLiteral("Out of date"))
+              && diagnosticsStatus->text().contains(
+                  QString::fromUtf8("“") + provenanceDesignName
+                  + QString::fromUtf8("”"))
+              && generationStatus->text().contains(
+                  QString::fromUtf8("“") + provenanceDesignName
+                  + QString::fromUtf8("”"))
+              && resultTabsAfterMutation
+              && resultTabsAfterMutation->tabText(0).contains(
+                  QStringLiteral("out of date"))
+              && resultTabsAfterMutation->tabText(2).contains(
+                  QStringLiteral("out of date")),
+          QStringLiteral(
+              "a durable design mutation keeps prior results visible but labels them out of date"));
+    restoreRequestedClientSize();
+    check(!requestedWindowSize.isValid()
+              || window.size() == requestedWindowSize,
+          QStringLiteral(
+              "opening Results does not grow the requested client size (%1x%2)")
+              .arg(window.width())
+              .arg(window.height()));
+    captureSmokeScreenshot(
+        window, QStringLiteral("results-out-of-date"), requestedTheme);
+
+    const QString blockedGenerationRoot = outputRoot.filePath(
+        QStringLiteral("blocked-generation-root"));
+    QFile blockedGenerationFile(blockedGenerationRoot);
+    const bool blockedGenerationFixtureReady =
+        blockedGenerationFile.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        && blockedGenerationFile.write("not a directory") > 0;
+    blockedGenerationFile.close();
+    if (outputPath) {
+        outputPath->setText(blockedGenerationRoot);
+    }
+    if (generateAction) {
+        generateAction->trigger();
+        check(waitUntil([&window] { return !window.operationBusy(); }),
+              QStringLiteral(
+                  "a generation failure returns control to the workbench"));
+    }
+    check(blockedGenerationFixtureReady && generationStatus
+              && generationStatus->text().contains(
+                  QStringLiteral("Current generation attempt"))
+              && generationStatus->text().contains(
+                  QStringLiteral("failed"), Qt::CaseInsensitive)
+              && generationStatus->property("finepaperRole").toString()
+                  == QStringLiteral("error"),
+          QStringLiteral(
+              "a failed generation attempt is published as an error, not as artifacts"));
+
+    QAction* resultReloadPackagesAction = actionWithText(
+        window, QStringLiteral("Reload Packages"));
+    if (resultReloadPackagesAction) {
+        resultReloadPackagesAction->trigger();
+        application.processEvents();
+    }
+    check(resultReloadPackagesAction && generationStatus
+              && generationStatus->text().contains(
+                  QStringLiteral("Out of date"))
+              && generationStatus->text().contains(
+                  QStringLiteral("failed generation attempt"))
+              && !generationStatus->text().contains(
+                  QStringLiteral("artifacts were generated"))
+              && generationStatus->property("finepaperRole").toString()
+                  == QStringLiteral("error"),
+          QStringLiteral(
+              "Package reload safely preserves a failed attempt's error provenance without inventing artifacts"));
+    if (outputPath) {
+        outputPath->setText(outputRoot.path());
     }
 
     finepaper::NocEditorSelectionSet observedSemanticSelection;
@@ -4195,6 +4330,41 @@ int main(int argc, char** argv) {
     }
     auto* numberApply = numberWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.applyParameters"));
+    QAction* numberValidate = actionWithText(
+        numberWindow, QStringLiteral("Validate / DRC"));
+    if (numberValidate) {
+        chooseMessageBoxButton(QMessageBox::Cancel);
+        numberValidate->trigger();
+        application.processEvents();
+    }
+    check(numberValidate && !numberWindow.operationBusy()
+              && numberEditor && numberEditor->value()
+              && qAbs(numberEditor->value()->toDouble() - 2.75) < 0.000001
+              && numberApply && numberApply->isEnabled(),
+          QStringLiteral(
+              "cancelling validation preserves an unapplied NoC parameter draft"));
+
+    if (numberValidate) {
+        chooseMessageBoxButton(QMessageBox::Discard);
+        numberValidate->trigger();
+        check(waitUntil([&numberWindow] {
+                  return !numberWindow.operationBusy();
+              }),
+              QStringLiteral(
+                  "authorized validation starts after discarding the NoC parameter draft"));
+    }
+    check(numberEditor && numberEditor->value()
+              && qAbs(numberEditor->value()->toDouble() - 1.25) < 0.000001
+              && numberApply && !numberApply->isEnabled(),
+          QStringLiteral(
+              "starting validation discards the authorized draft and restores the durable value"));
+
+    if (numberEditor) {
+        numberEditor->setValue(QJsonValue(2.75));
+        if (numberEditor->valueChanged) {
+            numberEditor->valueChanged();
+        }
+    }
     if (numberApply) {
         numberApply->click();
         application.processEvents();
@@ -4962,9 +5132,9 @@ int main(int argc, char** argv) {
               && domainWorkspaceDomains->rowCount() == 3
               && domainManagerInstances
               && domainManagerInstances->rowCount() == 3
-              && !domainWindow.isWindowModified(),
+              && domainWindow.isWindowModified(),
           QStringLiteral(
-              "a persistent complete-configuration draft remains separate from durable quick-Manager data"));
+              "a persistent complete-configuration draft remains separate from durable quick-Manager data and marks the workbench pending"));
     if (domainCenterViews) {
         domainCenterViews->setCurrentIndex(0);
         application.processEvents();
@@ -5012,8 +5182,8 @@ int main(int argc, char** argv) {
         application.processEvents();
     }
     check(domainApplyAssignment && domainApplyAssignment->isEnabled()
-              && !domainWindow.isWindowModified(),
-          QStringLiteral("editing Mixed choices stages an explicit atomic assignment without mutating the design"));
+              && domainWindow.isWindowModified(),
+          QStringLiteral("editing Mixed choices stages an explicit atomic assignment and marks the workbench pending without mutating durable data"));
 
     auto* domainEndpointPalette = domainWindow.findChild<QListWidget*>(
         QStringLiteral("finepaper.endpointPalette"));
@@ -5042,9 +5212,9 @@ int main(int argc, char** argv) {
               && revertWorkspaceDraft && revertWorkspaceDraft->isEnabled()
               && domainWorkspaceDomains
               && domainWorkspaceDomains->rowCount() == 3
-              && !domainWindow.isWindowModified(),
+              && domainWindow.isWindowModified(),
           QStringLiteral(
-              "authorizing discard before Endpoint creation keeps both quick and complete Domain drafts when the later Endpoint dialog is cancelled"));
+              "authorizing discard before Endpoint creation keeps both pending Domain drafts when the later Endpoint dialog is cancelled"));
     if (domainScene && domainRouterGraphics && domainRouter1Graphics) {
         domainScene->clearSelection();
         domainRouterGraphics->setSelected(true);
@@ -5072,9 +5242,9 @@ int main(int argc, char** argv) {
               && domainApplyAssignment->isEnabled()
               && revertWorkspaceDraft && revertWorkspaceDraft->isEnabled()
               && !domainWindow.operationBusy()
-              && !domainWindow.isWindowModified(),
+              && domainWindow.isWindowModified(),
           QStringLiteral(
-              "Save, Validate and Generate cannot silently ignore quick or complete Domain drafts"));
+              "Save, Validate and Generate remain available but cannot silently ignore quick or complete Domain drafts"));
 
     if (domainApplyAssignment) {
         chooseMessageBoxButton(QMessageBox::Cancel);
@@ -5186,6 +5356,32 @@ int main(int argc, char** argv) {
               && persistedAssignment(QStringLiteral("r-1-0"))
                   == QStringList{QStringLiteral("zone-a")},
           QStringLiteral("saving clears dirty state and persists the atomic generic Domain assignment"));
+
+    zoneAAssignment = domainAssignmentItem(QStringLiteral("zone-a"));
+    zoneBAssignment = domainAssignmentItem(QStringLiteral("zone-b"));
+    if (zoneAAssignment && zoneBAssignment) {
+        zoneAAssignment->setCheckState(Qt::Unchecked);
+        zoneBAssignment->setCheckState(Qt::Checked);
+        application.processEvents();
+    }
+    QAction* domainReloadAction = actionWithText(
+        domainWindow, QStringLiteral("Reload Packages"));
+    check(domainReloadAction && domainApplyAssignment
+              && domainApplyAssignment->isEnabled()
+              && domainWindow.isWindowModified(),
+          QStringLiteral(
+              "a quick Domain assignment draft can be staged before Package reload"));
+    if (domainReloadAction) {
+        chooseMessageBoxButton(QMessageBox::Discard);
+        domainReloadAction->trigger();
+        application.processEvents();
+        application.processEvents();
+    }
+    check(domainReloadAction && domainApplyAssignment
+              && !domainApplyAssignment->isEnabled()
+              && !domainWindow.isWindowModified(),
+          QStringLiteral(
+              "Package reload discards a Domain assignment while the borrowed old catalog is still alive"));
 
     const auto stageCompleteDomainDraft = [&domainWindow]() {
         auto* workspace = domainWindow.findChild<QWidget*>(
@@ -5317,6 +5513,99 @@ int main(int argc, char** argv) {
               && !restoredDomainWindow.isWindowModified(),
           QStringLiteral("the per-design Domain layer restores without dirtying the design"));
     closeDiscarding(restoredDomainWindow);
+
+    const QString v3PackageRoot = QDir(projectRoot).filePath(
+        QStringLiteral("packages/finepaper-noc-v3"));
+    finepaper::RuntimeLocations v3Locations = {
+        QStringList{v3PackageRoot}, outputRoot.path()};
+    finepaper::FinepaperMainWindow elementReloadWindow(v3Locations);
+    elementReloadWindow.show();
+    application.processEvents();
+    createDesignThroughDialog(
+        elementReloadWindow,
+        QStringLiteral("finepaper.noc@3.1.0"),
+        QStringLiteral("element_reload_regression"));
+    auto* elementReloadEditor = dynamic_cast<finepaper::NocNodeEditor*>(
+        elementReloadWindow.findChild<QWidget*>(
+            QStringLiteral("finepaper.nodeEditor")));
+    auto* elementReloadPanel =
+        dynamic_cast<finepaper::ElementConfigurationPanel*>(
+            elementReloadWindow.findChild<QWidget*>(
+                QStringLiteral("finepaper.elementConfiguration")));
+    const QString elementReloadDesignIdentity =
+        QStringLiteral("design-session-1");
+    auto* elementReloadView = elementReloadEditor
+        ? elementReloadEditor->findChild<QGraphicsView*>() : nullptr;
+    auto* elementReloadScene = elementReloadView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(
+              elementReloadView->scene())
+        : nullptr;
+    const auto elementReloadRouter = nodeIdWithCaption(
+        elementReloadScene, QStringLiteral("r-0-0"));
+    if (elementReloadScene && elementReloadRouter) {
+        elementReloadScene->clearSelection();
+        elementReloadScene->nodeGraphicsObject(*elementReloadRouter)
+            ->setSelected(true);
+        elementReloadScene->nodeSelected(*elementReloadRouter);
+        application.processEvents();
+    }
+    auto* virtualChannels = elementReloadWindow.findChild<QLineEdit*>(
+        QStringLiteral(
+            "finepaper.schemaValue.virtualChannels.scalar.text"));
+    auto* elementApply = elementReloadWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    if (virtualChannels) {
+        virtualChannels->setText(QStringLiteral("4"));
+        QMetaObject::invokeMethod(
+            virtualChannels,
+            "textEdited",
+            Qt::DirectConnection,
+            Q_ARG(QString, QStringLiteral("4")));
+        application.processEvents();
+    }
+    QAction* elementReloadAction = actionWithText(
+        elementReloadWindow, QStringLiteral("Reload Packages"));
+    check(elementReloadAction && elementApply && elementApply->isEnabled()
+              && elementReloadPanel
+              && elementReloadPanel->hasUnappliedDrafts(
+                  elementReloadDesignIdentity),
+          QStringLiteral(
+              "an Element Configuration draft can be staged before Package reload"));
+    if (elementReloadAction) {
+        chooseMessageBoxButton(QMessageBox::Discard);
+        elementReloadAction->trigger();
+        application.processEvents();
+        application.processEvents();
+    }
+    elementReloadView = elementReloadEditor
+        ? elementReloadEditor->findChild<QGraphicsView*>() : nullptr;
+    elementReloadScene = elementReloadView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(
+              elementReloadView->scene())
+        : nullptr;
+    const auto reloadedElementRouter = nodeIdWithCaption(
+        elementReloadScene, QStringLiteral("r-0-0"));
+    if (elementReloadScene && reloadedElementRouter) {
+        elementReloadScene->clearSelection();
+        elementReloadScene->nodeGraphicsObject(*reloadedElementRouter)
+            ->setSelected(true);
+        elementReloadScene->nodeSelected(*reloadedElementRouter);
+        application.processEvents();
+    }
+    virtualChannels = elementReloadWindow.findChild<QLineEdit*>(
+        QStringLiteral(
+            "finepaper.schemaValue.virtualChannels.scalar.text"));
+    elementApply = elementReloadWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    check(elementReloadAction && virtualChannels
+              && virtualChannels->text() == QStringLiteral("2")
+              && elementApply && !elementApply->isEnabled()
+              && elementReloadPanel
+              && !elementReloadPanel->hasUnappliedDrafts(
+                  elementReloadDesignIdentity),
+          QStringLiteral(
+              "Package reload discards an Element draft before replacing its borrowed catalog"));
+    closeDiscarding(elementReloadWindow);
 
     QTemporaryDir missingPackageRoot(
         QStringLiteral("/tmp/finepaper-missing-package-XXXXXX"));

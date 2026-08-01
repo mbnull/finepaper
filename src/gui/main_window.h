@@ -2,7 +2,9 @@
 
 #include "application/application.h"
 #include "application/runtime_settings.h"
+#include "features/operations/design_run_state.h"
 #include "features/topology/noc_node_editor.h"
+#include "gui/package_parameter_form.h"
 #include "gui/workbench_view_registry.h"
 
 #include <QJsonValue>
@@ -61,9 +63,22 @@ private:
         InspectorOnly,
     };
 
+    enum class GenerationPublicationKind {
+        None,
+        Artifacts,
+        FailedAttempt,
+    };
+
     struct AttachmentSlotChoice {
         bool accepted = false;
         std::optional<QString> slot = std::nullopt;
+    };
+
+    struct ParameterDraftState {
+        QString designIdentity;
+        QJsonObject sourceValues;
+        QString sourceSchemaIdentity;
+        PackageParameterDraft editorState;
     };
 
     void createUi();
@@ -88,15 +103,22 @@ private:
     void updateDomainManager();
     void updateDesignExtensionsWorkspace();
     void updateEndpointPalette();
+    void detachPackageBorrowingPanels();
     void updateUiState();
     void setOperationBusy(bool busy, const QString& message = {});
     void setDirty(bool dirty);
+    void captureParameterDraft();
+    void discardParameterDraft();
+    [[nodiscard]] bool hasPendingInspectorDrafts() const;
+    [[nodiscard]] QStringList pendingInspectorDraftDescriptions() const;
+    bool confirmDiscardPendingInspectorDrafts(const QString& action);
+    void discardPendingInspectorDrafts();
+    bool confirmDiscardElementDrafts(const QString& action,
+                                     const ElementRef& element);
     bool confirmDiscardPendingDomainChanges(const QString& action);
     bool confirmDiscardPendingDomainWorkspace(const QString& action);
     void discardPendingDomainChanges();
     void discardPendingDomainWorkspace();
-    bool confirmDiscardPendingEndpointDrafts(const QString& action);
-    void discardPendingEndpointDrafts();
     bool canSaveDetachedEndpointDrafts();
     bool maybeSave();
     void createDesign();
@@ -107,8 +129,10 @@ private:
     void validateDesign();
     void generateDesign();
     void resizeMesh();
-    void presentValidationResult(const ValidationResult& result);
-    void presentGenerationResult(const GenerationResult& result);
+    void presentValidationResult(const ValidationResult& result,
+                                 const operations::DesignStamp& stamp);
+    void presentGenerationResult(const GenerationResult& result,
+                                 const operations::DesignStamp& stamp);
     attachment::CreateEndpointResult addEndpoint(
         const QString& endpointType,
         NocAttachmentTarget target);
@@ -128,15 +152,26 @@ private:
     void refreshDesignViews();
     void refreshDomainViews();
     void rebuildParameterEditors();
-    void populateDiagnostics(const QVector<Diagnostic>& diagnostics);
-    void populateGenerationOutputs(const GenerationResult& result);
+    void populateDiagnostics(
+        const QVector<Diagnostic>& diagnostics,
+        const QString& source = {},
+        std::optional<operations::DesignStamp> stamp = std::nullopt);
+    void populateGenerationOutputs(
+        const GenerationResult& result,
+        const operations::DesignStamp& stamp);
     void showDiagnostics(const QVector<Diagnostic>& diagnostics,
                          const QString& title,
                          bool modalOnError = true);
     void appendActivity(const QString& message);
     void showWorkspaceStatusMessage();
+    void showResultsDock();
     void selectCenterView(const QString& id);
-    void beginDesignSession();
+    void beginDesignSession(const QString& designName);
+    [[nodiscard]] operations::DesignStamp currentDesignStamp() const;
+    void advanceDesignRevision();
+    void advanceCatalogRevision();
+    void clearPublishedResults();
+    void updateResultFreshness();
 
     const PackageDefinition* packageByKey(const QString& key) const;
     const PackageDefinition* packageForDesign() const;
@@ -158,6 +193,16 @@ private:
     bool m_operationBusy = false;
     quint64 m_designSessionSerial = 0;
     QString m_designSessionIdentity;
+    operations::DesignRunState m_runState;
+    std::optional<ParameterDraftState> m_parameterDraft = std::nullopt;
+    bool m_updatingParameterForm = false;
+    bool m_parameterDraftConflict = false;
+    bool m_batchingInspectorDraftChanges = false;
+    std::optional<operations::DesignStamp> m_diagnosticsStamp = std::nullopt;
+    std::optional<operations::DesignStamp> m_generationStamp = std::nullopt;
+    GenerationPublicationKind m_generationPublicationKind =
+        GenerationPublicationKind::None;
+    QString m_diagnosticsSource;
     QSet<QString> m_runtimeAvailablePackageKeys;
     std::optional<RouterPosition> m_selectedRouter = std::nullopt;
     NocEditorSelectionSet m_editorSelection;
@@ -195,6 +240,7 @@ private:
     DomainConfigurationWorkspace* m_domainConfigurationWorkspace = nullptr;
     DesignExtensionsWorkspace* m_designExtensionsWorkspace = nullptr;
     QLabel* m_performanceSummary = nullptr;
+    QLabel* m_problemReportStatus = nullptr;
     QPlainTextEdit* m_problemReport = nullptr;
 
     QDockWidget* m_packageDock = nullptr;
@@ -219,7 +265,9 @@ private:
     QGroupBox* m_elementConfigurationGroup = nullptr;
     QGroupBox* m_parameterGroup = nullptr;
     PackageParameterForm* m_parameterForm = nullptr;
+    QLabel* m_parameterDraftStatus = nullptr;
     QPushButton* m_applyParametersButton = nullptr;
+    QPushButton* m_discardParametersButton = nullptr;
     ElementConfigurationPanel* m_elementConfigurationPanel = nullptr;
 
     QDockWidget* m_domainDock = nullptr;
@@ -227,12 +275,14 @@ private:
 
     QDockWidget* m_resultsDock = nullptr;
     QTabWidget* m_resultTabs = nullptr;
+    QLabel* m_diagnosticsStatus = nullptr;
     QTableWidget* m_drcTable = nullptr;
     QPlainTextEdit* m_activityLog = nullptr;
     QLineEdit* m_outputRoot = nullptr;
     QPushButton* m_browseOutputButton = nullptr;
     QPushButton* m_generateButton = nullptr;
     QProgressBar* m_operationProgress = nullptr;
+    QLabel* m_generationStatus = nullptr;
     QTableWidget* m_artifactTable = nullptr;
     QPlainTextEdit* m_generationDetails = nullptr;
 };

@@ -1,6 +1,7 @@
 #include "features/topology/animated_graphics_view.h"
 
 #include "features/topology/noc_editor_style.h"
+#include "features/topology/topology_text.h"
 
 #include <QBrush>
 #include <QFontMetrics>
@@ -284,9 +285,8 @@ void AnimatedGraphicsView::drawDomainLegend(QPainter* painter) const {
         if (!compact || m_domainLegendEntries.size() <= 1) {
             return label;
         }
-        return QStringLiteral("%1 · %2 total")
-            .arg(label)
-            .arg(m_domainLegendEntries.size());
+        return topology_text::compactDomainLegendEntryText(
+            label, m_domainLegendEntries.size());
     };
     QString emptyText = m_domainLegendEmptyMessage.trimmed();
     if (emptyText.isEmpty() && visibleEntryCount == 0) {

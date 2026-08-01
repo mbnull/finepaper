@@ -28,6 +28,11 @@
 图标或 Tooltip 才能理解。图形标记只用于端口、Domain 色块、展开状态等空间或
 数据语义。
 
+设计名、Endpoint ID、Package label、路径等外部文本必须按纯文本展示；确需富文本
+的 Inspector 摘要先逐项 HTML escape。动态文案应一次性完成占位符替换或直接拼接，
+不得在插入外部文本后继续链式 `QString::arg()`，因为合法的 `%2` 等内容不能被再次
+解释为格式占位符。
+
 ## 视觉 token
 
 所有常用 Widgets 使用以下语义，不依赖业务对象名：
@@ -61,6 +66,51 @@ Endpoint 的自由位置属于工作区状态，不得因为断连、重新选�
 吸附 Router。断开的 Endpoint 是可恢复的编辑草稿，不属于持久 Design；重新连接
 或删除以前，保存必须被阻止并明确说明原因。Router 与 Router 链路来自 Mesh，
 不能作为任意图节点增删。
+
+## Inspector 草稿契约
+
+工作台采用文字优先的交互语言：工具栏、面板入口、状态与恢复动作使用简短动词或
+短语，不为已有文字重复添加装饰性图标。图标只适合空间关系或标准平台语义，且不能
+单独承担状态、危险程度或下一步操作的表达。
+
+NoC 参数、Endpoint 参数和 Package 定义的 Element Configuration 都区分
+“持久 Design 值”与“表单中的未应用草稿”。选择其他节点、切换 Property Set、
+刷新 Inspector 或重建画布时，必须保留完整编辑状态；`1e`、`-` 等暂时无效的
+输入也属于草稿，不能只比较其 JSON 投影。
+
+- 草稿按 design session 隔离；即使重新打开同一文件、Design ID 相同，也不得
+  恢复上一个 session 的草稿。
+- 权威 Design 值或 Package schema 改变后，旧草稿保留为只读冲突，并用文字说明
+  原因；只有显式 Discard 才能清除。
+- Save、Validate、Generate、New、Open、Reload、Install 和 Resize 必须汇总列出
+  所有未应用 Inspector 草稿。Cancel 保留草稿，操作失败也保留；只有 Apply、
+  显式 Discard 或实际开始/成功的后续操作才能消费相应草稿。
+- Type、Migration 等会重建依赖参数字段的切换，若字段已修改，先提供文字化的
+  “Discard Parameter Edits and Switch”与 Cancel 路径。
+
+状态不能只靠颜色：Inspector 同时显示 `Unapplied`、`Draft conflict`、
+`Discard Unapplied Changes` 等可读文案。
+Domain assignment 与 Domain Configuration 草稿遵守同一工作台契约：存在任一
+未应用草稿时窗口必须显示 modified 状态，并启用 Save 以进入统一处理流程。
+
+## 结果归属与过期状态
+
+Validation 和 Generation 启动时捕获 design session、语义 revision、Package
+catalog revision 与唯一 run ID。完成回调只有在完整票据仍匹配当前工作台时才能
+更新 DRC、Problem Report、Artifacts、结果 Tab、状态栏或焦点；旧任务只记录到
+Activity Log，不得覆盖新结果或切走主画布。
+
+结果页始终用文字标明以下状态之一：
+
+- `Running`：正在处理的 Design 名称与 revision；
+- `Current result` / `Current artifacts`：结果属于当前 revision；
+- `Out of date`：Design 已发生持久语义修改，或 Package catalog 已更新；旧内容
+  可以继续查看，但交付前必须重新运行；
+- `No diagnostics` / `No RTL`：新 session 尚无结果。
+
+Apply 参数、Endpoint/Domain/Element 修改和 Mesh 变化增加语义 revision；Save、
+画布平移、自由节点位置、Router 折叠和 Fit View 不增加 revision。Validation 失败
+展开 Results dock，但不自动切换中央工作区，避免打断画布上下文。
 
 ## Domain 表达
 

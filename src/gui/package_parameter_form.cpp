@@ -1,5 +1,6 @@
 #include "gui/package_parameter_form.h"
 
+#include "package/parameter_schema_identity.h"
 #include "ui/common/schema_value_editor.h"
 
 #include <QFormLayout>
@@ -43,9 +44,10 @@ PackageParameterForm::PackageParameterForm(
 void PackageParameterForm::setSchema(
     const QVector<ParameterDefinition>& definitions,
     const QJsonObject& values) {
+    m_schemaIdentity = parameterSchemaIdentity(definitions);
     m_definitions = definitions;
     rebuild(values);
-    m_baselineValues = this->values();
+    m_baselineDraftValues = draftValues();
 }
 
 void PackageParameterForm::setValues(const QJsonObject& values) {
@@ -90,9 +92,13 @@ void PackageParameterForm::loadValues(const QJsonObject& values,
             suggestion);
     }
     if (resetBaseline) {
-        m_baselineValues = this->values();
+        m_baselineDraftValues = draftValues();
     }
     notifyValueChanged();
+}
+
+bool PackageParameterForm::isModified() const {
+    return draftValues() != m_baselineDraftValues;
 }
 
 QJsonObject PackageParameterForm::values() const {
@@ -132,6 +138,30 @@ QStringList PackageParameterForm::localErrors() const {
         }
     }
     return errors;
+}
+
+PackageParameterEditorSnapshot
+PackageParameterForm::editorSnapshot() const {
+    PackageParameterEditorSnapshot snapshot;
+    for (const Control& control : m_controls) {
+        if (!control.editor) {
+            continue;
+        }
+        const std::optional<QJsonValue> value = control.editor->value();
+        if (value) {
+            snapshot.values.insert(control.definition.id, *value);
+        }
+        snapshot.draftValues.insert(
+            control.definition.id, control.editor->draftState());
+        const QString label = displayLabel(control.definition);
+        for (const QString& error : control.editor->localErrors()) {
+            snapshot.localErrors.append(
+                QStringLiteral("%1: %2").arg(label, error));
+        }
+    }
+    snapshot.modified =
+        snapshot.draftValues != m_baselineDraftValues;
+    return snapshot;
 }
 
 void PackageParameterForm::rebuild(const QJsonObject& values) {
@@ -244,15 +274,23 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
         auto* toggle = new QToolButton(m_content);
         toggle->setObjectName(
             m_objectNamePrefix + QStringLiteral(".advanced.toggle"));
-        toggle->setText(QStringLiteral("Advanced (%1)").arg(advancedCount));
+        toggle->setText(
+            QStringLiteral("Show advanced parameters (%1)")
+                .arg(advancedCount));
         toggle->setCheckable(true);
         toggle->setChecked(false);
-        toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        toggle->setArrowType(Qt::RightArrow);
+        toggle->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        toggle->setArrowType(Qt::NoArrow);
         advancedContainer->hide();
         connect(toggle, &QToolButton::toggled,
-                advancedContainer, [toggle, advancedContainer](bool expanded) {
-            toggle->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+                advancedContainer,
+                [toggle, advancedContainer, advancedCount](bool expanded) {
+            toggle->setText(
+                expanded
+                    ? QStringLiteral("Hide advanced parameters (%1)")
+                          .arg(advancedCount)
+                    : QStringLiteral("Show advanced parameters (%1)")
+                          .arg(advancedCount));
             advancedContainer->setVisible(expanded);
         });
         advancedLayout->addStretch(1);

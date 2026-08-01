@@ -3,15 +3,18 @@
 #include "gui/package_parameter_form.h"
 #include "ui/common/schema_value_editor.h"
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
 #include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QTabWidget>
 #include <QTextStream>
+#include <QTimer>
 #include <QToolButton>
 
 namespace {
@@ -33,6 +36,40 @@ SchemaValueEditor* schemaEditor(QObject* parent, const QString& objectName) {
         ? static_cast<SchemaValueEditor*>(
               parent->findChild<QWidget*>(objectName))
         : nullptr;
+}
+
+void respondToParameterSwitchConfirmation(
+    QMessageBox::StandardButton response,
+    bool* sawTextFirstConfirmation = nullptr) {
+    QTimer::singleShot(0, [response, sawTextFirstConfirmation] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* messageBox = qobject_cast<QMessageBox*>(widget);
+            if (!messageBox
+                || messageBox->objectName()
+                    != QStringLiteral(
+                        "finepaper.endpointConfiguration."
+                        "parameterSwitchConfirmation")) {
+                continue;
+            }
+            if (sawTextFirstConfirmation) {
+                const QAbstractButton* discard =
+                    messageBox->button(QMessageBox::Discard);
+                *sawTextFirstConfirmation =
+                    messageBox->text().contains(
+                        QStringLiteral("unapplied edits"))
+                    && discard
+                    && discard->text()
+                           == QStringLiteral(
+                               "Discard Parameter Edits and Switch");
+            }
+            if (QAbstractButton* button = messageBox->button(response)) {
+                button->click();
+            } else {
+                messageBox->reject();
+            }
+            return;
+        }
+    });
 }
 
 ParameterDefinition integerParameter(
@@ -181,6 +218,7 @@ void genericFormUsesSchemaMetadataAndTracksDrafts() {
         schema,
         QJsonObject{{QStringLiteral("width"), 64},
                     {QStringLiteral("depth"), 8}});
+    const QString semanticIdentity = form.schemaIdentity();
     QApplication::processEvents();
 
     auto* width = schemaEditor(
@@ -216,6 +254,26 @@ void genericFormUsesSchemaMetadataAndTracksDrafts() {
     check(form.values().value(QStringLiteral("width")).toInt() == 96
               && form.isModified(),
           QStringLiteral("generic form returns typed JSON and detects a real draft change"));
+
+    QVector<ParameterDefinition> presentationOnly = schema;
+    presentationOnly.front().label = QStringLiteral("Relabeled width");
+    presentationOnly.front().description = QStringLiteral("New help copy");
+    form.setSchema(
+        presentationOnly,
+        QJsonObject{{QStringLiteral("width"), 64},
+                    {QStringLiteral("depth"), 8}});
+    check(form.schemaIdentity() == semanticIdentity,
+          QStringLiteral(
+              "presentation-only Package changes keep a compatible parameter schema identity"));
+    QVector<ParameterDefinition> semanticChange = presentationOnly;
+    semanticChange.front().maximum = 32;
+    form.setSchema(
+        semanticChange,
+        QJsonObject{{QStringLiteral("width"), 32},
+                    {QStringLiteral("depth"), 8}});
+    check(form.schemaIdentity() != semanticIdentity,
+          QStringLiteral(
+              "type constraints change the shared parameter schema identity"));
 }
 
 void creationDialogOwnsIdentityParametersAndAutomaticDomains() {
@@ -269,6 +327,234 @@ void creationDialogOwnsIdentityParametersAndAutomaticDomains() {
               && dialog.localErrors().join(QLatin1Char('\n'))
                      .contains(QStringLiteral("already in use")),
           QStringLiteral("creation validates the editable Endpoint ID before mutation"));
+}
+
+void targetSelectionProtectsDependentParameterDrafts() {
+    const PackageDefinition package = packageFixture();
+    const NocDesign design = designFixture(package, false);
+    EndpointConfigurationPanel panel;
+    panel.show();
+    panel.planTypeChangeRequested = [&](QString endpointId,
+                                        QString targetType,
+                                        EndpointParameterMigration migration,
+                                        QJsonObject patch) {
+        return endpoint_configuration::buildTypeChangePlan(
+            design, package, endpointId, targetType, migration, patch);
+    };
+    panel.setContext(
+        &design, &package, QStringLiteral("selection-guard"),
+        QStringLiteral("ep-any-name"), false);
+    QApplication::processEvents();
+
+    auto* type = panel.findChild<QComboBox*>(
+        QStringLiteral("finepaper.endpointConfiguration.type"));
+    auto* migration = panel.findChild<QComboBox*>(
+        QStringLiteral("finepaper.endpointConfiguration.migration"));
+    auto* width = schemaEditor(
+        &panel, QStringLiteral("finepaper.endpointParameter.width"));
+    check(type && migration && width,
+          QStringLiteral("selection guard fixture exposes dependent controls"));
+    if (!type || !migration || !width) {
+        return;
+    }
+
+    width->setValue(QJsonValue(96));
+    if (width->valueChanged) {
+        width->valueChanged();
+    }
+    bool sawTypeConfirmation = false;
+    respondToParameterSwitchConfirmation(
+        QMessageBox::Cancel, &sawTypeConfirmation);
+    type->setCurrentIndex(type->findData(
+        QStringLiteral("target-any-name")));
+    QApplication::processEvents();
+    width = schemaEditor(
+        &panel, QStringLiteral("finepaper.endpointParameter.width"));
+    check(sawTypeConfirmation
+              && type->currentData().toString()
+                  == QStringLiteral("initiator-any-name")
+              && width && width->value() && width->value()->toInt() == 96,
+          QStringLiteral(
+              "cancelled type switch restores the selection and parameter draft"));
+
+    respondToParameterSwitchConfirmation(QMessageBox::Discard);
+    type->setCurrentIndex(type->findData(
+        QStringLiteral("target-any-name")));
+    QApplication::processEvents();
+    width = schemaEditor(
+        &panel, QStringLiteral("finepaper.endpointParameter.width"));
+    check(type->currentData().toString()
+              == QStringLiteral("target-any-name")
+              && width && width->value() && width->value()->toInt() == 128,
+          QStringLiteral(
+              "explicit discard permits a type-dependent parameter rebuild"));
+
+    width->setValue(QJsonValue(256));
+    if (width->valueChanged) {
+        width->valueChanged();
+    }
+    const int preserveIndex = migration->findData(static_cast<int>(
+        EndpointParameterMigration::PreserveCompatible));
+    bool sawMigrationConfirmation = false;
+    respondToParameterSwitchConfirmation(
+        QMessageBox::Cancel, &sawMigrationConfirmation);
+    migration->setCurrentIndex(preserveIndex);
+    QApplication::processEvents();
+    width = schemaEditor(
+        &panel, QStringLiteral("finepaper.endpointParameter.width"));
+    check(sawMigrationConfirmation
+              && static_cast<EndpointParameterMigration>(
+                     migration->currentData().toInt())
+                  == EndpointParameterMigration::ResetToDefaults
+              && width && width->value() && width->value()->toInt() == 256,
+          QStringLiteral(
+              "cancelled migration switch restores its selection and parameter draft"));
+
+    respondToParameterSwitchConfirmation(QMessageBox::Discard);
+    migration->setCurrentIndex(preserveIndex);
+    QApplication::processEvents();
+    width = schemaEditor(
+        &panel, QStringLiteral("finepaper.endpointParameter.width"));
+    check(static_cast<EndpointParameterMigration>(
+              migration->currentData().toInt())
+              == EndpointParameterMigration::PreserveCompatible
+              && width && width->value() && width->value()->toInt() == 64,
+          QStringLiteral(
+              "explicit discard permits a migration-dependent parameter rebuild"));
+}
+
+void conflictsPreserveDraftsUntilExplicitDiscard() {
+    const PackageDefinition package = packageFixture();
+    NocDesign design = designFixture(package, false);
+    EndpointConfigurationPanel panel;
+    panel.show();
+    panel.setContext(
+        &design, &package, QStringLiteral("conflict-design"),
+        QStringLiteral("ep-any-name"), false);
+    QApplication::processEvents();
+
+    auto* width = schemaEditor(
+        &panel, QStringLiteral("finepaper.endpointParameter.width"));
+    if (width) {
+        width->setValue(QJsonValue(96));
+        if (width->valueChanged) {
+            width->valueChanged();
+        }
+    }
+    NocDesign changedSource = design;
+    changedSource.endpoints.front().parameters.insert(
+        QStringLiteral("width"), 72);
+    panel.setContext(
+        &changedSource, &package, QStringLiteral("conflict-design"),
+        QStringLiteral("ep-any-name"), false);
+    QApplication::processEvents();
+
+    auto* conflictStatus = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.endpointConfiguration.conflictStatus"));
+    auto* discardConflict = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.endpointConfiguration.discardConflict"));
+    auto* type = panel.findChild<QComboBox*>(
+        QStringLiteral("finepaper.endpointConfiguration.type"));
+    auto* apply = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.endpointConfiguration.apply"));
+    width = schemaEditor(
+        &panel, QStringLiteral("finepaper.endpointParameter.width"));
+    check(panel.hasUnappliedDrafts(QStringLiteral("conflict-design"))
+              && conflictStatus && conflictStatus->isVisible()
+              && conflictStatus->text().contains(
+                  QStringLiteral("durable parameter values changed"))
+              && discardConflict && discardConflict->isEnabled()
+              && type && !type->isEnabled()
+              && width && !width->isEnabled()
+              && width->value() && width->value()->toInt() == 72
+              && apply && !apply->isEnabled(),
+          QStringLiteral(
+              "source mismatch preserves the draft while showing durable values read-only"));
+
+    if (discardConflict) {
+        discardConflict->click();
+        QApplication::processEvents();
+    }
+    width = schemaEditor(
+        &panel, QStringLiteral("finepaper.endpointParameter.width"));
+    check(!panel.hasUnappliedDrafts(QStringLiteral("conflict-design"))
+              && conflictStatus && !conflictStatus->isVisible()
+              && type && type->isEnabled()
+              && width && width->isEnabled()
+              && width->value() && width->value()->toInt() == 72,
+          QStringLiteral(
+              "explicit conflict discard resumes editing from the durable source"));
+
+    width->setValue(QJsonValue(80));
+    if (width->valueChanged) {
+        width->valueChanged();
+    }
+    PackageDefinition changedSchema = package;
+    changedSchema.endpointTypes.front().parameters[1].maximum = 2048;
+    panel.setContext(
+        &changedSource, &changedSchema, QStringLiteral("conflict-design"),
+        QStringLiteral("ep-any-name"), false);
+    QApplication::processEvents();
+    conflictStatus = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.endpointConfiguration.conflictStatus"));
+    discardConflict = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.endpointConfiguration.discardConflict"));
+    check(panel.hasUnappliedDrafts(QStringLiteral("conflict-design"))
+              && conflictStatus && conflictStatus->isVisible()
+              && conflictStatus->text().contains(
+                  QStringLiteral("Package parameter schema"))
+              && discardConflict && discardConflict->isEnabled(),
+          QStringLiteral(
+              "schema mismatch preserves the draft instead of silently erasing it"));
+    if (discardConflict) {
+        discardConflict->click();
+    }
+}
+
+void catalogRevisionRefreshesPresentationWithoutLosingDraft() {
+    PackageDefinition package = packageFixture();
+    const NocDesign design = designFixture(package, false);
+    const QString designIdentity = QStringLiteral("catalog-refresh");
+    const QString endpointId = QStringLiteral("ep-any-name");
+
+    EndpointConfigurationPanel panel;
+    panel.show();
+    panel.setContext(
+        &design, &package, designIdentity, endpointId, false, 7);
+    QApplication::processEvents();
+
+    auto* width = schemaEditor(
+        &panel, QStringLiteral("finepaper.endpointParameter.width"));
+    if (width) {
+        width->setValue(QJsonValue(96));
+        if (width->valueChanged) {
+            width->valueChanged();
+        }
+    }
+    check(width && panel.hasUnappliedDrafts(designIdentity),
+          QStringLiteral(
+              "the catalog-refresh fixture preserves an Endpoint draft"));
+
+    package.endpointTypes.front().label =
+        QStringLiteral("Renamed Initiator");
+    panel.setContext(
+        &design, &package, designIdentity, endpointId, false, 8);
+    QApplication::processEvents();
+
+    auto* type = panel.findChild<QComboBox*>(
+        QStringLiteral("finepaper.endpointConfiguration.type"));
+    width = schemaEditor(
+        &panel, QStringLiteral("finepaper.endpointParameter.width"));
+    const int initiatorIndex = type
+        ? type->findData(QStringLiteral("initiator-any-name")) : -1;
+    check(type && initiatorIndex >= 0
+              && type->itemText(initiatorIndex).contains(
+                  QStringLiteral("Renamed Initiator"))
+              && width && width->value() && width->value()->toInt() == 96
+              && panel.hasUnappliedDrafts(designIdentity),
+          QStringLiteral(
+              "a new catalog revision refreshes presentation metadata from "
+              "the same Package address without losing a compatible draft"));
 }
 
 void inspectorEditsEndpointOnlyAndPreviewsTypeImpact() {
@@ -514,6 +800,9 @@ int main(int argc, char** argv) {
     QApplication application(argc, argv);
     genericFormUsesSchemaMetadataAndTracksDrafts();
     creationDialogOwnsIdentityParametersAndAutomaticDomains();
+    targetSelectionProtectsDependentParameterDrafts();
+    conflictsPreserveDraftsUntilExplicitDiscard();
+    catalogRevisionRefreshesPresentationWithoutLosingDraft();
     inspectorEditsEndpointOnlyAndPreviewsTypeImpact();
     if (failures == 0) {
         QTextStream(stdout)

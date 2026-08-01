@@ -602,9 +602,9 @@ public:
             const ElementRef ref{ElementKind::Router, router.id};
             element_->addItem(
                 QStringLiteral("Router %1 (Mesh %2, %3)")
-                    .arg(router.id)
-                    .arg(router.position.x)
-                    .arg(router.position.y),
+                    .arg(router.id,
+                         QString::number(router.position.x),
+                         QString::number(router.position.y)),
                 elementKey(ref));
         }
         for (const EndpointInstance& endpoint : baseDesign_.endpoints) {

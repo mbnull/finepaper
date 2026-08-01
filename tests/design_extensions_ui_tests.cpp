@@ -354,8 +354,93 @@ void workspaceStateMatrix() {
     QApplication::processEvents();
     check(initiallySchemaValid && cacheStatus
               && cacheStatus->text().contains(QStringLiteral("Invalid value")),
+              QStringLiteral(
+                  "same-version Package reference declaration changes invalidate cached extension validation"));
+}
+
+void workspaceKeepsPercentPlaceholdersLiteral() {
+    using namespace finepaper;
+
+    const QString extensionId = QStringLiteral("vendor.extension-%2");
+    QJsonObject extensionSchema = objectSchemaWithDefault();
+    extensionSchema.insert(
+        QStringLiteral("title"), QStringLiteral("Literal %2 title"));
+    DesignExtensionDefinition extension = definitionFor(
+        extensionId, extensionSchema);
+    DesignExtensionDomainReferenceDefinition reference;
+    reference.pointerTokens = {QStringLiteral("domain")};
+    reference.domainType = QStringLiteral("power");
+    extension.domainReferences = {reference};
+
+    PackageDefinition package;
+    package.id = QStringLiteral("vendor.noc");
+    package.version = QStringLiteral("1.0");
+    package.designExtensionsDeclared = true;
+    package.domainTypes = {DomainTypeDefinition{
+        .id = QStringLiteral("power"),
+        .label = QStringLiteral("Power %2 domain")}};
+    package.designExtensions = {
+        extension,
+        definitionFor(
+            QStringLiteral("vendor.future"), QJsonObject{},
+            QStringLiteral("future-%2-form"))};
+
+    NocDesign design;
+    design.package = PackageReference{package.id, package.version};
+    design.domains = {DomainDefinition{
+        QStringLiteral("power-%2"),
+        QStringLiteral("power"),
+        QStringLiteral("Domain %2"),
+        {}}};
+
+    DesignExtensionsWorkspace workspace;
+    workspace.resize(900, 620);
+    workspace.show();
+    workspace.setContext(&design, &package);
+    auto* list = workspace.findChild<QListWidget*>(
+        QStringLiteral("finepaper.designExtensions.list"));
+    auto* open = workspace.findChild<QPushButton*>(
+        QStringLiteral("finepaper.designExtensions.open"));
+    QListWidgetItem* extensionItem = itemForId(list, extensionId);
+    QListWidgetItem* futureItem = itemForId(
+        list, QStringLiteral("vendor.future"));
+    check(extensionItem
+              && extensionItem->text().contains(
+                  QStringLiteral("Literal %2 title"))
+              && futureItem
+              && futureItem->toolTip().contains(
+                  QStringLiteral("future-%2-form")),
           QStringLiteral(
-              "same-version Package reference declaration changes invalidate cached extension validation"));
+              "Package titles and status details preserve literal percent placeholders"));
+
+    if (list && extensionItem) {
+        list->setCurrentItem(extensionItem);
+        QApplication::processEvents();
+    }
+    bool domainLabelPreserved = false;
+    QTimer::singleShot(0, &workspace, [&domainLabelPreserved] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (widget->objectName()
+                != QStringLiteral(
+                    "finepaper.designExtensions.editorDialog")) {
+                continue;
+            }
+            auto* summary = widget->findChild<QPlainTextEdit*>(
+                QStringLiteral(
+                    "finepaper.designExtensions.domainReferences"));
+            domainLabelPreserved = summary
+                && summary->toPlainText().contains(
+                    QStringLiteral("power-%2 — Domain %2"));
+            widget->close();
+            return;
+        }
+    });
+    if (open) {
+        open->click();
+    }
+    check(open && domainLabelPreserved,
+          QStringLiteral(
+              "Domain ids and names preserve literal percent placeholders"));
 }
 
 void dialogJsonAndTransactionSemantics() {
@@ -986,6 +1071,7 @@ void workspaceRemovalIsExplicit() {
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
     workspaceStateMatrix();
+    workspaceKeepsPercentPlaceholdersLiteral();
     dialogJsonAndTransactionSemantics();
     dialogDomainReferenceContextAndValidation();
     workspaceRemovalIsExplicit();

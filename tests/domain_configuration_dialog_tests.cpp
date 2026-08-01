@@ -359,7 +359,8 @@ void duplicateDamagedRowsCanBeRemovedIndependently() {
 }
 
 void meshElementsAreReferencesRatherThanEditableTopology() {
-    const NocDesign design = baseDesign();
+    NocDesign design = baseDesign();
+    design.endpoints.front().id = QStringLiteral("ep%2-%3");
     const PackageDefinition package = domainPackage();
     DomainConfiguration initial = completeConfiguration();
     initial.domainMemberships.clear();
@@ -425,11 +426,16 @@ void meshElementsAreReferencesRatherThanEditableTopology() {
         QStringLiteral("r-0-0"), QStringLiteral("r-1-0"));
     check(sawMembershipDialog
               && offeredElements.size() == 3
+              && offered.contains(
+                  QStringLiteral("Router r-0-0 (Mesh 0, 0)|"))
               && offered.contains(QStringLiteral("r-0-0"))
               && offered.contains(QStringLiteral("r-1-0"))
-              && offered.contains(QStringLiteral("ep0"))
+              && offered.contains(QStringLiteral("Endpoint ep%2-%3|"))
               && !offered.contains(derivedLink),
-          QStringLiteral("Membership choices are exactly Mesh-derived Routers and existing Endpoints, never Links"));
+          QStringLiteral(
+              "Membership choices preserve literal percent tokens in configurable "
+              "Endpoint IDs and contain exactly Mesh-derived Routers and existing "
+              "Endpoints, never Links"));
     dialog.close();
 }
 

@@ -487,6 +487,7 @@ void DomainManagerPanel::refreshInstances() {
 }
 
 void DomainManagerPanel::refreshAssignment() {
+    const bool hadPendingDraft = m_assignmentEdited;
     m_assignmentEdited = false;
     m_clearAssignmentStaged = false;
     m_selectionChangedWhileEditing = false;
@@ -600,6 +601,9 @@ void DomainManagerPanel::refreshAssignment() {
     }
     m_updating = false;
     updateActionState();
+    if (hadPendingDraft) {
+        notifyDraftStateChanged();
+    }
 }
 
 void DomainManagerPanel::updateActionState() {
@@ -836,6 +840,7 @@ void DomainManagerPanel::clearAssignment() {
             "\nPending: clear this Domain assignment from the original %1 eligible item(s).")
               .arg(m_assignment.eligibleElements));
     updateActionState();
+    notifyDraftStateChanged();
 }
 
 void DomainManagerPanel::discardAssignment() {
@@ -858,24 +863,38 @@ void DomainManagerPanel::handleAssignmentItemChanged(QListWidgetItem* item) {
     } else {
         m_touchedAssignmentDomains.insert(domainId);
     }
+    const bool wasEdited = m_assignmentEdited;
     m_assignmentEdited = !m_touchedAssignmentDomains.isEmpty();
     if (!m_assignmentEdited && m_selectionChangedWhileEditing) {
+        if (wasEdited) {
+            notifyDraftStateChanged();
+        }
         refreshAssignment();
         return;
     }
     updateActionState();
+    if (wasEdited != m_assignmentEdited) {
+        notifyDraftStateChanged();
+    }
 }
 
 void DomainManagerPanel::updateSingleAssignmentEdited() {
+    const bool wasEdited = m_assignmentEdited;
     if (!selectedType()
         || selectedType()->cardinality != DomainCardinality::Single
         || !m_singleAssignment->currentData().isValid()) {
         m_assignmentEdited = false;
         if (m_selectionChangedWhileEditing) {
+            if (wasEdited) {
+                notifyDraftStateChanged();
+            }
             refreshAssignment();
             return;
         }
         updateActionState();
+        if (wasEdited) {
+            notifyDraftStateChanged();
+        }
         return;
     }
 
@@ -892,10 +911,22 @@ void DomainManagerPanel::updateSingleAssignmentEdited() {
         m_assignmentEdited = false;
     }
     if (!m_assignmentEdited && m_selectionChangedWhileEditing) {
+        if (wasEdited) {
+            notifyDraftStateChanged();
+        }
         refreshAssignment();
         return;
     }
     updateActionState();
+    if (wasEdited != m_assignmentEdited) {
+        notifyDraftStateChanged();
+    }
+}
+
+void DomainManagerPanel::notifyDraftStateChanged() {
+    if (draftStateChanged) {
+        draftStateChanged();
+    }
 }
 
 QString DomainManagerPanel::selectedDomainId() const {
