@@ -14,6 +14,7 @@
 
 namespace {
 
+constexpr int kPackageError = 3;
 constexpr int kIoError = 7;
 constexpr int kProcessTimeoutMilliseconds = 30000;
 
@@ -80,6 +81,51 @@ bool hasDiagnosticCode(const QJsonObject& result, const QString& code) {
     });
 }
 
+bool readJsonObjectFile(const QString& path, QJsonObject* object) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    QJsonParseError error;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject()) {
+        return false;
+    }
+    *object = document.object();
+    return true;
+}
+
+bool writeJsonObjectFile(const QString& path, const QJsonObject& object) {
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    const QByteArray contents = QJsonDocument(object).toJson();
+    return file.write(contents) == contents.size();
+}
+
+void setMissingPackageReference(QJsonObject& object) {
+    object.insert(
+        QStringLiteral("package"),
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("example.rejected-target")},
+            {QStringLiteral("version"), QStringLiteral("1.0.0")}
+        });
+}
+
+void checkPackageResolutionFailure(const CommandResult& result,
+                                   const QString& context) {
+    const QJsonObject output = parseJsonOutput(result, context);
+    check(result.started
+              && result.finished
+              && result.exitStatus == QProcess::NormalExit
+              && result.exitCode == kPackageError
+              && !output.value(QStringLiteral("success")).toBool(true)
+              && hasDiagnosticCode(output, QStringLiteral("package.not_found")),
+          QStringLiteral("%1 returns Package exit code 3 for an unresolved target")
+              .arg(context));
+}
+
 QString finepaperExecutable() {
 #ifdef Q_OS_WIN
     constexpr auto executableName = "finepaper.exe";
@@ -114,6 +160,21 @@ int main(int argc, char** argv) {
 
     const QString missingPackageRoot = QDir(temporaryDirectory.path()).filePath(
         QStringLiteral("missing-package-root"));
+    const QString invalidPackageRoot = QDir(temporaryDirectory.path()).filePath(
+        QStringLiteral("invalid-package"));
+    check(QDir().mkpath(invalidPackageRoot),
+          QStringLiteral("invalid CLI Package root is created"));
+    QFile invalidManifest(
+        QDir(invalidPackageRoot).filePath(QStringLiteral("package.json")));
+    const bool invalidManifestOpened = invalidManifest.open(
+        QIODevice::WriteOnly | QIODevice::Truncate);
+    check(invalidManifestOpened,
+          QStringLiteral("invalid CLI Package manifest is opened for writing"));
+    if (invalidManifestOpened) {
+        check(invalidManifest.write("{}\n") == 3,
+              QStringLiteral("invalid CLI Package manifest is written"));
+        invalidManifest.close();
+    }
     const CommandResult packageListResult = runCommand(
         executable,
         QStringList{
@@ -125,6 +186,8 @@ int main(int argc, char** argv) {
             QDir(packageRoot).filePath(QStringLiteral("finepaper-noc")),
             QStringLiteral("--package-root"),
             missingPackageRoot,
+            QStringLiteral("--package-root"),
+            invalidPackageRoot,
             QStringLiteral("--json")
         });
     const QJsonObject packageList = parseJsonOutput(
@@ -133,6 +196,10 @@ int main(int argc, char** argv) {
               && packageListResult.exitStatus == QProcess::NormalExit
               && packageListResult.exitCode == 0
               && packageList.value(QStringLiteral("success")).toBool()
+              && packageList.value(QStringLiteral("catalogCommitted")).toBool()
+              && !packageList.value(QStringLiteral("catalogFatal")).toBool()
+              && packageList.value(QStringLiteral("acceptedPackageCount")).toInt() == 2
+              && packageList.value(QStringLiteral("rejectedPackageCount")).toInt() == 1
               && packageList.value(QStringLiteral("packages")).toArray().size() == 2
               && hasDiagnosticCode(packageList, QStringLiteral("package.root_missing")),
           QStringLiteral("CLI keeps valid Packages selectable when roots overlap or go missing"));
@@ -159,6 +226,8 @@ int main(int argc, char** argv) {
             invalidDesignOutput,
             QStringLiteral("--package-root"),
             packageRoot,
+            QStringLiteral("--package-root"),
+            invalidPackageRoot,
             QStringLiteral("--json")
         });
     check(createResult.started && createResult.finished
@@ -185,13 +254,108 @@ int main(int argc, char** argv) {
             validDesignPath,
             QStringLiteral("--package-root"),
             packageRoot,
+            QStringLiteral("--package-root"),
+            invalidPackageRoot,
             QStringLiteral("--json")
         });
     check(validCreateResult.started && validCreateResult.finished
               && validCreateResult.exitStatus == QProcess::NormalExit
               && validCreateResult.exitCode == 0
-              && QFileInfo(validDesignPath).isFile(),
-          QStringLiteral("design create prepares a valid design for generate testing"));
+              && QFileInfo(validDesignPath).isFile()
+              && validCreateResult.standardError.contains("error: package."),
+          QStringLiteral("design create uses valid Packages and reports isolated candidates on stderr"));
+
+    QJsonObject missingPackageRequest;
+    const QString missingPackageRequestPath = QDir(temporaryDirectory.path()).filePath(
+        QStringLiteral("missing-package.request.json"));
+    const bool missingRequestLoaded = readJsonObjectFile(
+        requestPath, &missingPackageRequest);
+    if (missingRequestLoaded) {
+        setMissingPackageReference(missingPackageRequest);
+    }
+    check(missingRequestLoaded
+              && writeJsonObjectFile(missingPackageRequestPath, missingPackageRequest),
+          QStringLiteral("request with an unresolved target Package is available"));
+
+    QJsonObject missingPackageDesign;
+    const QString missingPackageDesignPath = QDir(temporaryDirectory.path()).filePath(
+        QStringLiteral("missing-package.fpnoc"));
+    const bool missingDesignLoaded = readJsonObjectFile(
+        validDesignPath, &missingPackageDesign);
+    if (missingDesignLoaded) {
+        setMissingPackageReference(missingPackageDesign);
+    }
+    check(missingDesignLoaded
+              && writeJsonObjectFile(missingPackageDesignPath, missingPackageDesign),
+          QStringLiteral("design with an unresolved target Package is available"));
+
+    const CommandResult missingCreateResult = runCommand(
+        executable,
+        QStringList{
+            QStringLiteral("design"),
+            QStringLiteral("create"),
+            QStringLiteral("--input"),
+            missingPackageRequestPath,
+            QStringLiteral("--output"),
+            QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("missing-package-create.fpnoc")),
+            QStringLiteral("--package-root"),
+            packageRoot,
+            QStringLiteral("--package-root"),
+            invalidPackageRoot,
+            QStringLiteral("--json")
+        });
+    checkPackageResolutionFailure(
+        missingCreateResult, QStringLiteral("design create"));
+
+    const CommandResult missingValidateResult = runCommand(
+        executable,
+        QStringList{
+            QStringLiteral("design"),
+            QStringLiteral("validate"),
+            missingPackageDesignPath,
+            QStringLiteral("--package-root"),
+            packageRoot,
+            QStringLiteral("--package-root"),
+            invalidPackageRoot,
+            QStringLiteral("--json")
+        });
+    checkPackageResolutionFailure(
+        missingValidateResult, QStringLiteral("design validate"));
+
+    const CommandResult missingGenerateResult = runCommand(
+        executable,
+        QStringList{
+            QStringLiteral("design"),
+            QStringLiteral("generate"),
+            missingPackageDesignPath,
+            QStringLiteral("--output"),
+            QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("missing-package-generate")),
+            QStringLiteral("--package-root"),
+            packageRoot,
+            QStringLiteral("--package-root"),
+            invalidPackageRoot,
+            QStringLiteral("--json")
+        });
+    checkPackageResolutionFailure(
+        missingGenerateResult, QStringLiteral("design generate"));
+
+    const CommandResult missingRunResult = runCommand(
+        executable,
+        QStringList{
+            QStringLiteral("run"),
+            missingPackageRequestPath,
+            QStringLiteral("--output"),
+            QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("missing-package-run")),
+            QStringLiteral("--package-root"),
+            packageRoot,
+            QStringLiteral("--package-root"),
+            invalidPackageRoot,
+            QStringLiteral("--json")
+        });
+    checkPackageResolutionFailure(missingRunResult, QStringLiteral("run"));
 
     const QString designGenerationOutput = QDir(temporaryDirectory.path()).filePath(
         QStringLiteral("design-generation-output"));

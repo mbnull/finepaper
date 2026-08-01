@@ -2046,18 +2046,19 @@ void FinepaperMainWindow::reloadPackages() {
     if (m_operationBusy) {
         return;
     }
-    if (!confirmDiscardPendingDomainChanges(
-            QStringLiteral("Reloading Packages"))) {
-        return;
-    }
-    if (!confirmDiscardPendingInspectorDrafts(
-            QStringLiteral("Reloading Packages"))) {
-        return;
-    }
     FinepaperApplication candidateApplication = m_application;
-    const QVector<Diagnostic> diagnostics =
+    const PackageCatalogReloadResult reload =
         candidateApplication.reloadPackages(m_locations.packageRoots);
-    if (!hasErrors(diagnostics)) {
+    const QVector<Diagnostic>& diagnostics = reload.diagnostics;
+    if (reload.committed()) {
+        if (!confirmDiscardPendingDomainChanges(
+                QStringLiteral("Reloading Packages"))) {
+            return;
+        }
+        if (!confirmDiscardPendingInspectorDrafts(
+                QStringLiteral("Reloading Packages"))) {
+            return;
+        }
         // Panels borrow PackageDefinition objects from the current catalog.
         // Consume the authorized drafts while those borrowed contexts are
         // still valid, detach every borrowed pointer, then replace the catalog
@@ -2068,6 +2069,8 @@ void FinepaperMainWindow::reloadPackages() {
         m_application = std::move(candidateApplication);
         advanceCatalogRevision();
     }
+    // Even a rejected reload must re-probe the retained snapshot's files so
+    // stale runtime availability is never presented as executable.
     if (m_design) {
         refreshDesignViews();
     } else {
@@ -2080,7 +2083,7 @@ void FinepaperMainWindow::reloadPackages() {
                && m_diagnosticsSource == QStringLiteral("Package discovery")) {
         populateDiagnostics({}, QStringLiteral("Package discovery"));
     }
-    if (hasErrors(diagnostics)) {
+    if (reload.catalogFatal()) {
         m_resultTabs->setCurrentIndex(0);
         showResultsDock();
         QString summary = QStringLiteral("Package reload failed.");
@@ -2090,6 +2093,17 @@ void FinepaperMainWindow::reloadPackages() {
                 break;
             }
         }
+        appendActivity(summary);
+        statusBar()->showMessage(summary);
+    } else if (!reload.committed()) {
+        m_resultTabs->setCurrentIndex(0);
+        showResultsDock();
+        const QString summary = QStringLiteral(
+            "Package reload kept the previous catalog because all %1 discovered %2 were rejected.")
+            .arg(QString::number(reload.rejectedCount),
+                 reload.rejectedCount == 1
+                     ? QStringLiteral("candidate")
+                     : QStringLiteral("candidates"));
         appendActivity(summary);
         statusBar()->showMessage(summary);
     } else if (m_design && !packageForDesign()) {
@@ -2108,16 +2122,16 @@ void FinepaperMainWindow::reloadPackages() {
         const QString packageNoun = packageCount == 1
             ? QStringLiteral("Package")
             : QStringLiteral("Packages");
-        const QString summary = diagnostics.isEmpty()
+        const QString summary = reload.rejectedCount == 0
             ? QStringLiteral("Loaded %1 NoC IP %2.")
                   .arg(QString::number(packageCount), packageNoun)
-            : QStringLiteral("Loaded %1 NoC IP %2 with %3 %4.")
+            : QStringLiteral("Loaded %1 NoC IP %2; isolated %3 rejected %4.")
                   .arg(QString::number(packageCount),
                        packageNoun,
-                       QString::number(diagnostics.size()),
-                       diagnostics.size() == 1
-                           ? QStringLiteral("warning")
-                           : QStringLiteral("warnings"));
+                       QString::number(reload.rejectedCount),
+                       reload.rejectedCount == 1
+                           ? QStringLiteral("candidate")
+                           : QStringLiteral("candidates"));
         appendActivity(summary);
         statusBar()->showMessage(summary);
     }
@@ -2183,10 +2197,11 @@ bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
     appendPackageRoots(candidateLocations, QStringList{package.package->rootPath});
 
     FinepaperApplication candidateApplication = m_application;
-    const QVector<Diagnostic> diagnostics = candidateApplication.reloadPackages(
+    const PackageCatalogReloadResult reload = candidateApplication.reloadPackages(
         candidateLocations.packageRoots);
-    if (hasErrors(diagnostics)) {
-        showDiagnostics(diagnostics, QStringLiteral("Install Package"));
+    const QVector<Diagnostic>& diagnostics = reload.diagnostics;
+    if (!reload.committed()) {
+        showDiagnostics(reload.diagnostics, QStringLiteral("Install Package"));
         appendActivity(
             QStringLiteral("Failed to install NoC IP Package from %1.")
                 .arg(package.package->rootPath));
@@ -2202,16 +2217,25 @@ bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
         });
     const PackageDefinition* installedPackage =
         installedIt == candidateApplication.packages().cend() ? nullptr : &*installedIt;
-    if (!installedPackage || installedPackage->rootPath != package.package->rootPath) {
-        const QString loadedFrom = installedPackage
-            ? installedPackage->rootPath
-            : QStringLiteral("an existing Package root");
-        QMessageBox::information(
+    if (!installedPackage
+        || normalizedAbsolutePath(installedPackage->rootPath)
+            != normalizedAbsolutePath(package.package->rootPath)) {
+        if (!reload.diagnostics.isEmpty()) {
+            showDiagnostics(
+                reload.diagnostics, QStringLiteral("Install Package"), false);
+        }
+        QMessageBox::warning(
             this,
-            QStringLiteral("NoC IP already available"),
-            QStringLiteral("%1 is already provided by:\n%2\n\n"
-                           "The selected directory was not added.")
-                .arg(package.package->key(), loadedFrom));
+            QStringLiteral("NoC IP Package was not installed"),
+            QStringLiteral("The catalog did not accept %1 from:\n%2\n\n"
+                           "Resolve the reported Package conflict or validation "
+                           "errors, then try again. No Package roots were changed.")
+                .arg(package.package->key(), package.package->rootPath));
+        appendActivity(
+            QStringLiteral("Did not install NoC IP Package %1; its selected source was rejected.")
+                .arg(package.package->key()));
+        statusBar()->showMessage(
+            QStringLiteral("NoC IP Package was not installed."));
         return false;
     }
 
@@ -2257,7 +2281,7 @@ bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
         updatePackageControls();
     }
     if (!diagnostics.isEmpty()) {
-        showDiagnostics(diagnostics, QStringLiteral("Install Package"));
+        showDiagnostics(diagnostics, QStringLiteral("Install Package"), false);
     } else if (!m_diagnosticsStamp
                && (m_diagnosticsSource == QStringLiteral("Package discovery")
                    || m_diagnosticsSource == QStringLiteral("Install Package"))) {

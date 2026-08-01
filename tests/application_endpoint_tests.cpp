@@ -336,9 +336,9 @@ int main(int argc, char** argv) {
     }
 
     FinepaperApplication application;
-    const QVector<Diagnostic> packageDiagnostics =
+    const PackageCatalogReloadResult packageReload =
         application.reloadPackages(QStringList{fixture.path()});
-    check(!hasErrors(packageDiagnostics),
+    check(packageReload.committed() && !hasErrors(packageReload.diagnostics),
           QStringLiteral("Endpoint lifecycle Package loads"));
 
     QTemporaryDir legacyFixture(QStringLiteral(
@@ -356,7 +356,7 @@ int main(int argc, char** argv) {
               && prepareFixture(legacyFixture.path(), legacyManifest),
           QStringLiteral("legacy explicit-slot Package fixture is available"));
     FinepaperApplication legacyApplication;
-    const QVector<Diagnostic> legacyPackageDiagnostics =
+    const PackageCatalogReloadResult legacyPackageReload =
         legacyApplication.reloadPackages(QStringList{legacyFixture.path()});
     QJsonObject legacyRequest = createRequest();
     QJsonObject legacyPackage =
@@ -378,7 +378,8 @@ int main(int argc, char** argv) {
     legacyRequest.insert(QStringLiteral("endpoints"), legacyEndpoints);
     const DesignResult invalidLegacyDesign =
         legacyApplication.createDesign(legacyRequest);
-    check(!hasErrors(legacyPackageDiagnostics)
+    check(legacyPackageReload.committed()
+              && !hasErrors(legacyPackageReload.diagnostics)
               && validLegacyDesign.success
               && !invalidLegacyDesign.success
               && hasDiagnosticCode(
@@ -403,12 +404,13 @@ int main(int argc, char** argv) {
               && prepareFixture(oversizedFixture.path(), oversizedManifest),
           QStringLiteral("oversized attachment Package fixture is available"));
     FinepaperApplication oversizedApplication;
-    const QVector<Diagnostic> oversizedDiagnostics =
+    const PackageCatalogReloadResult oversizedReload =
         oversizedApplication.reloadPackages(
             QStringList{oversizedFixture.path()});
-    check(hasErrors(oversizedDiagnostics)
+    check(!oversizedReload.committed()
+              && hasErrors(oversizedReload.diagnostics)
               && hasDiagnosticCode(
-                  oversizedDiagnostics,
+                  oversizedReload.diagnostics,
                   QStringLiteral("package.invalid_attachment_capacity")),
           QStringLiteral(
               "Package loading rejects attachment capacities that could exhaust the GUI"));

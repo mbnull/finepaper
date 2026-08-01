@@ -5,6 +5,7 @@
 #include "application/element_configuration.h"
 #include "application/endpoint_configuration.h"
 #include "application/mesh_resize_plan.h"
+#include "application/package_catalog/catalog.h"
 #include "execution/package_protocol.h"
 #include "noc/model.h"
 #include "package/package.h"
@@ -57,7 +58,7 @@ struct GenerationResult {
 
 class FinepaperApplication {
 public:
-    QVector<Diagnostic> reloadPackages(const QStringList& roots);
+    PackageCatalogReloadResult reloadPackages(const QStringList& roots);
     const QVector<PackageDefinition>& packages() const;
 
     DesignResult createDesign(const QJsonObject& request) const;

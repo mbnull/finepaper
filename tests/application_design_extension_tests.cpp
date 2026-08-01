@@ -437,12 +437,13 @@ int main(int argc, char **argv) {
   }
 
   FinepaperApplication application;
-  const QVector<Diagnostic> packageDiagnostics =
+  const PackageCatalogReloadResult packageReload =
       application.reloadPackages(QStringList{fixture.path()});
-  check(!hasErrors(packageDiagnostics) && application.packages().size() == 2,
+  check(packageReload.committed() && !hasErrors(packageReload.diagnostics)
+            && application.packages().size() == 2,
         QStringLiteral("strict and legacy Design Extension Packages load"));
-  if (hasErrors(packageDiagnostics)) {
-    for (const Diagnostic &diagnostic : packageDiagnostics) {
+  if (hasErrors(packageReload.diagnostics)) {
+    for (const Diagnostic &diagnostic : packageReload.diagnostics) {
       QTextStream(stderr) << diagnostic.code << ' ' << diagnostic.path << ' '
                           << diagnostic.message << Qt::endl;
     }

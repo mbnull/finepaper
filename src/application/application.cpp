@@ -294,7 +294,8 @@ QJsonObject artifactToJson(const Artifact& artifact) {
 
 } // namespace
 
-QVector<Diagnostic> FinepaperApplication::reloadPackages(const QStringList& roots) {
+PackageCatalogReloadResult FinepaperApplication::reloadPackages(
+    const QStringList& roots) {
     return m_catalog.reload(roots);
 }
 

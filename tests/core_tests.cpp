@@ -1056,9 +1056,10 @@ int main(int argc, char** argv) {
         QStringLiteral("packages"));
     const QString bundledPackagePath = QDir(projectRoot).filePath(
         QStringLiteral("packages/finepaper-noc"));
-    const QVector<Diagnostic> packageDiagnostics = finepaper.reloadPackages(
+    const PackageCatalogReloadResult packageReload = finepaper.reloadPackages(
         QStringList{bundledPackageRoot});
-    check(!hasErrors(packageDiagnostics), QStringLiteral("reference Packages load"));
+    check(packageReload.committed() && !hasErrors(packageReload.diagnostics),
+          QStringLiteral("reference Packages load"));
     check(finepaper.packages().size() == 2
               && finepaper.packages().at(0).key()
                   == QStringLiteral("finepaper.noc@1.0.0")
@@ -1103,26 +1104,32 @@ int main(int argc, char** argv) {
         FinepaperApplication resilientCatalog;
         const QString missingPackageRoot = QDir(duplicatePackageFixture.path()).filePath(
             QStringLiteral("missing-root"));
-        const QVector<Diagnostic> discoveryDiagnostics = resilientCatalog.reloadPackages(
+        const PackageCatalogReloadResult discoveryReload = resilientCatalog.reloadPackages(
             QStringList{bundledPackageRoot,
                         bundledPackagePath,
                         duplicatePackageFixture.path(),
                         missingPackageRoot});
-        check(!hasErrors(discoveryDiagnostics)
-                  && resilientCatalog.packages().size() == 2
+        check(discoveryReload.committed()
+                  && resilientCatalog.packages().size() == 1
                   && resilientCatalog.packages().at(0).id == QStringLiteral("finepaper.noc")
-                  && hasDiagnosticCode(discoveryDiagnostics,
-                                       QStringLiteral("package.duplicate_ignored"))
-                  && hasDiagnosticCode(discoveryDiagnostics,
+                  && resilientCatalog.packages().at(0).version == QStringLiteral("3.1.0")
+                  && discoveryReload.acceptedCount == 1
+                  && discoveryReload.rejectedCount == 2
+                  && hasDiagnosticCode(discoveryReload.diagnostics,
+                                       QStringLiteral("package.duplicate_conflict"))
+                  && hasDiagnosticCode(discoveryReload.diagnostics,
                                        QStringLiteral("package.root_missing")),
-              QStringLiteral("duplicate and missing roots do not hide valid NoC Packages"));
+              QStringLiteral("conflicting duplicates are both isolated without hiding unrelated Packages"));
     }
     if (manifestFixture.isValid()) {
-        const QVector<Diagnostic> failedReload = finepaper.reloadPackages(
+        const PackageCatalogReloadResult failedReload = finepaper.reloadPackages(
             QStringList{manifestFixture.path()});
-        check(hasErrors(failedReload) && finepaper.packages().size() == 2 &&
+        check(!failedReload.committed()
+                  && !failedReload.catalogFatal()
+                  && hasErrors(failedReload.diagnostics)
+                  && finepaper.packages().size() == 2 &&
                   finepaper.packages().at(0).id == QStringLiteral("finepaper.noc"),
-              QStringLiteral("failed Package reload preserves the previous catalog snapshot"));
+              QStringLiteral("an all-rejected Package reload preserves the previous catalog snapshot"));
     }
 
     const DesignResult created = finepaper.createDesign(request());
@@ -2396,9 +2403,11 @@ int main(int argc, char** argv) {
     }
 
     FinepaperApplication complexApplication;
-    const QVector<Diagnostic> complexPackageDiagnostics = complexApplication.reloadPackages(
+    const PackageCatalogReloadResult complexPackageReload = complexApplication.reloadPackages(
         QStringList{QDir(projectRoot).filePath(QStringLiteral("tests/fixtures"))});
-    check(!hasErrors(complexPackageDiagnostics), QStringLiteral("complex Engine fixture Package loads"));
+    check(complexPackageReload.committed()
+              && !hasErrors(complexPackageReload.diagnostics),
+          QStringLiteral("complex Engine fixture Package loads"));
     const DesignResult complexDesign = complexApplication.createDesign(complexRequest());
     check(complexDesign.success, QStringLiteral("complex Package can retain opaque packageData"));
     const ValidationResult complexValidation = complexApplication.validate(complexDesign.design, true);
@@ -2423,12 +2432,13 @@ int main(int argc, char** argv) {
     }
 
     FinepaperApplication multiPackageApplication;
-    const QVector<Diagnostic> multiPackageDiagnostics = multiPackageApplication.reloadPackages(
+    const PackageCatalogReloadResult multiPackageReload = multiPackageApplication.reloadPackages(
         QStringList{
             QDir(projectRoot).filePath(QStringLiteral("packages")),
             QDir(projectRoot).filePath(QStringLiteral("tests/fixtures"))
         });
-    check(!hasErrors(multiPackageDiagnostics),
+    check(multiPackageReload.committed()
+              && !hasErrors(multiPackageReload.diagnostics),
           QStringLiteral("multiple Package roots load without a shared build step"));
     check(multiPackageApplication.packages().size() == 4,
           QStringLiteral("catalog exposes V1/V3 automatic, explicit-slot and Engine-backed Packages together"));

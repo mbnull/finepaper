@@ -713,9 +713,10 @@ int main(int argc, char** argv) {
     }
 
     FinepaperApplication application;
-    const QVector<Diagnostic> packageDiagnostics = application.reloadPackages(
+    const PackageCatalogReloadResult packageReload = application.reloadPackages(
         QStringList{fixture.path()});
-    check(!hasErrors(packageDiagnostics) && application.packages().size() == 1,
+    check(packageReload.committed() && !hasErrors(packageReload.diagnostics)
+              && application.packages().size() == 1,
           QStringLiteral("the V2 application Domain Package loads"));
 
     const DesignResult created = application.createDesign(createRequest());
@@ -781,7 +782,7 @@ int main(int argc, char** argv) {
           QStringLiteral("partial Domain runtime fixture is prepared"));
     if (unsupportedRuntimeFixtureReady) {
         FinepaperApplication unsupportedRuntimeApplication;
-        const QVector<Diagnostic> runtimePackageDiagnostics =
+        const PackageCatalogReloadResult runtimePackageReload =
             unsupportedRuntimeApplication.reloadPackages(
                 QStringList{unsupportedRuntimeFixture.path()});
         const DesignResult runtimeDesign =
@@ -800,7 +801,8 @@ int main(int argc, char** argv) {
             ? unsupportedRuntimeApplication.generate(
                   runtimeDesign.design, GenerationOptions{output.path()})
             : GenerationResult{};
-        check(!hasErrors(runtimePackageDiagnostics)
+        check(runtimePackageReload.committed()
+                  && !hasErrors(runtimePackageReload.diagnostics)
                   && runtimeDesign.success
                   && structuralValidation.success,
               QStringLiteral(
@@ -830,7 +832,7 @@ int main(int argc, char** argv) {
           QStringLiteral("the configured Domain scaffold Package fixture is prepared"));
     if (scaffoldFixtureReady) {
         FinepaperApplication scaffoldApplication;
-        const QVector<Diagnostic> scaffoldPackageDiagnostics =
+        const PackageCatalogReloadResult scaffoldPackageReload =
             scaffoldApplication.reloadPackages(
                 QStringList{scaffoldFixture.path()});
         const DesignResult scaffoldCreated = scaffoldApplication.createDesign(
@@ -839,7 +841,8 @@ int main(int argc, char** argv) {
             scaffoldCreated.design, QStringLiteral("vdd-main"));
         const DomainDefinition* configuredClock = findDomain(
             scaffoldCreated.design, QStringLiteral("fabric-clock"));
-        check(!hasErrors(scaffoldPackageDiagnostics)
+        check(scaffoldPackageReload.committed()
+                  && !hasErrors(scaffoldPackageReload.diagnostics)
                   && scaffoldCreated.success
                   && configuredPower
                   && configuredPower->name == QStringLiteral("Main VDD rail")
@@ -889,7 +892,7 @@ int main(int argc, char** argv) {
           QStringLiteral("the legacy missing Domain default Package fixture is prepared"));
     if (legacyMissingDefaultFixtureReady) {
         FinepaperApplication legacyApplication;
-        const QVector<Diagnostic> legacyPackageDiagnostics =
+        const PackageCatalogReloadResult legacyPackageReload =
             legacyApplication.reloadPackages(
                 QStringList{legacyMissingDefaultFixture.path()});
         const DomainTypeDefinition* loadedClock =
@@ -897,7 +900,8 @@ int main(int argc, char** argv) {
             ? nullptr
             : legacyApplication.packages().constFirst().domainType(
                   QStringLiteral("clock"));
-        check(!hasErrors(legacyPackageDiagnostics)
+        check(legacyPackageReload.committed()
+                  && !hasErrors(legacyPackageReload.diagnostics)
                   && loadedClock
                   && loadedClock->defaultInstance
                   && !loadedClock->defaultInstance->properties.contains(
@@ -1657,10 +1661,11 @@ int main(int argc, char** argv) {
           QStringLiteral("the explicit Domain configuration Package fixture is prepared"));
     if (configurationFixtureReady) {
         FinepaperApplication configurationApplication;
-        const QVector<Diagnostic> configurationPackageDiagnostics =
+        const PackageCatalogReloadResult configurationPackageReload =
             configurationApplication.reloadPackages(
                 QStringList{configurationFixture.path()});
-        check(!hasErrors(configurationPackageDiagnostics),
+        check(configurationPackageReload.committed()
+                  && !hasErrors(configurationPackageReload.diagnostics),
               QStringLiteral("the explicit Domain configuration Package loads"));
 
         const DomainConfiguration singleConfiguration = singleDomainConfiguration();
@@ -1850,10 +1855,11 @@ int main(int argc, char** argv) {
               QStringLiteral("the V1 Domain configuration Package fixture is prepared"));
         if (versionOneFixtureReady) {
             FinepaperApplication versionOneApplication;
-            const QVector<Diagnostic> versionOnePackageDiagnostics =
+            const PackageCatalogReloadResult versionOnePackageReload =
                 versionOneApplication.reloadPackages(
                     QStringList{versionOneFixture.path()});
-            check(!hasErrors(versionOnePackageDiagnostics),
+            check(versionOnePackageReload.committed()
+                      && !hasErrors(versionOnePackageReload.diagnostics),
                   QStringLiteral("the V1 Package fixture loads"));
             QJsonObject versionOneRequest = requestForPackage(
                 QStringLiteral("test.v1-domain-configuration"));

@@ -277,14 +277,4 @@ QVector<Diagnostic> validateParameterObject(
     const QString& basePath,
     const QString& source);
 
-class PackageCatalog {
-public:
-    QVector<Diagnostic> reload(const QStringList& roots);
-    const QVector<PackageDefinition>& packages() const;
-    std::optional<PackageDefinition> resolve(const PackageReference& reference) const;
-
-private:
-    QVector<PackageDefinition> m_packages;
-};
-
 } // namespace finepaper

@@ -337,9 +337,10 @@ int main(int argc, char** argv) {
     }
 
     FinepaperApplication application;
-    const QVector<Diagnostic> packageDiagnostics =
+    const PackageCatalogReloadResult packageReload =
         application.reloadPackages(QStringList{fixture.path()});
-    check(!hasErrors(packageDiagnostics) && application.packages().size() == 1,
+    check(packageReload.committed() && !hasErrors(packageReload.diagnostics)
+              && application.packages().size() == 1,
           QStringLiteral("V3 Package with element property sets loads"));
     if (application.packages().isEmpty()) {
         return 1;

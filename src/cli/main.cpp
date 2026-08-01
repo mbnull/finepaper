@@ -11,6 +11,8 @@
 #include <QTextStream>
 
 #include <algorithm>
+#include <utility>
+
 namespace {
 
 using namespace finepaper;
@@ -66,6 +68,18 @@ void printDiagnostics(const QVector<Diagnostic>& diagnostics) {
     }
 }
 
+bool hasPackageResolutionFailure(const QVector<Diagnostic>& diagnostics) {
+    return std::any_of(
+        diagnostics.cbegin(), diagnostics.cend(),
+        [](const Diagnostic& diagnostic) {
+            return diagnostic.code == QStringLiteral("package.not_found");
+        });
+}
+
+int failureExitCode(const QVector<Diagnostic>& diagnostics, int fallback) {
+    return hasPackageResolutionFailure(diagnostics) ? kPackageError : fallback;
+}
+
 QJsonObject packageToJson(const PackageDefinition& package) {
     return QJsonObject{
         {QStringLiteral("id"), package.id},
@@ -114,8 +128,10 @@ void printUsage() {
 bool initializeApplication(FinepaperApplication& application,
                            const QStringList& arguments,
                            QVector<Diagnostic>* diagnostics) {
-    *diagnostics = application.reloadPackages(packageRoots(arguments));
-    return !hasErrors(*diagnostics);
+    PackageCatalogReloadResult reload =
+        application.reloadPackages(packageRoots(arguments));
+    *diagnostics = std::move(reload.diagnostics);
+    return reload.committed();
 }
 
 int packageCommand(const QStringList& arguments) {
@@ -151,21 +167,28 @@ int packageCommand(const QStringList& arguments) {
     }
 
     FinepaperApplication application;
-    QVector<Diagnostic> diagnostics;
-    const bool initialized = initializeApplication(application, arguments, &diagnostics);
+    const PackageCatalogReloadResult reload =
+        application.reloadPackages(packageRoots(arguments));
+    const bool initialized = reload.committed();
     QJsonArray packages;
     for (const PackageDefinition& package : application.packages()) {
         packages.append(packageToJson(package));
     }
     const QJsonObject output{
         {QStringLiteral("success"), initialized},
+        {QStringLiteral("catalogCommitted"), reload.committed()},
+        {QStringLiteral("catalogFatal"), reload.catalogFatal()},
+        {QStringLiteral("acceptedPackageCount"),
+         static_cast<qint64>(reload.acceptedCount)},
+        {QStringLiteral("rejectedPackageCount"),
+         static_cast<qint64>(reload.rejectedCount)},
         {QStringLiteral("packages"), packages},
-        {QStringLiteral("diagnostics"), diagnosticsToJson(diagnostics)}
+        {QStringLiteral("diagnostics"), diagnosticsToJson(reload.diagnostics)}
     };
     if (hasOption(arguments, QStringLiteral("--json"))) {
         printJson(output);
     } else {
-        printDiagnostics(diagnostics);
+        printDiagnostics(reload.diagnostics);
         for (const PackageDefinition& package : application.packages()) {
             QTextStream(stdout) << package.key() << "  " << package.name << Qt::endl;
         }
@@ -209,7 +232,10 @@ int designCreate(const QStringList& arguments, FinepaperApplication& application
     if (result.success) {
         return kSuccess;
     }
-    return outputWriteFailed ? kIoError : kDesignValidationError;
+    if (outputWriteFailed) {
+        return kIoError;
+    }
+    return failureExitCode(result.diagnostics, kDesignValidationError);
 }
 
 int designValidate(const QStringList& arguments, FinepaperApplication& application) {
@@ -233,6 +259,9 @@ int designValidate(const QStringList& arguments, FinepaperApplication& applicati
     }
     if (result.success) {
         return kSuccess;
+    }
+    if (hasPackageResolutionFailure(result.diagnostics)) {
+        return kPackageError;
     }
     const bool packageFailure = std::any_of(
         result.diagnostics.cbegin(),
@@ -280,7 +309,9 @@ int designGenerate(const QStringList& arguments, FinepaperApplication& applicati
     if (resultWriteFailed) {
         return kIoError;
     }
-    return result.success ? kSuccess : kGenerationError;
+    return result.success
+        ? kSuccess
+        : failureExitCode(result.diagnostics, kGenerationError);
 }
 
 int designCommand(const QStringList& arguments) {
@@ -299,6 +330,9 @@ int designCommand(const QStringList& arguments) {
             });
         }
         return kPackageError;
+    }
+    if (!diagnostics.isEmpty()) {
+        printDiagnostics(diagnostics);
     }
     const QString action = arguments.at(2);
     if (action == QStringLiteral("create")) {
@@ -330,6 +364,9 @@ int runCommand(const QStringList& arguments) {
         printDiagnostics(diagnostics);
         return kPackageError;
     }
+    if (!diagnostics.isEmpty()) {
+        printDiagnostics(diagnostics);
+    }
     const JsonObjectLoadResult request = loadJsonObject(arguments.at(2));
     if (!request.success) {
         printDiagnostics(request.diagnostics);
@@ -341,7 +378,7 @@ int runCommand(const QStringList& arguments) {
         if (hasOption(arguments, QStringLiteral("--json"))) {
             printJson(designResultToJson(design));
         }
-        return kDesignValidationError;
+        return failureExitCode(design.diagnostics, kDesignValidationError);
     }
     const QString designOutput = optionValue(arguments, QStringLiteral("--design-output"));
     if (!designOutput.isEmpty() &&
@@ -370,7 +407,9 @@ int runCommand(const QStringList& arguments) {
     if (resultWriteFailed) {
         return kIoError;
     }
-    return result.success ? kSuccess : kGenerationError;
+    return result.success
+        ? kSuccess
+        : failureExitCode(result.diagnostics, kGenerationError);
 }
 
 } // namespace
