@@ -97,6 +97,7 @@ private:
     void reloadPackages();
     void installPackage();
     void updatePackageControls();
+    void updateCreationPackageDetails();
     void updateEditorEmptyState();
     void updateEndpointQuickAddState();
     void filterEndpointPalette(const QString& text);
@@ -253,8 +254,10 @@ private:
     QDockWidget* m_packageDock = nullptr;
     QGroupBox* m_currentDesignGroup = nullptr;
     QLabel* m_activePackageLabel = nullptr;
+    QLabel* m_activePackageAvailability = nullptr;
     QLabel* m_availablePackagesLabel = nullptr;
     QComboBox* m_creationPackageSelector = nullptr;
+    QLabel* m_creationPackageDetails = nullptr;
     QPushButton* m_createDesignButton = nullptr;
     QPushButton* m_installPackageButton = nullptr;
     QPushButton* m_reloadPackagesButton = nullptr;

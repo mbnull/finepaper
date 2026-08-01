@@ -1517,8 +1517,12 @@ int main(int argc, char** argv) {
               QStringLiteral("View menu toggle hides the left Package panel"));
         packagePanelAction->trigger();
         application.processEvents();
-        check(packageDock->isVisible() && packagePanelAction->isChecked(),
-              QStringLiteral("View menu toggle restores the left Package panel"));
+        auto* focusedPackageSelector = packageDock->findChild<QComboBox*>(
+            QStringLiteral("finepaper.packageSelector"));
+        check(packageDock->isVisible() && packagePanelAction->isChecked()
+                  && focusIsWithin(focusedPackageSelector),
+              QStringLiteral(
+                  "showing the left Package panel restores it at the primary Package selector"));
     }
     if (inspectorPanelAction && inspectorDock) {
         inspectorDock->show();
@@ -1644,6 +1648,14 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.activePackage"));
     auto* availablePackages = window.findChild<QLabel*>(
         QStringLiteral("finepaper.availablePackages"));
+    auto* creationPackageDetails = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.creationPackageDetails"));
+    auto* packageLibrarySection = window.findChild<QGroupBox*>(
+        QStringLiteral("finepaper.packageLibrarySection"));
+    auto* installPackageButton = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.installPackage"));
+    auto* reloadPackagesButton = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.reloadPackages"));
     auto* endpointPalette = window.findChild<QListWidget*>(QStringLiteral("finepaper.endpointPalette"));
     auto* currentDesignSection = window.findChild<QGroupBox*>(
         QStringLiteral("finepaper.currentDesignSection"));
@@ -1658,9 +1670,41 @@ int main(int argc, char** argv) {
               && creationPackageSelector->count() == 1
               && creationPackageSelector->currentData().toString()
                   == QStringLiteral("finepaper.noc@1.0.0")
+              && creationPackageSelector->currentText()
+                  == QStringLiteral("Finepaper Mesh NoC")
               && !creationPackageSelector->accessibleName().isEmpty(),
           QStringLiteral(
               "the Package for a new design is visible before opening the dialog"));
+    check(packageDock && packageDock->windowTitle()
+              == QStringLiteral("NoC Library")
+              && creationPackageDetails
+              && creationPackageDetails->textFormat() == Qt::PlainText
+              && creationPackageDetails->text().contains(
+                  QStringLiteral("finepaper.noc@1.0.0"))
+              && creationPackageDetails->text().contains(
+                  QStringLiteral("Mesh")),
+          QStringLiteral(
+              "the compact Package selector keeps the exact version and capability range visible in text"));
+    const bool packageActionsFit = packageLibrarySection
+        && installPackageButton && reloadPackagesButton
+        && packageLibrarySection->rect().contains(
+            installPackageButton->geometry())
+        && packageLibrarySection->rect().contains(
+            reloadPackagesButton->geometry())
+        && installPackageButton->width()
+            >= installPackageButton->sizeHint().width()
+        && reloadPackagesButton->width()
+            >= reloadPackagesButton->sizeHint().width();
+    check(packageActionsFit,
+          QStringLiteral(
+              "Package maintenance actions remain fully visible inside the NoC Library"));
+    if (fontScale >= 1.5) {
+        check(installPackageButton && reloadPackagesButton
+                  && installPackageButton->geometry().bottom()
+                      < reloadPackagesButton->geometry().top(),
+              QStringLiteral(
+                  "large system fonts stack Package maintenance actions before labels clip"));
+    }
     check(activePackage
               && activePackage->text().contains(QStringLiteral("No design is open")),
           QStringLiteral("the workbench does not imply an active IP before design creation"));
@@ -1776,6 +1820,10 @@ int main(int argc, char** argv) {
               && initialValidateAction && initialValidateAction->isEnabled()
               && initialGenerateAction && initialGenerateAction->isEnabled(),
           QStringLiteral("active NoC IP, design actions and Endpoint Palette stay aligned"));
+    check(endpointLibrarySection && packageLibrarySection
+              && endpointLibrarySection->y() < packageLibrarySection->y(),
+          QStringLiteral(
+              "an open design prioritizes Endpoint types ahead of secondary Package maintenance"));
     check(applyParameters && !applyParameters->isEnabled(),
           QStringLiteral("Package defaults are editable but do not enable a no-op Apply"));
     check(meshTopologyGroup && meshTopologyGroup->isVisible()
@@ -4608,6 +4656,8 @@ int main(int argc, char** argv) {
 
     auto* retainedActivePackage = numberWindow.findChild<QLabel*>(
         QStringLiteral("finepaper.activePackage"));
+    auto* retainedPackageAvailability = numberWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.activePackageAvailability"));
     auto* retainedAvailablePackages = numberWindow.findChild<QLabel*>(
         QStringLiteral("finepaper.availablePackages"));
     auto* retainedPalette = numberWindow.findChild<QListWidget*>(
@@ -4627,6 +4677,10 @@ int main(int argc, char** argv) {
                   QStringLiteral("test.number-parameter@1.0.0"))
               && retainedActivePackage->text().contains(
                   QStringLiteral("runtime unavailable"))
+              && retainedPackageAvailability
+              && !retainedPackageAvailability->isHidden()
+              && retainedPackageAvailability->text().contains(
+                  QStringLiteral("Reload or reinstall"))
               && retainedAvailablePackages
               && retainedAvailablePackages->text().startsWith(
                   QStringLiteral("No runnable NoC IP Package"))
@@ -4660,6 +4714,8 @@ int main(int argc, char** argv) {
                   QStringLiteral("test.number-parameter@1.0.0"))
               && !retainedActivePackage->text().contains(
                   QStringLiteral("runtime unavailable"))
+              && retainedPackageAvailability
+              && retainedPackageAvailability->isHidden()
               && retainedAvailablePackages
               && retainedAvailablePackages->text().startsWith(
                   QStringLiteral("1 NoC IP Package"))
@@ -5862,11 +5918,23 @@ int main(int argc, char** argv) {
     application.processEvents();
     auto* missingCreate = zeroPackageWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.createDesign"));
+    auto* zeroPackageInstall = zeroPackageWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.installPackage"));
+    QAction* zeroPackageNavigation = zeroPackageWindow.findChild<QAction*>(
+        finepaper::workbench::packageNavigationActionName);
     QAction* missingNew = actionWithText(
         zeroPackageWindow, QStringLiteral("New NoC Design…"));
     check(missingCreate && !missingCreate->isEnabled()
               && missingNew && !missingNew->isEnabled(),
           QStringLiteral("zero-Package startup disables every New Design entry point consistently"));
+    if (zeroPackageNavigation) {
+        zeroPackageNavigation->trigger();
+        application.processEvents();
+    }
+    check(zeroPackageNavigation && zeroPackageInstall
+              && focusIsWithin(zeroPackageInstall),
+          QStringLiteral(
+              "Package navigation focuses Install when no runnable Package can be selected"));
     closeDiscarding(zeroPackageWindow);
 
     finepaper::RuntimeLocations missingLocations{
@@ -5881,6 +5949,8 @@ int main(int argc, char** argv) {
 
     auto* missingActivePackage = missingWindow.findChild<QLabel*>(
         QStringLiteral("finepaper.activePackage"));
+    auto* missingPackageAvailability = missingWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.activePackageAvailability"));
     auto* missingAvailablePackages = missingWindow.findChild<QLabel*>(
         QStringLiteral("finepaper.availablePackages"));
     auto* missingPalette = missingWindow.findChild<QListWidget*>(
@@ -5904,6 +5974,10 @@ int main(int argc, char** argv) {
                   QStringLiteral("test.never-loaded@1.0.0"))
               && missingActivePackage->text().contains(
                   QStringLiteral("Package not loaded"))
+              && missingPackageAvailability
+              && !missingPackageAvailability->isHidden()
+              && missingPackageAvailability->text().contains(
+                  QStringLiteral("Install this exact Package ID and version"))
               && missingAvailablePackages
               && missingAvailablePackages->text().startsWith(
                   QStringLiteral("1 NoC IP Package")),

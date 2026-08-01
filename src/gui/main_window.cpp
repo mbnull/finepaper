@@ -12,6 +12,7 @@
 #include "features/topology/mesh_resize_dialog.h"
 #include "gui/package_parameter_form.h"
 #include "ui/components/empty_state.h"
+#include "ui/layouts/responsive_action_layout.h"
 #include "ui/theme/ui_tokens.h"
 #include "ui/workbench/inspector_design_settings.h"
 #include "ui/workbench/inspector_summary_panel.h"
@@ -937,7 +938,7 @@ void FinepaperMainWindow::createCentralViews() {
 }
 
 void FinepaperMainWindow::createPackageDock() {
-    m_packageDock = new QDockWidget(QStringLiteral("NoC IP && Endpoint Library"), this);
+    m_packageDock = new QDockWidget(QStringLiteral("NoC Library"), this);
     m_packageDock->setObjectName(workbench::packageDockName);
     m_packageDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
@@ -962,10 +963,25 @@ void FinepaperMainWindow::createPackageDock() {
     m_activePackageLabel->setProperty(
         "finepaperRole", QStringLiteral("subtitle"));
     currentDesignLayout->addWidget(m_activePackageLabel);
+
+    m_activePackageAvailability = new QLabel(m_currentDesignGroup);
+    m_activePackageAvailability->setObjectName(
+        QStringLiteral("finepaper.activePackageAvailability"));
+    m_activePackageAvailability->setTextFormat(Qt::PlainText);
+    m_activePackageAvailability->setWordWrap(true);
+    m_activePackageAvailability->setMinimumWidth(0);
+    m_activePackageAvailability->setTextInteractionFlags(
+        Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    m_activePackageAvailability->setProperty(
+        "finepaperRole", QStringLiteral("warning"));
+    m_activePackageAvailability->hide();
+    currentDesignLayout->addWidget(m_activePackageAvailability);
     layout->addWidget(m_currentDesignGroup);
     layout->setAlignment(m_currentDesignGroup, Qt::AlignTop);
 
     auto* packageGroup = new QGroupBox(QStringLiteral("NoC IP Packages"));
+    packageGroup->setObjectName(
+        QStringLiteral("finepaper.packageLibrarySection"));
     packageGroup->setSizePolicy(
         QSizePolicy::Preferred, QSizePolicy::Maximum);
     auto* packageLayout = new QVBoxLayout(packageGroup);
@@ -998,6 +1014,18 @@ void FinepaperMainWindow::createPackageDock() {
     packageLayout->addWidget(creationPackageLabel);
     packageLayout->addWidget(m_creationPackageSelector);
 
+    m_creationPackageDetails = new QLabel(packageGroup);
+    m_creationPackageDetails->setObjectName(
+        QStringLiteral("finepaper.creationPackageDetails"));
+    m_creationPackageDetails->setTextFormat(Qt::PlainText);
+    m_creationPackageDetails->setWordWrap(true);
+    m_creationPackageDetails->setMinimumWidth(0);
+    m_creationPackageDetails->setTextInteractionFlags(
+        Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    m_creationPackageDetails->setProperty(
+        "finepaperRole", QStringLiteral("muted"));
+    packageLayout->addWidget(m_creationPackageDetails);
+
     m_createDesignButton = new QPushButton(
         QStringLiteral("Create Another Design…"), packageGroup);
     m_createDesignButton->setObjectName(QStringLiteral("finepaper.createDesign"));
@@ -1005,16 +1033,19 @@ void FinepaperMainWindow::createPackageDock() {
         "finepaperRole", QStringLiteral("quiet"));
     packageLayout->addWidget(m_createDesignButton);
 
-    auto* packageButtons = new QHBoxLayout;
+    auto* packageButtons = new ui::ResponsiveActionLayout;
+    packageButtons->setSpacing(ui::UiMetrics::spacing8);
     m_installPackageButton = new QPushButton(QStringLiteral("Install Package…"));
+    m_installPackageButton->setObjectName(
+        QStringLiteral("finepaper.installPackage"));
     m_reloadPackagesButton = new QPushButton(QStringLiteral("Reload Packages"));
+    m_reloadPackagesButton->setObjectName(
+        QStringLiteral("finepaper.reloadPackages"));
     m_reloadPackagesButton->setProperty(
         "finepaperRole", QStringLiteral("quiet"));
     packageButtons->addWidget(m_installPackageButton);
     packageButtons->addWidget(m_reloadPackagesButton);
     packageLayout->addLayout(packageButtons);
-    layout->addWidget(packageGroup);
-    layout->setAlignment(packageGroup, Qt::AlignTop);
 
     m_endpointLibraryGroup = new QGroupBox(QStringLiteral("Endpoint Types"));
     m_endpointLibraryGroup->setObjectName(
@@ -1065,6 +1096,8 @@ void FinepaperMainWindow::createPackageDock() {
         "finepaperRole", QStringLiteral("primary"));
     endpointLayout->addWidget(m_addEndpointButton);
     layout->addWidget(m_endpointLibraryGroup, 1);
+    layout->addWidget(packageGroup);
+    layout->setAlignment(packageGroup, Qt::AlignTop);
 
     auto* packageScroll = new QScrollArea(m_packageDock);
     packageScroll->setObjectName(
@@ -1086,7 +1119,10 @@ void FinepaperMainWindow::createPackageDock() {
     connect(m_createDesignButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::createDesign);
     connect(m_creationPackageSelector, &QComboBox::currentIndexChanged,
-            this, [this] { updateEditorEmptyState(); });
+            this, [this] {
+                updateCreationPackageDetails();
+                updateEditorEmptyState();
+            });
     connect(m_endpointPalette, &QListWidget::itemActivated,
             this, [this](QListWidgetItem* item) {
                 addEndpointFromPalette(item);
@@ -1899,6 +1935,22 @@ void FinepaperMainWindow::createActions() {
     packagePanelAction->setText(QStringLiteral("NoC IP && Endpoint Library"));
     packagePanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+B")));
     packagePanelAction->setStatusTip(QStringLiteral("Show or hide the NoC IP and Endpoint panel"));
+    connect(packagePanelAction, &QAction::triggered,
+            this, [this](bool visible) {
+                if (!visible) {
+                    return;
+                }
+                QTimer::singleShot(0, m_packageDock, [this] {
+                    QWidget* focusTarget = m_creationPackageSelector
+                            && m_creationPackageSelector->isEnabled()
+                        ? static_cast<QWidget*>(m_creationPackageSelector)
+                        : static_cast<QWidget*>(m_installPackageButton);
+                    if (focusTarget && focusTarget->isEnabled()
+                        && focusTarget->isVisibleTo(m_packageDock)) {
+                        focusTarget->setFocus(Qt::ShortcutFocusReason);
+                    }
+                });
+            });
 
     QAction* inspectorPanelAction = m_inspectorDock->toggleViewAction();
     inspectorPanelAction->setObjectName(workbench::inspectorToggleActionName);
@@ -2063,7 +2115,7 @@ void FinepaperMainWindow::createActions() {
     addPanelNavigation(
         workbench::packageNavigationActionName,
         QStringLiteral("Package Library"), m_packageDock,
-        m_creationPackageSelector, m_packageDock->widget());
+        m_creationPackageSelector, m_installPackageButton);
     addPanelNavigation(
         workbench::inspectorNavigationActionName,
         QStringLiteral("Inspector"), m_inspectorDock,
@@ -2452,9 +2504,7 @@ void FinepaperMainWindow::updatePackageControls() {
         m_creationPackageSelector->clear();
         for (const PackageDefinition* package : runnablePackages) {
             m_creationPackageSelector->addItem(
-                QStringLiteral("%1 — %2")
-                    .arg(package->key())
-                    .arg(package->name),
+                package->name,
                 package->key());
             m_creationPackageSelector->setItemData(
                 m_creationPackageSelector->count() - 1,
@@ -2462,6 +2512,11 @@ void FinepaperMainWindow::updatePackageControls() {
                     .arg(package->name)
                     .arg(package->key()),
                 Qt::ToolTipRole);
+            m_creationPackageSelector->setItemData(
+                m_creationPackageSelector->count() - 1,
+                QStringLiteral("%1, %2")
+                    .arg(package->name, package->key()),
+                Qt::AccessibleTextRole);
         }
         if (m_creationPackageSelector->count() == 0) {
             m_creationPackageSelector->addItem(
@@ -2474,45 +2529,84 @@ void FinepaperMainWindow::updatePackageControls() {
         }
         m_creationPackageSelector->setEnabled(
             !m_runtimeAvailablePackageKeys.isEmpty() && !m_operationBusy);
-        m_creationPackageSelector->setToolTip(
-            m_runtimeAvailablePackageKeys.isEmpty()
-                ? QStringLiteral(
-                    "Install or repair a runnable Package before creating a design.")
-                : QStringLiteral(
-                    "Sets the initial choice in New NoC Design. The open design "
-                    "keeps its own bound Package."));
+        updateCreationPackageDetails();
     }
 
     if (!m_design) {
         m_activePackageLabel->setText(QStringLiteral("No design is open."));
         m_activePackageLabel->setToolTip({});
+        m_activePackageAvailability->clear();
+        m_activePackageAvailability->hide();
     } else if (const PackageDefinition* package = packageForDesign()) {
         if (runtimePackageByKey(package->key())) {
             m_activePackageLabel->setText(
                 QStringLiteral("%1 — %2").arg(package->name, package->key()));
             m_activePackageLabel->setToolTip(package->rootPath);
+            m_activePackageAvailability->clear();
+            m_activePackageAvailability->hide();
         } else {
             m_activePackageLabel->setText(
                 QStringLiteral("%1 — %2 (runtime unavailable)")
                     .arg(package->name, package->key()));
-            m_activePackageLabel->setToolTip(
-                QStringLiteral("Retained metadata from %1 keeps editing available. "
-                               "Reload or reinstall this exact Package before validation "
-                               "or generation.")
-                    .arg(package->rootPath));
+            const QString recovery = QStringLiteral(
+                "Runtime unavailable. Reload or reinstall this exact Package "
+                "before Validate or Generate RTL.");
+            m_activePackageAvailability->setText(recovery);
+            m_activePackageAvailability->setAccessibleDescription(recovery);
+            m_activePackageAvailability->show();
+            m_activePackageLabel->setToolTip(QStringLiteral(
+                "Retained metadata from %1 keeps editing available.")
+                .arg(package->rootPath));
         }
     } else {
         m_activePackageLabel->setText(
             QStringLiteral("Package not loaded: %1@%2 (design is read-only)")
                 .arg(m_design->package.id, m_design->package.version));
-        m_activePackageLabel->setToolTip(
-            QStringLiteral("Install the exact Package id and version to restore editing."));
+        const QString recovery = QStringLiteral(
+            "Install this exact Package ID and version to restore editing.");
+        m_activePackageAvailability->setText(recovery);
+        m_activePackageAvailability->setAccessibleDescription(recovery);
+        m_activePackageAvailability->show();
+        m_activePackageLabel->setToolTip(recovery);
     }
     updateEndpointPalette();
     updateDomainLayerControls();
     updateDomainManager();
     updateDesignExtensionsWorkspace();
     updateUiState();
+}
+
+void FinepaperMainWindow::updateCreationPackageDetails() {
+    if (!m_creationPackageSelector || !m_creationPackageDetails) {
+        return;
+    }
+    const PackageDefinition* package = runtimePackageByKey(
+        m_creationPackageSelector->currentData().toString());
+    if (!package) {
+        const QString unavailable = QStringLiteral(
+            "Install or repair a runnable Package before creating a design.");
+        m_creationPackageDetails->setText(unavailable);
+        m_creationPackageDetails->setAccessibleDescription(unavailable);
+        m_creationPackageSelector->setToolTip(unavailable);
+        return;
+    }
+
+    const QString details = QStringLiteral(
+        "%1\nMesh %2–%3 rows × %4–%5 columns")
+        .arg(package->key(),
+             QString::number(package->mesh.minimumRows),
+             QString::number(package->mesh.maximumRows),
+             QString::number(package->mesh.minimumColumns),
+             QString::number(package->mesh.maximumColumns));
+    m_creationPackageDetails->setText(details);
+    m_creationPackageDetails->setAccessibleDescription(
+        QStringLiteral("Selected Package: %1. %2")
+            .arg(package->name, details));
+    m_creationPackageSelector->setToolTip(
+        QStringLiteral(
+            "%1\n%2\nSets the initial choice for New NoC Design. The open "
+            "design keeps its own bound Package.")
+            .arg(package->name, details));
 }
 
 void FinepaperMainWindow::detachPackageBorrowingPanels() {
