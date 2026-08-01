@@ -16,11 +16,6 @@ QStringList normalizedDomainIds(QStringList ids) {
     return ids;
 }
 
-bool appliesTo(const DomainTypeDefinition& type, ElementKind kind) {
-    return std::find(type.appliesTo.cbegin(), type.appliesTo.cend(), kind)
-        != type.appliesTo.cend();
-}
-
 std::uint64_t stableDomainHash(const QString& domainType,
                                const QString& domainId) {
     constexpr std::uint64_t offsetBasis = 14695981039346656037ULL;
@@ -85,7 +80,7 @@ DomainAssignmentDisplayState displayState(
     if (status == DomainPresentationStatus::MissingPackageType || !type) {
         return DomainAssignmentDisplayState::Unavailable;
     }
-    if (!appliesTo(*type, kind)) {
+    if (!type->assignmentRule(kind)) {
         return DomainAssignmentDisplayState::NotApplicable;
     }
     if (assignmentCount == 0) {

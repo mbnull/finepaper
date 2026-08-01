@@ -10,6 +10,7 @@
 #include <QVector>
 
 #include <functional>
+#include <optional>
 
 class QComboBox;
 class QDialogButtonBox;
@@ -30,8 +31,8 @@ struct EndpointDomainChoice {
 struct EndpointDomainAssignmentGroup {
     QString domainType;
     QString domainTypeLabel;
-    DomainCardinality cardinality = DomainCardinality::Invalid;
-    bool required = false;
+    DomainAssignmentRule assignmentRule = {
+        ElementKind::Endpoint, -1, std::nullopt};
     QVector<EndpointDomainChoice> choices;
     QStringList selectedDomainIds;
     bool assignmentProvided = false;
@@ -54,8 +55,9 @@ buildEndpointDomainAssignmentGroups(
     const EndpointDomainAssignments& initialAssignments = {});
 
 // A modal choice is only useful when the Package leaves a real decision to the
-// user (or when persisted assignments need repair).  Required Domain Types
-// with one available instance are resolved automatically by the group builder.
+// user (or when persisted assignments need repair). If exactly the declared
+// minimum number of instances is available, the required choices are resolved
+// automatically by the group builder.
 [[nodiscard]] bool endpointDomainAssignmentsRequireUserDecision(
     const QVector<EndpointDomainAssignmentGroup>& groups,
     EndpointDomainAssignmentDecisionMode mode =

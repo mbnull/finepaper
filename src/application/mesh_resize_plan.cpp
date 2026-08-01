@@ -29,10 +29,6 @@ bool projectableTopology(const TopologySpec& topology) {
             <= kMaximumProjectedRouterCount;
 }
 
-bool appliesToRouter(const DomainTypeDefinition& type) {
-    return type.appliesTo.contains(ElementKind::Router);
-}
-
 QStringList normalizedDomainIds(QStringList ids,
                                 const QString& path,
                                 QVector<Diagnostic>& diagnostics) {
@@ -135,7 +131,8 @@ void validateExactImpactConfirmation(
 } // namespace
 
 bool MeshResizeDomainAssignmentPlan::requiresExplicitChoice() const {
-    return required && automaticAssignment.isEmpty();
+    return assignmentRule.isValid()
+        && automaticAssignment.size() < assignmentRule.minimumAssignments;
 }
 
 bool MeshResizePlan::hasBlockingDiagnostics() const {
@@ -194,21 +191,24 @@ MeshResizePlan buildMeshResizePlan(const NocDesign& design,
 
     for (const DomainTypeDefinition& type : package.domainTypes) {
         plan.declaredDomainTypes.append(type.id);
-        if (!appliesToRouter(type)) {
+        const std::optional<DomainAssignmentRule> rule =
+            type.assignmentRule(ElementKind::Router);
+        if (!rule) {
             continue;
         }
         MeshResizeDomainAssignmentPlan assignment;
         assignment.domainType = type.id;
         assignment.label = type.label.trimmed().isEmpty()
             ? type.id : type.label.trimmed();
-        assignment.cardinality = type.cardinality;
-        assignment.required = type.required;
+        assignment.assignmentRule = *rule;
         for (const MeshResizeDomainOption& domain : std::as_const(plan.domains)) {
             if (domain.type == type.id) {
                 assignment.availableDomainIds.append(domain.id);
             }
         }
-        if (assignment.required && assignment.availableDomainIds.size() == 1) {
+        if (rule->requiresAssignment()
+            && assignment.availableDomainIds.size()
+                == rule->minimumAssignments) {
             assignment.automaticAssignment = assignment.availableDomainIds;
         }
         plan.routerAssignmentPlans.append(std::move(assignment));
@@ -533,14 +533,21 @@ MeshResizeAssignmentResolution resolveMeshResizeAssignments(
                         QStringLiteral("package"));
                 }
             }
-            if ((*assignmentPlan)->cardinality == DomainCardinality::Single
-                && ids.size() > 1) {
+            const DomainAssignmentRule& rule =
+                (*assignmentPlan)->assignmentRule;
+            if (rule.maximumAssignments
+                && ids.size() > *rule.maximumAssignments) {
+                const QString message = *rule.maximumAssignments == 1
+                    ? QStringLiteral("Domain type %1 allows only one assignment")
+                          .arg(assignment.key())
+                    : QStringLiteral("Domain type %1 allows at most %2 assignments")
+                          .arg(assignment.key())
+                          .arg(*rule.maximumAssignments);
                 appendDiagnostic(
                     resolution.diagnostics,
                     QStringLiteral("error"),
                     QStringLiteral("domain_assignment.cardinality"),
-                    QStringLiteral("Domain type %1 allows only one assignment")
-                        .arg(assignment.key()),
+                    message,
                     assignmentPath,
                     QStringLiteral("package"));
             }
@@ -558,14 +565,28 @@ MeshResizeAssignmentResolution resolveMeshResizeAssignments(
             router.element.id, DomainMembership{router.element, {}});
         for (const MeshResizeDomainAssignmentPlan& assignment
              : plan.routerAssignmentPlans) {
-            if (!assignment.required
-                || !membership.assignments.value(assignment.domainType).isEmpty()) {
+            const qsizetype assignmentCount =
+                membership.assignments.value(assignment.domainType).size();
+            if (!assignment.assignmentRule.requiresAssignment()
+                || assignmentCount
+                    >= assignment.assignmentRule.minimumAssignments) {
                 continue;
             }
             if (!assignment.automaticAssignment.isEmpty()) {
-                membership.assignments.insert(
-                    assignment.domainType, assignment.automaticAssignment);
-                continue;
+                QStringList completed =
+                    membership.assignments.value(assignment.domainType);
+                for (const QString& domainId : assignment.automaticAssignment) {
+                    if (!completed.contains(domainId)) {
+                        completed.append(domainId);
+                    }
+                }
+                std::sort(completed.begin(), completed.end());
+                if (completed.size()
+                    >= assignment.assignmentRule.minimumAssignments) {
+                    membership.assignments.insert(
+                        assignment.domainType, std::move(completed));
+                    continue;
+                }
             }
             appendDiagnostic(
                 resolution.diagnostics,

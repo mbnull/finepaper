@@ -188,6 +188,27 @@ Membership 是稀疏设计意图，不保存完整 Router 图。空 membership�
 }
 ~~~
 
+V2/V3 的 `appliesTo + cardinality + required` 只保留为 Manifest 兼容输入。
+Package 解析层会立即把每个适用元素类型归一化成 canonical assignment rule：
+
+| V2/V3 声明 | minimum | maximum |
+|---|---:|---:|
+| optional + single | 0 | 1 |
+| required + single | 1 | 1 |
+| optional + multiple | 0 | 无上限 |
+| required + multiple | 1 | 无上限 |
+
+Application 与通用 UI 只应查询该规则，不应在各自代码里再次解释三个旧字段。
+这一步不改变 V2/V3 行为，也不扩大 membership 的元素集合：当前仍只有固定 Mesh
+Router 与 Endpoint 可归属 Domain，Router Link 继续作为 crossing/override 的派生物理边。
+
+按 Router、Endpoint 分别声明一般 `minimum/maximum` 是下一 Package/Design 格式的
+显式协议变化，不能作为 V2/V3 未知可选字段偷偷加入。旧 Finepaper 会忽略大多数
+未知 Domain Type 字段，因而新格式必须让旧版本 fail closed；同时需要把
+`required` 的“Domain Type 至少存在一个实例”和“每个元素至少一次 assignment”
+语义拆开。`minimum > 1` 也不能靠复制单个 `defaultInstance` 猜造实例，缺少显式
+`domainConfiguration` 时必须明确失败。
+
 Domain property 沿用基础 scalar 类型、枚举和数值范围，同时增加：
 
 - `required`：实例中必须出现该属性；

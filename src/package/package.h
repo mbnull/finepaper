@@ -1,6 +1,7 @@
 #pragma once
 
 #include "noc/model.h"
+#include "package/domain/assignment_rule.h"
 #include "schema/json_schema.h"
 
 #include <QJsonValue>
@@ -119,13 +120,20 @@ struct DomainDefaultInstanceDefinition {
 struct DomainTypeDefinition {
     QString id;
     QString label;
+    // V2/V3 source fields remain available during the compatibility window.
+    // Package parsing also materializes assignmentRules, which is the
+    // canonical semantic view consumed by Application and UI code.
     QVector<ElementKind> appliesTo;
     DomainCardinality cardinality = DomainCardinality::Single;
     bool required = false;
+    QVector<DomainAssignmentRule> assignmentRules;
     std::optional<DomainDefaultInstanceDefinition> defaultInstance;
     QVector<DomainPropertyDefinition> properties;
     QVector<DomainRelationDefinition> relations;
     QVector<DomainPropertyDefinition> crossingProperties;
+
+    [[nodiscard]] std::optional<DomainAssignmentRule> assignmentRule(
+        ElementKind elementKind) const;
 };
 
 struct AttachmentSlotDefinition {

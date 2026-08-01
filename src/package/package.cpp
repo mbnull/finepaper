@@ -794,6 +794,30 @@ DomainCardinality parseDomainCardinality(const QJsonObject& object,
     return DomainCardinality::Invalid;
 }
 
+std::optional<DomainAssignmentRule> legacyDomainAssignmentRule(
+    ElementKind elementKind,
+    DomainCardinality cardinality,
+    bool required) {
+    if (!isDomainMembershipElementKind(elementKind)) {
+        return std::nullopt;
+    }
+    if (cardinality == DomainCardinality::Single) {
+        return DomainAssignmentRule{
+            elementKind,
+            required ? 1 : 0,
+            qsizetype{1}
+        };
+    }
+    if (cardinality == DomainCardinality::Multiple) {
+        return DomainAssignmentRule{
+            elementKind,
+            required ? 1 : 0,
+            std::nullopt
+        };
+    }
+    return DomainAssignmentRule{elementKind, -1, std::nullopt};
+}
+
 QVector<ElementKind> parseDomainAppliesTo(
     const QJsonValue& value,
     const QString& path,
@@ -1403,6 +1427,15 @@ QVector<DomainTypeDefinition> parseDomainTypes(
             continue;
         }
         const QJsonObject object = values.at(index).toObject();
+        if (object.contains(QStringLiteral("assignmentRules"))) {
+            appendDiagnostic(
+                diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.assignment_rules_require_v4"),
+                QStringLiteral(
+                    "assignmentRules requires Package formatVersion 4"),
+                path + QStringLiteral("/assignmentRules"));
+        }
         DomainTypeDefinition definition;
         definition.id = requiredString(
             object, QStringLiteral("id"), path, diagnostics);
@@ -1422,6 +1455,14 @@ QVector<DomainTypeDefinition> parseDomainTypes(
                                               false,
                                               path,
                                               diagnostics);
+        for (const ElementKind elementKind : definition.appliesTo) {
+            const std::optional<DomainAssignmentRule> rule =
+                legacyDomainAssignmentRule(
+                    elementKind, definition.cardinality, definition.required);
+            if (rule) {
+                definition.assignmentRules.append(*rule);
+            }
+        }
         definition.defaultInstance = parseDomainDefaultInstance(
             object, definition.required, path, diagnostics);
         definition.properties = parseDomainProperties(
@@ -2355,6 +2396,22 @@ const ElementPropertyDefinition* ElementPropertySetDefinition::property(
             return value.id == id;
         });
     return it == properties.cend() ? nullptr : &(*it);
+}
+
+std::optional<DomainAssignmentRule> DomainTypeDefinition::assignmentRule(
+    ElementKind elementKind) const {
+    const auto rule = std::find_if(
+        assignmentRules.cbegin(), assignmentRules.cend(),
+        [&](const DomainAssignmentRule& candidate) {
+            return candidate.elementKind == elementKind;
+        });
+    if (rule != assignmentRules.cend()) {
+        return *rule;
+    }
+    if (!assignmentRules.isEmpty() || !appliesTo.contains(elementKind)) {
+        return std::nullopt;
+    }
+    return legacyDomainAssignmentRule(elementKind, cardinality, required);
 }
 
 const ElementPropertySetDefinition* PackageDefinition::elementPropertySet(

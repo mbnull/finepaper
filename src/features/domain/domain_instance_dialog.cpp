@@ -1,5 +1,7 @@
 #include "features/domain/domain_instance_dialog.h"
 
+#include "features/domain/presentation/domain_text.h"
+
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -58,10 +60,8 @@ DomainInstanceDialog::DomainInstanceDialog(
         m_typeSelector = new QComboBox(this);
         m_typeSelector->setObjectName(QStringLiteral("finepaper.domainInstance.type"));
         for (const DomainTypeDefinition& type : m_types) {
-            const QString label = type.label.trimmed().isEmpty()
-                ? type.id
-                : QStringLiteral("%1 (%2)").arg(type.label, type.id);
-            m_typeSelector->addItem(label, type.id);
+            m_typeSelector->addItem(
+                domain_text::domainTypeDisplayText(type), type.id);
         }
         const int preferredIndex = m_typeSelector->findData(preferredType);
         if (preferredIndex >= 0) {
@@ -299,23 +299,15 @@ void DomainInstanceDialog::updateTypeDescription() {
         return;
     }
 
-    QStringList appliesTo;
-    for (ElementKind kind : type->appliesTo) {
-        appliesTo.append(elementKindId(kind));
+    QStringList assignmentRules;
+    for (ElementKind kind : {ElementKind::Router, ElementKind::Endpoint}) {
+        assignmentRules.append(
+            domain_text::domainAssignmentConstraintText(*type, kind));
     }
-    const QString cardinality = type->cardinality == DomainCardinality::Multiple
-        ? QStringLiteral("multiple assignments")
-        : QStringLiteral("single assignment");
     m_typeDescription->setText(
-        QStringLiteral("%1. Applies to: %2. %3; %4.")
-            .arg(type->label.trimmed().isEmpty() ? type->id : type->label,
-                 appliesTo.isEmpty()
-                     ? QStringLiteral("no element kinds")
-                     : appliesTo.join(QStringLiteral(", ")),
-                 cardinality,
-                 type->required
-                     ? QStringLiteral("assignment required")
-                     : QStringLiteral("assignment optional")));
+        QStringLiteral("%1. %2")
+            .arg(domain_text::domainTypeDisplayText(*type),
+                 assignmentRules.join(QLatin1Char(' '))));
 }
 
 } // namespace finepaper

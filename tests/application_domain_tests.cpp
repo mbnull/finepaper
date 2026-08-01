@@ -1,5 +1,6 @@
 #include "application/application.h"
 #include "application/domain_configuration_draft.h"
+#include "application/domain_service.h"
 #include "storage/json.h"
 
 #include <QCoreApplication>
@@ -753,6 +754,101 @@ int main(int argc, char** argv) {
                                QStringList{QStringLiteral("clock-default")})
               && !findDomain(base, QStringLiteral("tag-default")),
           QStringLiteral("createDesign assigns every Router and Endpoint to applicable required Domains"));
+
+    PackageDefinition membershipRulePackage =
+        application.packages().constFirst();
+    auto membershipClock = std::find_if(
+        membershipRulePackage.domainTypes.begin(),
+        membershipRulePackage.domainTypes.end(),
+        [](const DomainTypeDefinition& type) {
+            return type.id == QStringLiteral("clock");
+        });
+    membershipClock->assignmentRules = {
+        DomainAssignmentRule{ElementKind::Router, 0, qsizetype{1}},
+        DomainAssignmentRule{ElementKind::Endpoint, 1, qsizetype{1}}
+    };
+    NocDesign unmaterialized = base;
+    unmaterialized.domains.clear();
+    unmaterialized.domainMemberships.clear();
+    const domain_service::MutationResult ruleMaterialization =
+        domain_service::materializeRequiredDomains(
+            unmaterialized, membershipRulePackage);
+    check(!hasErrors(ruleMaterialization.diagnostics)
+              && findDomain(ruleMaterialization.design,
+                            QStringLiteral("clock-default"))
+              && !hasAssignment(ruleMaterialization.design,
+                                ElementKind::Router,
+                                QStringLiteral("r-0-0"),
+                                QStringLiteral("clock"),
+                                QStringList{QStringLiteral("clock-default")})
+              && hasAssignment(ruleMaterialization.design,
+                               ElementKind::Endpoint,
+                               QStringLiteral("ep0"),
+                               QStringLiteral("clock"),
+                               QStringList{QStringLiteral("clock-default")}),
+          QStringLiteral("global required scaffolds remain independent while canonical minimums drive memberships"));
+
+    NocDesign twoClockAssignments = base;
+    twoClockAssignments.domains.append(DomainDefinition{
+        QStringLiteral("clock-canonical"),
+        QStringLiteral("clock"),
+        QStringLiteral("Canonical clock"),
+        QJsonObject{{QStringLiteral("frequencyMHz"), 600}}
+    });
+    auto twoClockMembership = std::find_if(
+        twoClockAssignments.domainMemberships.begin(),
+        twoClockAssignments.domainMemberships.end(),
+        [](const DomainMembership& membership) {
+            return membership.element
+                == ElementRef{ElementKind::Router,
+                              QStringLiteral("r-0-0")};
+        });
+    twoClockMembership->assignments.insert(
+        QStringLiteral("clock"),
+        QStringList{QStringLiteral("clock-default"),
+                    QStringLiteral("clock-canonical")});
+
+    PackageDefinition unboundedRulePackage =
+        application.packages().constFirst();
+    auto unboundedClock = std::find_if(
+        unboundedRulePackage.domainTypes.begin(),
+        unboundedRulePackage.domainTypes.end(),
+        [](const DomainTypeDefinition& type) {
+            return type.id == QStringLiteral("clock");
+        });
+    unboundedClock->assignmentRules = {
+        DomainAssignmentRule{ElementKind::Router, 1, std::nullopt},
+        DomainAssignmentRule{ElementKind::Endpoint, 1, qsizetype{1}}
+    };
+    check(!hasDiagnosticCode(
+              domain_service::validateAgainstPackage(
+                  twoClockAssignments, unboundedRulePackage),
+              QStringLiteral("domain_assignment.cardinality")),
+          QStringLiteral("canonical unbounded maximum overrides the legacy single projection"));
+
+    unboundedClock->cardinality = DomainCardinality::Multiple;
+    unboundedClock->assignmentRules[0].maximumAssignments = qsizetype{1};
+    check(hasDiagnosticCode(
+              domain_service::validateAgainstPackage(
+                  twoClockAssignments, unboundedRulePackage),
+              QStringLiteral("domain_assignment.cardinality")),
+          QStringLiteral("canonical maximum retains the legacy cardinality diagnostic code"));
+
+    PackageDefinition minimumRulePackage =
+        application.packages().constFirst();
+    auto minimumTag = std::find_if(
+        minimumRulePackage.domainTypes.begin(),
+        minimumRulePackage.domainTypes.end(),
+        [](const DomainTypeDefinition& type) {
+            return type.id == QStringLiteral("tag");
+        });
+    minimumTag->assignmentRules = {
+        DomainAssignmentRule{ElementKind::Router, 1, std::nullopt}
+    };
+    check(hasDiagnosticCode(
+              domain_service::validateAgainstPackage(base, minimumRulePackage),
+              QStringLiteral("domain_assignment.required")),
+          QStringLiteral("canonical minimum retains the legacy required-assignment diagnostic code"));
 
     QTemporaryDir unsupportedRuntimeFixture(
         QStringLiteral("/tmp/finepaper-domain-runtime-capability-test-XXXXXX"));

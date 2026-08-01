@@ -127,9 +127,10 @@ void projectionIsPackageDrivenAndPreservesInitialState() {
         return;
     }
     check(groups.at(0).domainType == QStringLiteral("power")
-              && groups.at(0).cardinality == DomainCardinality::Single
-              && groups.at(0).required,
-          QStringLiteral("projection preserves Package order and Single/required semantics"));
+              && groups.at(0).assignmentRule
+                  == DomainAssignmentRule{
+                      ElementKind::Endpoint, 1, qsizetype{1}},
+          QStringLiteral("projection preserves Package order and canonical Endpoint limits"));
     check(groups.at(0).choices.size() == 2
               && groups.at(0).choices.at(0).id == QStringLiteral("p-a")
               && groups.at(0).choices.at(1).id == QStringLiteral("p-b"),
@@ -142,6 +143,65 @@ void projectionIsPackageDrivenAndPreservesInitialState() {
                   == QStringLiteral("missing-tag")
               && !groups.at(2).choices.constLast().available,
           QStringLiteral("stale detached assignments remain visible and repairable"));
+}
+
+void canonicalPerKindRulesDriveEndpointUi() {
+    DomainTypeDefinition asymmetric;
+    asymmetric.id = QStringLiteral("asymmetric");
+    asymmetric.label = QStringLiteral("Asymmetric Domain");
+    asymmetric.appliesTo = {ElementKind::Endpoint};
+    asymmetric.cardinality = DomainCardinality::Single;
+    asymmetric.required = true;
+    asymmetric.assignmentRules = {
+        DomainAssignmentRule{
+            ElementKind::Router, 1, qsizetype{1}},
+        DomainAssignmentRule{
+            ElementKind::Endpoint, 0, qsizetype{2}}};
+
+    DomainTypeDefinition routerOnly;
+    routerOnly.id = QStringLiteral("canonical-router-only");
+    // These legacy fields deliberately disagree with the canonical rules.
+    routerOnly.appliesTo = {ElementKind::Endpoint};
+    routerOnly.cardinality = DomainCardinality::Multiple;
+    routerOnly.required = false;
+    routerOnly.assignmentRules = {
+        DomainAssignmentRule{
+            ElementKind::Router, 1, qsizetype{1}}};
+
+    PackageDefinition package;
+    package.domainTypes = {asymmetric, routerOnly};
+    NocDesign design;
+    design.domains = {
+        domain(QStringLiteral("a"), QStringLiteral("asymmetric")),
+        domain(QStringLiteral("b"), QStringLiteral("asymmetric"))};
+
+    const QVector<EndpointDomainAssignmentGroup> groups =
+        buildEndpointDomainAssignmentGroups(design, package);
+    check(groups.size() == 1
+              && groups.constFirst().domainType
+                  == QStringLiteral("asymmetric")
+              && groups.constFirst().assignmentRule
+                  == DomainAssignmentRule{
+                      ElementKind::Endpoint, 0, qsizetype{2}},
+          QStringLiteral("Endpoint applicability and limits come from the per-kind canonical rule"));
+
+    EndpointDomainAssignmentDialog dialog(design, package);
+    auto* multiple = dialog.findChild<QListWidget*>(
+        QStringLiteral(
+            "finepaper.endpointDomainAssignment.asymmetric.multiple"));
+    auto* single = dialog.findChild<QComboBox*>(
+        QStringLiteral(
+            "finepaper.endpointDomainAssignment.asymmetric.single"));
+    auto* description = dialog.findChild<QLabel*>(
+        QStringLiteral(
+            "finepaper.endpointDomainAssignment.asymmetric.description"));
+    auto* accept = dialog.findChild<QPushButton*>(
+        QStringLiteral("finepaper.endpointDomainAssignment.accept"));
+    check(multiple && !single && accept && accept->isEnabled()
+              && description
+              && description->text().contains(QStringLiteral("minimum 0"))
+              && description->text().contains(QStringLiteral("maximum 2")),
+          QStringLiteral("Endpoint editor type, optionality, and visible limits ignore conflicting legacy fields"));
 }
 
 void ambiguousRequiredChoicesGateAcceptance() {
@@ -379,6 +439,7 @@ int main(int argc, char** argv) {
     QApplication application(argc, argv);
     snapshotMergesAndNormalizesMemberships();
     projectionIsPackageDrivenAndPreservesInitialState();
+    canonicalPerKindRulesDriveEndpointUi();
     ambiguousRequiredChoicesGateAcceptance();
     uniqueRequiredChoicesAreSelectedWithoutHardcodedTypeKnowledge();
     userDecisionDetectionSkipsOnlyFullyAutomaticAssignments();

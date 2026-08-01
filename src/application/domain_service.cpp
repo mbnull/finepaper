@@ -37,7 +37,7 @@ void mergeValues(QJsonObject& target, const QJsonObject& source) {
 }
 
 bool domainTypeAppliesTo(const DomainTypeDefinition& type, ElementKind kind) {
-    return type.appliesTo.contains(kind);
+    return type.assignmentRule(kind).has_value();
 }
 
 QString elementReferenceKey(const ElementRef& element) {
@@ -110,13 +110,28 @@ void completeRequiredAssignments(
     const QString& path,
     QVector<Diagnostic>& diagnostics) {
     for (const DomainTypeDefinition& type : package.domainTypes) {
-        if (!type.required || !domainTypeAppliesTo(type, elementKind)
-            || !assignments.value(type.id).isEmpty()) {
+        const std::optional<DomainAssignmentRule> rule =
+            type.assignmentRule(elementKind);
+        if (!rule || !rule->requiresAssignment()) {
             continue;
         }
+
+        QStringList assigned = assignments.value(type.id);
+        if (assigned.size() >= rule->minimumAssignments) {
+            continue;
+        }
+
         const QStringList available = domainIdsForType(design, type.id);
-        if (available.size() == 1) {
-            assignments.insert(type.id, available);
+        QStringList candidates;
+        for (const QString& domainId : available) {
+            if (!assigned.contains(domainId)) {
+                candidates.append(domainId);
+            }
+        }
+        const qsizetype missing = rule->minimumAssignments - assigned.size();
+        if (candidates.size() == missing) {
+            assigned.append(candidates);
+            assignments.insert(type.id, std::move(assigned));
             continue;
         }
         assignments.remove(type.id);
@@ -419,7 +434,10 @@ MutationResult materializeRequiredDomains(
     const auto materializeMembership = [&](const ElementRef& element) {
         QHash<QString, QStringList> assignments;
         for (const DomainTypeDefinition& type : package.domainTypes) {
-            if (type.required && domainTypeAppliesTo(type, element.kind)) {
+            const std::optional<DomainAssignmentRule> rule =
+                type.assignmentRule(element.kind);
+            if (rule && rule->requiresAssignment()
+                && defaultDomainIds.contains(type.id)) {
                 assignments.insert(
                     type.id, QStringList{defaultDomainIds.value(type.id)});
             }
@@ -1092,7 +1110,9 @@ QVector<Diagnostic> validateAgainstPackage(
                                  QStringLiteral("package"));
                 continue;
             }
-            if (!domainTypeAppliesTo(*type, membership.element.kind)) {
+            const std::optional<DomainAssignmentRule> rule =
+                type->assignmentRule(membership.element.kind);
+            if (!rule) {
                 appendDiagnostic(diagnostics,
                                  QStringLiteral("error"),
                                  QStringLiteral("domain_assignment.not_applicable"),
@@ -1100,14 +1120,19 @@ QVector<Diagnostic> validateAgainstPackage(
                                      .arg(type->id),
                                  assignmentPath,
                                  QStringLiteral("package"));
-            }
-            if (type->cardinality == DomainCardinality::Single
-                && assignment.value().size() > 1) {
+            } else if (rule->maximumAssignments
+                       && assignment.value().size()
+                           > *rule->maximumAssignments) {
+                const QString message = *rule->maximumAssignments == 1
+                    ? QStringLiteral("Domain type %1 allows only one assignment")
+                          .arg(type->id)
+                    : QStringLiteral("Domain type %1 allows at most %2 assignments")
+                          .arg(type->id)
+                          .arg(*rule->maximumAssignments);
                 appendDiagnostic(diagnostics,
                                  QStringLiteral("error"),
                                  QStringLiteral("domain_assignment.cardinality"),
-                                 QStringLiteral("Domain type %1 allows only one assignment")
-                                     .arg(type->id),
+                                 message,
                                  assignmentPath,
                                  QStringLiteral("package"));
             }
@@ -1119,16 +1144,26 @@ QVector<Diagnostic> validateAgainstPackage(
         const DomainMembership* membership = membershipsByElement.value(
             elementReferenceKey(element), nullptr);
         for (const DomainTypeDefinition& type : package.domainTypes) {
-            if (!type.required || !domainTypeAppliesTo(type, element.kind)) {
+            const std::optional<DomainAssignmentRule> rule =
+                type.assignmentRule(element.kind);
+            if (!rule || !rule->requiresAssignment()) {
                 continue;
             }
-            if (!membership || membership->assignments.value(type.id).isEmpty()) {
+            const qsizetype assignmentCount = membership
+                ? membership->assignments.value(type.id).size() : 0;
+            if (assignmentCount < rule->minimumAssignments) {
+                const QString message = rule->minimumAssignments == 1
+                    ? QStringLiteral("Element %1 requires a %2 Domain assignment")
+                          .arg(element.id, type.id)
+                    : QStringLiteral("Element %1 requires at least %2 %3 Domain assignments")
+                          .arg(element.id)
+                          .arg(rule->minimumAssignments)
+                          .arg(type.id);
                 appendDiagnostic(
                     diagnostics,
                     QStringLiteral("error"),
                     QStringLiteral("domain_assignment.required"),
-                    QStringLiteral("Element %1 requires a %2 Domain assignment")
-                        .arg(element.id, type.id),
+                    message,
                     path + QStringLiteral("/assignments/") + type.id,
                     QStringLiteral("package"));
             }

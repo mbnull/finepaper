@@ -66,6 +66,10 @@ PackageDefinition packageDefinition() {
     clock.appliesTo = {ElementKind::Router, ElementKind::Endpoint};
     clock.cardinality = DomainCardinality::Single;
     clock.required = true;
+    clock.assignmentRules = {
+        DomainAssignmentRule{ElementKind::Router, 1, qsizetype{1}},
+        DomainAssignmentRule{ElementKind::Endpoint, 1, qsizetype{1}}
+    };
 
     DomainTypeDefinition power;
     power.id = QStringLiteral("power");
@@ -73,18 +77,29 @@ PackageDefinition packageDefinition() {
     power.appliesTo = {ElementKind::Router};
     power.cardinality = DomainCardinality::Single;
     power.required = true;
+    power.assignmentRules = {
+        DomainAssignmentRule{ElementKind::Router, 1, qsizetype{1}}
+    };
 
     DomainTypeDefinition tags;
     tags.id = QStringLiteral("tag");
     tags.label = QStringLiteral("Router tags");
     tags.appliesTo = {ElementKind::Router};
     tags.cardinality = DomainCardinality::Multiple;
+    tags.assignmentRules = {
+        DomainAssignmentRule{ElementKind::Router, 0, std::nullopt}
+    };
 
     DomainTypeDefinition endpointSecurity;
     endpointSecurity.id = QStringLiteral("endpoint-security");
-    endpointSecurity.appliesTo = {ElementKind::Endpoint};
+    endpointSecurity.appliesTo = {
+        ElementKind::Router, ElementKind::Endpoint
+    };
     endpointSecurity.cardinality = DomainCardinality::Single;
     endpointSecurity.required = true;
+    endpointSecurity.assignmentRules = {
+        DomainAssignmentRule{ElementKind::Endpoint, 1, qsizetype{1}}
+    };
 
     PackageDefinition package;
     package.formatVersion = 2;
@@ -222,27 +237,81 @@ int main(int argc, char** argv) {
         grow, QStringLiteral("power"));
     const MeshResizeDomainAssignmentPlan* tag = assignmentPlan(
         grow, QStringLiteral("tag"));
-    check(clock && clock->required
-              && clock->cardinality == DomainCardinality::Single
+    check(clock
+              && clock->assignmentRule.elementKind == ElementKind::Router
+              && clock->assignmentRule.minimumAssignments == 1
+              && clock->assignmentRule.maximumAssignments == 1
               && clock->availableDomainIds
                   == QStringList{QStringLiteral("clock-a"),
                                  QStringLiteral("clock-b")}
               && clock->automaticAssignment.isEmpty()
               && clock->requiresExplicitChoice(),
           QStringLiteral("multiple required instances remain an explicit choice"));
-    check(power && power->required
+    check(power && power->assignmentRule.requiresAssignment()
               && power->automaticAssignment
                   == QStringList{QStringLiteral("power-main")}
               && !power->requiresExplicitChoice(),
           QStringLiteral("a unique required instance is the only automatic assignment"));
-    check(tag && !tag->required
-              && tag->cardinality == DomainCardinality::Multiple
+    check(tag && tag->assignmentRule.minimumAssignments == 0
+              && !tag->assignmentRule.maximumAssignments
               && tag->automaticAssignment.isEmpty(),
           QStringLiteral("optional Router Domains remain optional even when choices exist"));
     check(!assignmentPlan(grow, QStringLiteral("endpoint-security"))
               && grow.requiresExplicitAssignments()
               && !grow.canApplyWithoutAssignments(),
           QStringLiteral("Router planning excludes Endpoint-only types and reports missing choices"));
+
+    PackageDefinition minimumRulePackage = package;
+    auto minimumTag = std::find_if(
+        minimumRulePackage.domainTypes.begin(),
+        minimumRulePackage.domainTypes.end(),
+        [](const DomainTypeDefinition& type) {
+            return type.id == QStringLiteral("tag");
+        });
+    minimumTag->assignmentRules = {
+        DomainAssignmentRule{ElementKind::Router, 2, std::nullopt}
+    };
+    const MeshResizePlan minimumRulePlan = buildMeshResizePlan(
+        design, minimumRulePackage, 2, 3);
+    const MeshResizeDomainAssignmentPlan* minimumTagPlan = assignmentPlan(
+        minimumRulePlan, QStringLiteral("tag"));
+    const MeshResizeAssignmentResolution minimumRuleResolution =
+        resolveMeshResizeAssignments(
+            minimumRulePlan, explicitClockChoices(minimumRulePlan));
+    const DomainMembership* minimumRuleRouter = membershipFor(
+        minimumRuleResolution, QStringLiteral("r-0-1"));
+    check(minimumTagPlan
+              && minimumTagPlan->assignmentRule.minimumAssignments == 2
+              && minimumTagPlan->automaticAssignment
+                  == QStringList{QStringLiteral("tag-a"),
+                                 QStringLiteral("tag-b")}
+              && !minimumTagPlan->requiresExplicitChoice()
+              && minimumRuleResolution.success()
+              && minimumRuleRouter
+              && minimumRuleRouter->assignments.value(QStringLiteral("tag"))
+                  == minimumTagPlan->automaticAssignment,
+          QStringLiteral("canonical minimum assignments drive Mesh auto-completion independently of legacy required"));
+
+    PackageDefinition maximumRulePackage = package;
+    auto maximumTag = std::find_if(
+        maximumRulePackage.domainTypes.begin(),
+        maximumRulePackage.domainTypes.end(),
+        [](const DomainTypeDefinition& type) {
+            return type.id == QStringLiteral("tag");
+        });
+    maximumTag->assignmentRules = {
+        DomainAssignmentRule{ElementKind::Router, 0, qsizetype{1}}
+    };
+    const MeshResizePlan maximumRulePlan = buildMeshResizePlan(
+        design, maximumRulePackage, 2, 3);
+    const MeshResizeAssignmentResolution maximumRuleResolution =
+        resolveMeshResizeAssignments(
+            maximumRulePlan, explicitClockChoices(maximumRulePlan));
+    check(!maximumRuleResolution.success()
+              && hasDiagnosticCode(
+                  maximumRuleResolution.diagnostics,
+                  QStringLiteral("domain_assignment.cardinality")),
+          QStringLiteral("canonical maximum assignments retain the V2 cardinality diagnostic code"));
 
     const MeshResizeAssignmentResolution missing =
         resolveMeshResizeAssignments(grow);

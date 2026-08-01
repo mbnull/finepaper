@@ -26,6 +26,8 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QFont>
+#include <QFontMetrics>
 #include <QGraphicsView>
 #include <QGraphicsPathItem>
 #include <QGuiApplication>
@@ -3890,11 +3892,17 @@ int main(int argc, char** argv) {
 
     finepaper::NocDesign largePortDesign;
     largePortDesign.id = QStringLiteral("large-port-projection");
-    largePortDesign.topology = {QStringLiteral("mesh"), 1, 1};
+    largePortDesign.topology = {QStringLiteral("mesh"), 1, 2};
     finepaper::AttachmentDefinition largePortAttachment;
     largePortAttachment.maxPerRouter =
         finepaper::kMaximumEndpointAttachmentsPerRouter;
     largePortAttachment.slotMode = finepaper::AttachmentSlotMode::Automatic;
+    const QFont normalApplicationFont = QApplication::font();
+    QFont largeApplicationFont = normalApplicationFont;
+    const qreal normalPointSize = normalApplicationFont.pointSizeF() > 0.0
+        ? normalApplicationFont.pointSizeF() : 12.0;
+    largeApplicationFont.setPointSizeF((std::max)(
+        18.0, normalPointSize + 6.0));
     finepaper::NocNodeEditor largePortEditor;
     largePortEditor.beginDocumentSession(
         QStringLiteral("large-port-projection-session"));
@@ -3902,7 +3910,6 @@ int main(int argc, char** argv) {
         &largePortDesign,
         finepaper::attachment::policyFromPackage(largePortAttachment));
     largePortEditor.show();
-    largePortEditor.setRouterCollapsed(QStringLiteral("r-0-0"), false);
     application.processEvents();
     auto* largePortView = largePortEditor.findChild<QGraphicsView*>();
     auto* largePortScene = largePortView
@@ -3910,22 +3917,74 @@ int main(int argc, char** argv) {
         : nullptr;
     const auto largePortRouter = nodeIdWithCaption(
         largePortScene, QStringLiteral("r-0-0"));
-    const QSize largeRouterSize = largePortScene && largePortRouter
-        ? largePortScene->nodeGeometry().size(*largePortRouter) : QSize{};
-    const unsigned int logicalInputPortCount =
+    const auto largePortNeighbor = nodeIdWithCaption(
+        largePortScene, QStringLiteral("r-1-0"));
+    const QSize normalCollapsedRouterSize =
         largePortScene && largePortRouter
-        ? largePortScene->graphModel().nodeData<unsigned int>(
-              *largePortRouter, QtNodes::NodeRole::InPortCount)
-        : 0U;
-    const QPointF firstOverflowPosition = largePortScene && largePortRouter
-        ? largePortScene->nodeGeometry().portPosition(
+        ? largePortScene->nodeGeometry().size(*largePortRouter) : QSize{};
+    const QtNodes::ConnectionId largePortRouterLink =
+        largePortRouter && largePortNeighbor
+        ? QtNodes::ConnectionId{
               *largePortRouter,
+              finepaper::portIndex(finepaper::RouterOutputPort::East),
+              *largePortNeighbor,
+              finepaper::portIndex(finepaper::RouterInputPort::West)}
+        : QtNodes::ConnectionId{};
+    auto* largePortLinkGraphics = largePortScene
+        ? largePortScene->connectionGraphicsObject(largePortRouterLink)
+        : nullptr;
+    const QPointF normalFontLinkOutput = largePortLinkGraphics
+        ? largePortLinkGraphics->out() : QPointF{};
+    QApplication::setFont(largeApplicationFont);
+    application.processEvents();
+    const QSize largeCollapsedRouterSize = largePortScene && largePortRouter
+        ? largePortScene->nodeGeometry().size(*largePortRouter) : QSize{};
+    const QFont largeCaptionFont = finepaper::nocEditorFont(
+        finepaper::NocEditorFontRole::Caption, QApplication::font());
+    const int collapsedLabelMinimumWidth = QFontMetrics(largeCaptionFont)
+        .horizontalAdvance(
+            QStringLiteral("%1 endpoint ports")
+                .arg(finepaper::kMaximumEndpointAttachmentsPerRouter))
+        + 28;
+    check(largePortRouter
+              && largeCollapsedRouterSize.width()
+                  >= collapsedLabelMinimumWidth
+              && largeCollapsedRouterSize.width()
+                  > normalCollapsedRouterSize.width(),
+          QStringLiteral(
+              "a live collapsed Router grows to retain its textual Endpoint-port summary after a font change"));
+    const QPointF largeFontLinkOutput = largePortLinkGraphics
+        ? largePortLinkGraphics->out() : QPointF{};
+    check(largePortLinkGraphics
+              && qAbs(largeFontLinkOutput.x() - normalFontLinkOutput.x())
+                  > 0.1,
+          QStringLiteral(
+              "runtime font changes refresh existing Router-Link endpoints without rebuilding the graph"));
+    QApplication::setFont(normalApplicationFont);
+    application.processEvents();
+    largePortEditor.setRouterCollapsed(QStringLiteral("r-0-0"), false);
+    application.processEvents();
+    const auto expandedLargePortRouter = nodeIdWithCaption(
+        largePortScene, QStringLiteral("r-0-0"));
+    const QSize largeRouterSize = largePortScene && expandedLargePortRouter
+        ? largePortScene->nodeGeometry().size(*expandedLargePortRouter)
+        : QSize{};
+    const unsigned int logicalInputPortCount =
+        largePortScene && expandedLargePortRouter
+        ? largePortScene->graphModel().nodeData<unsigned int>(
+              *expandedLargePortRouter, QtNodes::NodeRole::InPortCount)
+        : 0U;
+    const QPointF firstOverflowPosition =
+        largePortScene && expandedLargePortRouter
+        ? largePortScene->nodeGeometry().portPosition(
+              *expandedLargePortRouter,
               QtNodes::PortType::In,
               finepaper::portIndex(finepaper::RouterInputPort::Endpoint) + 7U)
         : QPointF{};
-    const QPointF lastLogicalPortPosition = largePortScene && largePortRouter
+    const QPointF lastLogicalPortPosition =
+        largePortScene && expandedLargePortRouter
         ? largePortScene->nodeGeometry().portPosition(
-              *largePortRouter,
+              *expandedLargePortRouter,
               QtNodes::PortType::In,
               finepaper::portIndex(finepaper::RouterInputPort::Endpoint)
                   + static_cast<unsigned int>(
@@ -3935,21 +3994,30 @@ int main(int argc, char** argv) {
         largePortEditor.endpointAttachmentAvailability(
             finepaper::RouterPosition{0, 0});
     const QPixmap largePortRendering = largePortEditor.grab();
-    check(largePortRouter
+    check(expandedLargePortRouter
               && logicalInputPortCount
                   == static_cast<unsigned int>(
                          finepaper::kMaximumEndpointAttachmentsPerRouter)
                       + finepaper::portIndex(
-                          finepaper::RouterInputPort::Endpoint)
-              && largeRouterSize.width() <= 400
-              && largeRouterSize.height() <= 400
-              && QLineF(firstOverflowPosition, lastLogicalPortPosition).length()
-                  < 0.1
-              && largePortAvailability.kind
-                  != finepaper::attachment::SlotResolutionKind::Rejected
-              && !largePortRendering.isNull(),
+                          finepaper::RouterInputPort::Endpoint),
           QStringLiteral(
-              "large legal attachment policies retain all logical slots while bounding Router geometry and aggregating overflow ports"));
+              "large legal attachment policies retain all logical Router ports"));
+    check(largeRouterSize.width() <= 400
+              && largeRouterSize.height() <= 400,
+          QStringLiteral(
+              "large legal attachment policies keep expanded Router geometry bounded"));
+    check(qAbs(firstOverflowPosition.x() - lastLogicalPortPosition.x()) < 0.1
+              && qAbs(firstOverflowPosition.y()
+                      - lastLogicalPortPosition.y()) < 0.1,
+          QStringLiteral(
+              "large legal attachment policies aggregate overflow ports at one target"));
+    check(largePortAvailability.kind
+              != finepaper::attachment::SlotResolutionKind::Rejected,
+          QStringLiteral(
+              "large legal attachment policies retain an available logical slot"));
+    check(!largePortRendering.isNull(),
+          QStringLiteral(
+              "large legal attachment policies remain renderable"));
     largePortEditor.close();
 
     finepaper::NocDesign readOnlyRaceDesign;
@@ -4650,6 +4718,9 @@ int main(int argc, char** argv) {
               && domainSelector->itemText(0) == QStringLiteral("None")
               && domainSelector->itemData(0).toString().isEmpty()
               && domainSelector->findData(QStringLiteral("security-zone")) > 0
+              && domainSelector->itemText(domainSelector->findData(
+                     QStringLiteral("security-zone")))
+                  == QStringLiteral("Security zones (security-zone)")
               && domainSelector->findData(QStringLiteral("fabric-tier")) > 0,
           QStringLiteral("Color by lists Package labels backed by arbitrary stable Domain type ids"));
 
@@ -4818,6 +4889,33 @@ int main(int argc, char** argv) {
                   == QStringLiteral("security-zone")
               && domainEditor->domainPresentation().legend.size() == 2,
           QStringLiteral("the selected generic Domain type produces a presentation snapshot"));
+    check(domainView
+              && domainView->accessibleDescription().contains(
+                  QStringLiteral("Trusted (zone-a)"))
+              && domainView->accessibleDescription().contains(
+                  QStringLiteral(
+                      "Dashed connections indicate Domain crossings"))
+              && domainView->accessibleDescription().contains(
+                  QStringLiteral(
+                      "A diamond marker indicates an edge override")),
+          QStringLiteral(
+              "the canvas explains stable Domain identities and non-text connection markers in accessible text"));
+    auto* domainSelectionInspectorGroup = domainWindow.findChild<QGroupBox*>(
+        finepaper::workbench::selectionInspectorName);
+    auto* domainSelectionInspector = domainSelectionInspectorGroup
+        ? domainSelectionInspectorGroup->findChild<QLabel*>() : nullptr;
+    check(domainSelectionInspector
+              && domainSelectionInspector->text().contains(
+                  QStringLiteral("Active Domain layer"))
+              && domainSelectionInspector->text().contains(
+                  QStringLiteral("Security zones (security-zone)"))
+              && domainSelectionInspector->text().contains(
+                  QStringLiteral(
+                      "Router assignments: minimum 0, maximum unbounded."))
+              && domainSelectionInspector->text().contains(
+                  QStringLiteral("Trusted (zone-a)")),
+          QStringLiteral(
+              "Router Inspector states the active Domain id, per-kind bounds, and full assignment in text"));
     check(domainScene && domainRouter && domainRouterGraphics
               && domainScene->nodeGraphicsObject(*domainRouter)
                   == domainRouterGraphics
@@ -4852,17 +4950,13 @@ int main(int argc, char** argv) {
         domainLinkGraphics->setSelected(true);
         application.processEvents();
     }
-    auto* domainSelectionInspectorGroup = domainWindow.findChild<QGroupBox*>(
-        finepaper::workbench::selectionInspectorName);
-    auto* domainSelectionInspector = domainSelectionInspectorGroup
-        ? domainSelectionInspectorGroup->findChild<QLabel*>() : nullptr;
     check(domainSelectionInspector
               && domainSelectionInspector->text().contains(
                   QStringLiteral("Color-by Domain crossing"))
               && domainSelectionInspector->text().contains(
-                  QStringLiteral("From set: { zone-a }"))
+                  QStringLiteral("From set: Trusted (zone-a)"))
               && domainSelectionInspector->text().contains(
-                  QStringLiteral("To set: { zone-b }"))
+                  QStringLiteral("To set: Restricted (zone-b)"))
               && domainSelectionInspector->text().contains(
                   QStringLiteral("zone-transition"))
               && domainSelectionInspector->text().contains(

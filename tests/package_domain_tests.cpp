@@ -1905,6 +1905,19 @@ int main(int argc, char** argv) {
             check(clock->appliesTo.contains(ElementKind::Router)
                       && clock->appliesTo.contains(ElementKind::Endpoint),
                   QStringLiteral("Domain element applicability is parsed"));
+            const std::optional<DomainAssignmentRule> routerRule =
+                clock->assignmentRule(ElementKind::Router);
+            const std::optional<DomainAssignmentRule> endpointRule =
+                clock->assignmentRule(ElementKind::Endpoint);
+            check(routerRule && routerRule->isValid()
+                      && routerRule->minimumAssignments == 1
+                      && !routerRule->maximumAssignments
+                      && endpointRule && endpointRule->isValid()
+                      && endpointRule->minimumAssignments == 1
+                      && !endpointRule->maximumAssignments
+                      && !clock->assignmentRule(ElementKind::RouterLink),
+                  QStringLiteral(
+                      "legacy required/multiple membership fields normalize to per-kind rules"));
 
             const auto reference = std::find_if(
                 clock->properties.cbegin(),
@@ -1945,7 +1958,60 @@ int main(int argc, char** argv) {
                           == QJsonArray{QStringLiteral("pd-main")},
                   QStringLiteral("explicit required-Domain scaffolds are parsed and resolved"));
         }
+
+        const DomainTypeDefinition* power = completeResult.package->domainType(
+            QStringLiteral("power"));
+        const std::optional<DomainAssignmentRule> powerRouterRule = power
+            ? power->assignmentRule(ElementKind::Router)
+            : std::nullopt;
+        check(powerRouterRule && powerRouterRule->isValid()
+                  && powerRouterRule->minimumAssignments == 1
+                  && powerRouterRule->maximumAssignments == 1
+                  && powerRouterRule->acceptsCount(1)
+                  && !powerRouterRule->acceptsCount(0)
+                  && !powerRouterRule->acceptsCount(2),
+              QStringLiteral(
+                  "legacy required/single membership fields normalize to an exact-one rule"));
     }
+
+    DomainTypeDefinition explicitRules;
+    explicitRules.appliesTo = {ElementKind::Router, ElementKind::Endpoint};
+    explicitRules.cardinality = DomainCardinality::Single;
+    explicitRules.required = true;
+    explicitRules.assignmentRules = {
+        DomainAssignmentRule{ElementKind::Endpoint, 0, qsizetype{2}}
+    };
+    check(!explicitRules.assignmentRule(ElementKind::Router)
+              && explicitRules.assignmentRule(ElementKind::Endpoint)
+                  == std::optional<DomainAssignmentRule>{
+                      DomainAssignmentRule{
+                          ElementKind::Endpoint, 0, qsizetype{2}}},
+          QStringLiteral(
+              "explicit canonical rules are authoritative over legacy compatibility fields"));
+
+    QJsonObject prematureAssignmentRulesManifest = completeManifest;
+    QJsonArray prematureAssignmentRuleTypes =
+        prematureAssignmentRulesManifest.value(
+            QStringLiteral("domainTypes")).toArray();
+    QJsonObject prematureAssignmentRuleType =
+        prematureAssignmentRuleTypes[0].toObject();
+    prematureAssignmentRuleType.insert(
+        QStringLiteral("assignmentRules"),
+        QJsonObject{
+            {QStringLiteral("router"),
+             QJsonObject{
+                 {QStringLiteral("minimum"), 1},
+                 {QStringLiteral("maximum"), 1}
+             }}
+        });
+    prematureAssignmentRuleTypes[0] = prematureAssignmentRuleType;
+    prematureAssignmentRulesManifest.insert(
+        QStringLiteral("domainTypes"), prematureAssignmentRuleTypes);
+    expectFailure(
+        fixture.path(),
+        prematureAssignmentRulesManifest,
+        QStringLiteral("package.assignment_rules_require_v4"),
+        QStringLiteral("a V2/V3 Package attempting to declare future assignment rules"));
 
     QJsonObject partialScaffoldManifest = completeManifest;
     QJsonArray partialScaffoldTypes = partialScaffoldManifest.value(

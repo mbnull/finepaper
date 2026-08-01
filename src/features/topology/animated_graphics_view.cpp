@@ -262,7 +262,7 @@ void AnimatedGraphicsView::drawDomainLegend(QPainter* painter) const {
     }
 
     const bool compact = viewportRectangle.width() < 720;
-    const qsizetype maximumVisibleEntries = compact ? 1 : 6;
+    const qsizetype preferredVisibleEntries = compact ? 1 : 6;
     constexpr qreal panelMargin = 16.0;
     constexpr qreal horizontalPadding = 14.0;
     constexpr qreal verticalPadding = 12.0;
@@ -276,13 +276,46 @@ void AnimatedGraphicsView::drawDomainLegend(QPainter* painter) const {
     const QFontMetrics titleMetrics(titleFont);
     const QFontMetrics entryMetrics(entryFont);
     const QString title = QStringLiteral("Domain · %1").arg(m_domainLayerLabel);
+    const QString crossingHint = QStringLiteral(
+        "Dashed line: Domain crossing");
+    const QString overrideHint = QStringLiteral(
+        "Diamond: Edge override");
 
-    const qsizetype visibleEntryCount = (std::min)(
-        maximumVisibleEntries, m_domainLegendEntries.size());
-    const auto entryText = [this, compact](qsizetype index) {
+    const qreal rowHeight = std::max<qreal>(
+        22.0, entryMetrics.height() + 5.0);
+    const qreal fixedPanelHeight = verticalPadding * 2.0
+        + titleMetrics.height() + 8.0 + 2.0 * rowHeight;
+    const qreal availablePanelHeight = viewportRectangle.height()
+        - panelMargin * 2.0;
+    if (fixedPanelHeight + rowHeight > availablePanelHeight) {
+        return;
+    }
+    const qreal availableContentHeight = (std::max)(
+        0.0,
+        availablePanelHeight - fixedPanelHeight);
+    const qsizetype maximumContentRows = (std::max)(
+        qsizetype{1},
+        static_cast<qsizetype>(
+            qFloor(availableContentHeight / rowHeight)));
+    qsizetype visibleEntryCount = (std::min)(
+        preferredVisibleEntries,
+        (std::min)(m_domainLegendEntries.size(), maximumContentRows));
+    bool hasOverflow = m_domainLegendEntries.size() > visibleEntryCount;
+    if (hasOverflow && !compact && maximumContentRows > 1
+        && visibleEntryCount >= maximumContentRows) {
+        --visibleEntryCount;
+    }
+    hasOverflow = m_domainLegendEntries.size() > visibleEntryCount;
+    const bool showsOverflowFooter = hasOverflow && !compact
+        && maximumContentRows > visibleEntryCount;
+    const bool summarizesHiddenEntries = hasOverflow
+        && !showsOverflowFooter;
+    const auto entryText = [this, compact, summarizesHiddenEntries](
+                               qsizetype index) {
         const CanvasDomainLegendEntry& entry = m_domainLegendEntries.at(index);
         const QString label = entry.label.isEmpty() ? entry.id : entry.label;
-        if (!compact || m_domainLegendEntries.size() <= 1) {
+        if ((!compact && !summarizesHiddenEntries)
+            || m_domainLegendEntries.size() <= 1) {
             return label;
         }
         return topology_text::compactDomainLegendEntryText(
@@ -303,16 +336,19 @@ void AnimatedGraphicsView::drawDomainLegend(QPainter* painter) const {
     if (visibleEntryCount == 0) {
         contentWidth = std::max<qreal>(
             contentWidth, entryMetrics.horizontalAdvance(emptyText));
-    } else if (!compact
-               && m_domainLegendEntries.size() > visibleEntryCount) {
-        const QString moreText = QStringLiteral("+ %1 more").arg(
+    } else if (showsOverflowFooter) {
+        const QString moreText = QStringLiteral("More Domains: %1").arg(
             m_domainLegendEntries.size() - visibleEntryCount);
         contentWidth = std::max<qreal>(
             contentWidth, entryMetrics.horizontalAdvance(moreText));
     }
+    contentWidth = std::max<qreal>(
+        contentWidth, entryMetrics.horizontalAdvance(crossingHint));
+    contentWidth = std::max<qreal>(
+        contentWidth, entryMetrics.horizontalAdvance(overrideHint));
 
     const qreal maximumPanelWidth = compact
-        ? viewportRectangle.width() * 0.40
+        ? viewportRectangle.width() * 0.52
         : std::min<qreal>(
               300.0, viewportRectangle.width() - panelMargin * 2.0);
     const qreal minimumPanelWidth = std::min<qreal>(
@@ -321,14 +357,11 @@ void AnimatedGraphicsView::drawDomainLegend(QPainter* painter) const {
         contentWidth + horizontalPadding * 2.0,
         minimumPanelWidth,
         maximumPanelWidth);
-    const qreal rowHeight = std::max<qreal>(22.0, entryMetrics.height() + 5.0);
-    const bool hasOverflow = m_domainLegendEntries.size() > visibleEntryCount;
-    const bool showsOverflowFooter = hasOverflow && !compact;
     const qsizetype contentRows = visibleEntryCount == 0
         ? 1 : visibleEntryCount + (showsOverflowFooter ? 1 : 0);
     const qreal panelHeight = verticalPadding * 2.0
         + titleMetrics.height() + 8.0
-        + static_cast<qreal>(contentRows) * rowHeight;
+        + static_cast<qreal>(contentRows + 2) * rowHeight;
     const QRectF panel(
         viewportRectangle.right() - panelMargin - panelWidth,
         viewportRectangle.top() + panelMargin,
@@ -396,13 +429,27 @@ void AnimatedGraphicsView::drawDomainLegend(QPainter* painter) const {
                             rowHeight);
         const QString footerText = visibleEntryCount == 0
             ? emptyText
-            : QStringLiteral("+ %1 more").arg(
+            : QStringLiteral("More Domains: %1").arg(
                   m_domainLegendEntries.size() - visibleEntryCount);
         painter->setPen(visual.mutedText);
         painter->drawText(
             footer, Qt::AlignLeft | Qt::AlignVCenter,
             entryMetrics.elidedText(
                 footerText, Qt::ElideRight, qRound(footer.width())));
+        rowTop += rowHeight;
+    }
+
+    for (const QString& hint : {crossingHint, overrideHint}) {
+        const QRectF hintRow(panel.left() + horizontalPadding,
+                             rowTop,
+                             panel.width() - horizontalPadding * 2.0,
+                             rowHeight);
+        painter->setPen(visual.mutedText);
+        painter->drawText(
+            hintRow, Qt::AlignLeft | Qt::AlignVCenter,
+            entryMetrics.elidedText(
+                hint, Qt::ElideRight, qRound(hintRow.width())));
+        rowTop += rowHeight;
     }
     painter->restore();
 }

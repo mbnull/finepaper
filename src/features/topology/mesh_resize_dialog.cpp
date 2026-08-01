@@ -1,5 +1,6 @@
 #include "features/topology/mesh_resize_dialog.h"
 
+#include "features/domain/presentation/domain_text.h"
 #include "features/topology/topology_text.h"
 
 #include <QAbstractItemView>
@@ -40,23 +41,65 @@ QString domainLabel(const MeshResizePlan& plan, const QString& id) {
     const auto found = std::find_if(
         plan.domains.cbegin(), plan.domains.cend(),
         [&](const MeshResizeDomainOption& domain) { return domain.id == id; });
-    if (found == plan.domains.cend() || found->name.trimmed().isEmpty()
-        || found->name == found->id) {
-        return id;
-    }
-    return found->name + QStringLiteral(" — ") + found->id;
+    return found == plan.domains.cend()
+        ? domain_text::domainInstanceDisplayText(id)
+        : domain_text::domainInstanceDisplayText(found->id, found->name);
 }
 
-QString cardinalityLabel(DomainCardinality cardinality) {
-    switch (cardinality) {
-    case DomainCardinality::Single:
-        return QStringLiteral("one");
-    case DomainCardinality::Multiple:
-        return QStringLiteral("one or more");
-    case DomainCardinality::Invalid:
-        break;
+bool hasFixedAutomaticAssignment(
+    const MeshResizeDomainAssignmentPlan& assignment) {
+    return assignment.assignmentRule.isValid()
+        && !assignment.automaticAssignment.isEmpty()
+        && assignment.automaticAssignment.size()
+            == assignment.availableDomainIds.size()
+        && assignment.assignmentRule.acceptsCount(
+            assignment.automaticAssignment.size());
+}
+
+QString automaticAssignmentText(
+    const MeshResizeDomainAssignmentPlan& assignment) {
+    if (assignment.automaticAssignment.size() == 1) {
+        return QStringLiteral(
+                   "The only available instance is assigned automatically "
+                   "because the Router minimum is %1.")
+            .arg(assignment.assignmentRule.minimumAssignments);
     }
-    return QStringLiteral("invalid cardinality");
+    return QStringLiteral(
+               "All %1 available instances are assigned automatically "
+               "because the Router minimum is %2.")
+        .arg(assignment.automaticAssignment.size())
+        .arg(assignment.assignmentRule.minimumAssignments);
+}
+
+QString unavailableAssignmentText(
+    const MeshResizeDomainAssignmentPlan& assignment) {
+    const qsizetype available = assignment.availableDomainIds.size();
+    const qsizetype minimum =
+        assignment.assignmentRule.minimumAssignments;
+    if (assignment.assignmentRule.isValid() && available < minimum) {
+        const qsizetype missing = minimum - available;
+        QString repair;
+        if (missing == 1) {
+            repair = available == 0
+                ? QStringLiteral("Create one in Domain Manager")
+                : QStringLiteral("Create one more in Domain Manager");
+        } else {
+            repair = QStringLiteral("Create %1 more in Domain Manager")
+                         .arg(missing);
+        }
+        const QString availability = available == 1
+            ? QStringLiteral("1 instance exists")
+            : QStringLiteral("%1 instances exist").arg(available);
+        return QStringLiteral(
+                   "%1, but this Router requires at least %2. %3 before "
+                   "resizing the Mesh.")
+            .arg(availability)
+            .arg(minimum)
+            .arg(repair);
+    }
+    return QStringLiteral(
+        "No instances currently exist. This is allowed because the Router "
+        "assignment minimum is 0.");
 }
 
 QString assignmentsText(const DomainMembership& membership) {
@@ -500,7 +543,9 @@ void MeshResizeDialog::rebuildPlan() {
 
     m_deltaSummary->setText(
         QStringLiteral(
-            "Mesh %1 × %2 → %3 × %4. Routers: +%5 / −%6; Router links: +%7 / −%8. "
+            "Mesh changes from %1 × %2 to %3 × %4. "
+            "Routers added: %5; removed: %6. "
+            "Router links added: %7; removed: %8. "
             "State removals: %9 membership(s), %10 Domain override(s), %11 element configuration(s).")
             .arg(m_design.topology.rows)
             .arg(m_design.topology.columns)
@@ -652,16 +697,9 @@ void MeshResizeDialog::rebuildAssignmentEditor() {
 
     for (const MeshResizeDomainAssignmentPlan& assignment
          : m_plan.routerAssignmentPlans) {
-        const QString requirement = assignment.required
-            ? QStringLiteral("required, %1")
-                  .arg(cardinalityLabel(assignment.cardinality))
-            : QStringLiteral("optional, %1")
-                  .arg(assignment.cardinality == DomainCardinality::Single
-                           ? QStringLiteral("at most one")
-                           : QStringLiteral("zero or more"));
         auto* group = new QGroupBox(
-            QStringLiteral("%1 (%2) — %3")
-                .arg(assignment.label, assignment.domainType, requirement),
+            domain_text::domainTypeDisplayText(
+                assignment.domainType, assignment.label),
             content);
         group->setObjectName(
             assignmentObjectName(routerId,
@@ -670,8 +708,25 @@ void MeshResizeDialog::rebuildAssignmentEditor() {
         group->setProperty("finepaper.routerId", routerId);
         group->setProperty("finepaper.domainType", assignment.domainType);
         auto* groupLayout = new QVBoxLayout(group);
+        auto* constraint = new QLabel(
+            domain_text::domainAssignmentConstraintText(
+                assignment.assignmentRule),
+            group);
+        constraint->setObjectName(
+            assignmentObjectName(routerId,
+                                 assignment.domainType,
+                                 QStringLiteral("constraint")));
+        constraint->setProperty("finepaper.routerId", routerId);
+        constraint->setProperty(
+            "finepaper.domainType", assignment.domainType);
+        constraint->setWordWrap(true);
+        constraint->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        groupLayout->addWidget(constraint);
 
-        if (assignment.cardinality == DomainCardinality::Single) {
+        const bool fixedAutomatic =
+            hasFixedAutomaticAssignment(assignment);
+
+        if (assignment.assignmentRule.isSingleAssignment()) {
             auto* combo = new QComboBox(group);
             combo->setObjectName(
                 assignmentObjectName(routerId,
@@ -679,12 +734,9 @@ void MeshResizeDialog::rebuildAssignmentEditor() {
                                      QStringLiteral("single")));
             combo->setProperty("finepaper.routerId", routerId);
             combo->setProperty("finepaper.domainType", assignment.domainType);
-            const bool fixedAutomatic = assignment.required
-                && assignment.availableDomainIds.size() == 1
-                && assignment.automaticAssignment.size() == 1;
             if (!fixedAutomatic) {
                 combo->addItem(
-                    assignment.required
+                    assignment.assignmentRule.requiresAssignment()
                         ? QStringLiteral("Choose a Domain…")
                         : QStringLiteral("Unassigned"),
                     QString());
@@ -702,9 +754,7 @@ void MeshResizeDialog::rebuildAssignmentEditor() {
             }
             combo->setEnabled(!fixedAutomatic);
             if (fixedAutomatic) {
-                combo->setToolTip(
-                    QStringLiteral(
-                        "The only available instance is assigned automatically because this Domain Type is required."));
+                combo->setToolTip(automaticAssignmentText(assignment));
             }
             groupLayout->addWidget(combo);
             connect(combo, &QComboBox::currentIndexChanged,
@@ -725,7 +775,7 @@ void MeshResizeDialog::rebuildAssignmentEditor() {
                         refreshRouterNavigator();
                         updateValidation();
                     });
-        } else if (assignment.cardinality == DomainCardinality::Multiple) {
+        } else if (assignment.assignmentRule.isValid()) {
             auto* list = new QListWidget(group);
             list->setObjectName(
                 assignmentObjectName(routerId,
@@ -740,9 +790,6 @@ void MeshResizeDialog::rebuildAssignmentEditor() {
                     .value(assignment.domainType);
             const QSet<QString> selected(selectedIds.cbegin(),
                                          selectedIds.cend());
-            const bool fixedAutomatic = assignment.required
-                && assignment.availableDomainIds.size() == 1
-                && assignment.automaticAssignment.size() == 1;
             for (const QString& id : assignment.availableDomainIds) {
                 auto* item = new QListWidgetItem(domainLabel(m_plan, id), list);
                 item->setData(Qt::UserRole, id);
@@ -751,9 +798,7 @@ void MeshResizeDialog::rebuildAssignmentEditor() {
                                                           : Qt::Unchecked);
                 if (fixedAutomatic) {
                     item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
-                    item->setToolTip(
-                        QStringLiteral(
-                            "The only available instance is assigned automatically because this Domain Type is required."));
+                    item->setToolTip(automaticAssignmentText(assignment));
                 }
             }
             groupLayout->addWidget(list);
@@ -785,19 +830,31 @@ void MeshResizeDialog::rebuildAssignmentEditor() {
         } else {
             auto* invalid = new QLabel(
                 QStringLiteral(
-                    "This Domain Type has an invalid Package cardinality and cannot be assigned."),
+                    "This Domain Type has an invalid Package assignment rule "
+                    "and cannot be assigned."),
                 group);
             invalid->setWordWrap(true);
             groupLayout->addWidget(invalid);
         }
 
-        if (assignment.availableDomainIds.isEmpty()) {
+        if (fixedAutomatic) {
+            auto* automatic = new QLabel(
+                automaticAssignmentText(assignment), group);
+            automatic->setObjectName(
+                assignmentObjectName(routerId,
+                                     assignment.domainType,
+                                     QStringLiteral("automatic")));
+            automatic->setWordWrap(true);
+            automatic->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            groupLayout->addWidget(automatic);
+        }
+
+        if (assignment.assignmentRule.isValid()
+            && (assignment.availableDomainIds.size()
+                    < assignment.assignmentRule.minimumAssignments
+                || assignment.availableDomainIds.isEmpty())) {
             auto* unavailable = new QLabel(
-                assignment.required
-                    ? QStringLiteral(
-                          "No instances exist for this required Domain Type. Create one in Domain Manager before resizing the Mesh.")
-                    : QStringLiteral(
-                          "No instances currently exist for this optional Domain Type."),
+                unavailableAssignmentText(assignment),
                 group);
             unavailable->setObjectName(
                 assignmentObjectName(routerId,
@@ -982,14 +1039,7 @@ bool MeshResizeDialog::routerAssignmentsComplete(
     for (const MeshResizeDomainAssignmentPlan& plan
          : m_plan.routerAssignmentPlans) {
         const QStringList ids = assignments.value(plan.domainType);
-        if (plan.cardinality != DomainCardinality::Single
-            && plan.cardinality != DomainCardinality::Multiple) {
-            return false;
-        }
-        if (plan.required && ids.isEmpty()) {
-            return false;
-        }
-        if (plan.cardinality == DomainCardinality::Single && ids.size() > 1) {
+        if (!plan.assignmentRule.acceptsCount(ids.size())) {
             return false;
         }
         for (const QString& id : ids) {

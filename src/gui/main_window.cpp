@@ -4,6 +4,7 @@
 #include "features/domain/domain_configuration_workspace.h"
 #include "features/design_extensions/design_extensions_workspace.h"
 #include "features/domain/domain_manager_panel.h"
+#include "features/domain/presentation/domain_text.h"
 #include "features/attachment/endpoint_attachment_rules.h"
 #include "gui/element_configuration_panel.h"
 #include "gui/endpoint_configuration_panel.h"
@@ -87,16 +88,26 @@ QString diagnosticText(const QVector<Diagnostic>& diagnostics) {
                            : lines.join(QLatin1Char('\n'));
 }
 
-QString domainSetHtml(const QStringList& domainIds) {
+QString domainSetHtml(const DomainPresentationSnapshot& snapshot,
+                      const QStringList& domainIds) {
     if (domainIds.isEmpty()) {
-        return QStringLiteral("∅");
+        return QStringLiteral("No Domains");
     }
-    QStringList escapedIds;
-    escapedIds.reserve(domainIds.size());
+    QStringList assignments;
+    assignments.reserve(domainIds.size());
     for (const QString& domainId : domainIds) {
-        escapedIds.append(domainId.toHtmlEscaped());
+        const auto entry = std::find_if(
+            snapshot.legend.cbegin(), snapshot.legend.cend(),
+            [&](const DomainLegendEntry& candidate) {
+                return candidate.id == domainId;
+            });
+        assignments.append(
+            domain_text::domainInstanceDisplayText(
+                domainId,
+                entry == snapshot.legend.cend() ? QString() : entry->name)
+                .toHtmlEscaped());
     }
-    return QStringLiteral("{ %1 }").arg(escapedIds.join(QStringLiteral(", ")));
+    return assignments.join(QStringLiteral(", "));
 }
 
 QString propertiesHtml(const QJsonObject& properties) {
@@ -114,20 +125,15 @@ QString domainCrossingInspectorHtml(
         return {};
     }
 
-    const QString label = snapshot.domainTypeLabel.trimmed().isEmpty()
-        ? snapshot.activeDomainType : snapshot.domainTypeLabel;
-    const QString layer = label == snapshot.activeDomainType
-        ? label.toHtmlEscaped()
-        : QStringLiteral("%1 (<code>%2</code>)")
-              .arg(label.toHtmlEscaped(),
-                   snapshot.activeDomainType.toHtmlEscaped());
+    const QString layer = domain_text::domainTypeDisplayText(
+        snapshot.activeDomainType, snapshot.domainTypeLabel).toHtmlEscaped();
 
     QStringList lines = {
         QStringLiteral("<b>Color-by Domain crossing — %1</b>").arg(layer),
         QStringLiteral("From set: %1").arg(
-            domainSetHtml(crossing->fromDomainIds)),
+            domainSetHtml(snapshot, crossing->fromDomainIds)),
         QStringLiteral("To set: %1").arg(
-            domainSetHtml(crossing->toDomainIds))
+            domainSetHtml(snapshot, crossing->toDomainIds))
     };
     if (crossing->defaultPolicy) {
         lines.append(
@@ -165,6 +171,41 @@ QString domainCrossingInspectorHtml(
             : QStringLiteral("Edge override: <i>none</i>"));
     }
     return QStringLiteral("<br><br>%1").arg(lines.join(QStringLiteral("<br>")));
+}
+
+QString domainElementInspectorHtml(
+    const DomainPresentationSnapshot& snapshot,
+    const PackageDefinition* package,
+    const NocDesign& design,
+    const ElementRef& element) {
+    const DomainElementPresentation* presentation = snapshot.element(element);
+    if (!presentation || snapshot.activeDomainType.isEmpty()) {
+        return {};
+    }
+
+    const DomainTypeDefinition* type = package
+        ? package->domainType(snapshot.activeDomainType) : nullptr;
+    const QString typeText = type
+        ? domain_text::domainTypeDisplayText(*type)
+        : domain_text::domainTypeDisplayText(
+              snapshot.activeDomainType, snapshot.domainTypeLabel);
+    const QString constraintText = type
+        ? domain_text::domainAssignmentConstraintText(*type, element.kind)
+        : QStringLiteral("Package assignment rule unavailable.");
+    const QString assignmentText = type
+        ? domain_text::domainAssignmentText(
+              *type, element.kind, design.domains, presentation->domainIds)
+        : domain_text::domainAssignmentListText(
+              design.domains,
+              snapshot.activeDomainType,
+              presentation->domainIds);
+
+    return QStringLiteral(
+        "<br><br><b>Active Domain layer</b><br>Type: %1<br>"
+        "Constraint: %2<br>Assignment: %3")
+        .arg(typeText.toHtmlEscaped(),
+             constraintText.toHtmlEscaped(),
+             assignmentText.toHtmlEscaped());
 }
 
 QString normalizedAbsolutePath(const QString& path) {
@@ -2440,7 +2481,7 @@ void FinepaperMainWindow::updateDomainLayerControls() {
         if (package) {
             for (const DomainTypeDefinition& type : package->domainTypes) {
                 m_domainLayerSelector->addItem(
-                    type.label.trimmed().isEmpty() ? type.id : type.label,
+                    domain_text::domainTypeDisplayText(type),
                     type.id);
             }
         }
@@ -3865,14 +3906,22 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
     const NocEditorSelection& item = selection.items.front();
     if (item.kind == NocEditorSelection::Kind::Router) {
         const std::optional<RouterPosition> position = m_selectedRouter;
-        m_selectionSummary->setText(
+        QString summary =
             QStringLiteral("<b>Router %1</b><br>Column x: %2<br>Row y: %3<br>"
                            "Router identity and every Router-to-Router Link are derived from "
                            "the fixed Mesh. Dragging changes only this local Workspace layout; "
                            "Router creation, deletion, and manual rewiring are not exposed.")
                 .arg(item.id.toHtmlEscaped(),
                      QString::number(position ? position->x : -1),
-                     QString::number(position ? position->y : -1)));
+                     QString::number(position ? position->y : -1));
+        if (m_nodeEditor && m_design) {
+            summary += domainElementInspectorHtml(
+                m_nodeEditor->domainPresentation(),
+                packageForDesign(),
+                *m_design,
+                ElementRef{ElementKind::Router, item.id});
+        }
+        m_selectionSummary->setText(summary);
         return;
     }
     const auto endpoint = m_design
@@ -3883,7 +3932,7 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
         : QVector<EndpointInstance>::const_iterator{};
     const bool endpointFound = m_design && endpoint != m_design->endpoints.cend();
     if (item.kind == NocEditorSelection::Kind::Endpoint && endpointFound) {
-        m_selectionSummary->setText(
+        QString summary =
             QStringLiteral("<b>Endpoint %1</b><br>Type: %2<br>Router: (%3, %4)<br>"
                            "Slot: %5<br>Moving the node changes only its Workspace position; "
                            "the attachment changes only through an explicit connection action.")
@@ -3893,7 +3942,15 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
                      QString::number(endpoint->attachment.router.y),
                      endpoint->attachment.slot
                          .value_or(QStringLiteral("automatic"))
-                         .toHtmlEscaped()));
+                         .toHtmlEscaped());
+        if (m_nodeEditor && m_design) {
+            summary += domainElementInspectorHtml(
+                m_nodeEditor->domainPresentation(),
+                packageForDesign(),
+                *m_design,
+                ElementRef{ElementKind::Endpoint, endpoint->id});
+        }
+        m_selectionSummary->setText(summary);
         return;
     }
     if (item.kind == NocEditorSelection::Kind::RouterLink && m_design) {

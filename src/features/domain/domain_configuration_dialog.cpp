@@ -2,6 +2,7 @@
 
 #include "application/domain_configuration_draft.h"
 #include "features/domain/domain_property_form.h"
+#include "features/domain/presentation/domain_text.h"
 
 #include <QAbstractItemView>
 #include <QComboBox>
@@ -38,15 +39,11 @@ QString compactObject(const QJsonObject& object) {
 }
 
 QString domainText(const DomainDefinition& domain) {
-    return domain.name.trimmed().isEmpty()
-        ? domain.id
-        : QStringLiteral("%1 — %2").arg(domain.name, domain.id);
+    return domain_text::domainInstanceDisplayText(domain);
 }
 
 QString typeText(const DomainTypeDefinition& type) {
-    return type.label.trimmed().isEmpty()
-        ? type.id
-        : QStringLiteral("%1 (%2)").arg(type.label, type.id);
+    return domain_text::domainTypeDisplayText(type);
 }
 
 QString relationText(const DomainRelationDefinition& relation) {
@@ -631,6 +628,10 @@ public:
         assignmentsTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
         assignmentsTable_->setSelectionMode(QAbstractItemView::NoSelection);
         assignmentsTable_->verticalHeader()->hide();
+        assignmentsTable_->verticalHeader()->setSectionResizeMode(
+            QHeaderView::ResizeToContents);
+        assignmentsTable_->horizontalHeader()->setSectionResizeMode(
+            0, QHeaderView::ResizeToContents);
         assignmentsTable_->horizontalHeader()->setStretchLastSection(true);
         root->addWidget(assignmentsTable_, 1);
 
@@ -713,8 +714,14 @@ private:
 
     void addDomainItems(QComboBox* combo,
                         const QString& type,
-                        const QStringList& stored) {
-        combo->addItem(QStringLiteral("Unassigned"), QString());
+                        const QStringList& stored,
+                        const DomainAssignmentRule& assignmentRule) {
+        combo->addItem(
+            assignmentRule.requiresAssignment()
+                ? QStringLiteral("Unassigned (below minimum %1)")
+                      .arg(assignmentRule.minimumAssignments)
+                : QStringLiteral("Unassigned"),
+            QString());
         for (const DomainDefinition& domain : domains_) {
             if (domain.type == type) {
                 combo->addItem(domainText(domain), domain.id);
@@ -761,17 +768,25 @@ private:
         QSet<QString> rendered;
 
         for (const DomainTypeDefinition& type : package_.domainTypes) {
-            if (!type.appliesTo.contains(element.kind)) {
+            const std::optional<DomainAssignmentRule> assignmentRule =
+                type.assignmentRule(element.kind);
+            if (!assignmentRule) {
                 continue;
             }
             rendered.insert(type.id);
             const int row = assignmentsTable_->rowCount();
             assignmentsTable_->insertRow(row);
-            assignmentsTable_->setItem(row, 0, new QTableWidgetItem(typeText(type)));
+            assignmentsTable_->setItem(
+                row, 0,
+                new QTableWidgetItem(
+                    QStringLiteral("%1\n%2")
+                        .arg(typeText(type),
+                             domain_text::domainAssignmentConstraintText(
+                                 *assignmentRule))));
             const QStringList stored = assignments_.value(type.id);
             Editor editor;
             editor.type = type.id;
-            if (type.cardinality == DomainCardinality::Multiple
+            if (!assignmentRule->isSingleAssignment()
                 || stored.size() > 1) {
                 editor.multiple = new QListWidget(assignmentsTable_);
                 editor.multiple->setObjectName(
@@ -779,7 +794,6 @@ private:
                     + safeSuffix(type.id));
                 addDomainItems(editor.multiple, type.id, stored);
                 assignmentsTable_->setCellWidget(row, 1, editor.multiple);
-                assignmentsTable_->setRowHeight(row, 108);
                 connect(editor.multiple, &QListWidget::itemChanged,
                         this, [this] {
                             if (!updating_) {
@@ -792,7 +806,8 @@ private:
                 editor.single->setObjectName(
                     objectName() + QStringLiteral(".assignment.")
                     + safeSuffix(type.id));
-                addDomainItems(editor.single, type.id, stored);
+                addDomainItems(
+                    editor.single, type.id, stored, *assignmentRule);
                 assignmentsTable_->setCellWidget(row, 1, editor.single);
                 connect(editor.single, &QComboBox::currentIndexChanged,
                         this, [this] {
@@ -855,9 +870,10 @@ private:
         }
         const QStringList errors = localErrors();
         diagnostics_->setText(errors.isEmpty()
-                                  ? QStringLiteral("Local fields are valid. Cardinality, "
-                                                   "required assignments, and references "
-                                                   "are checked for the complete draft.")
+                                  ? QStringLiteral(
+                                        "Local fields are valid. Per-kind minimum/maximum "
+                                        "assignments and references are checked for the "
+                                        "complete draft.")
                                   : dialogErrorsText(errors).join(QLatin1Char('\n')));
         ok_->setEnabled(errors.isEmpty());
     }

@@ -1,5 +1,7 @@
 #include "features/domain/endpoint_domain_assignment_dialog.h"
 
+#include "features/domain/presentation/domain_text.h"
+
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFrame>
@@ -17,24 +19,8 @@
 namespace finepaper {
 namespace {
 
-QString typeLabel(const DomainTypeDefinition& type) {
-    return type.label.trimmed().isEmpty() ? type.id : type.label;
-}
-
 QString domainLabel(const DomainDefinition& domain) {
-    return domain.name.trimmed().isEmpty()
-        ? domain.id
-        : QStringLiteral("%1 (%2)").arg(domain.name, domain.id);
-}
-
-QString cardinalityText(DomainCardinality cardinality) {
-    if (cardinality == DomainCardinality::Single) {
-        return QStringLiteral("one Domain");
-    }
-    if (cardinality == DomainCardinality::Multiple) {
-        return QStringLiteral("one or more Domains");
-    }
-    return QStringLiteral("a valid assignment");
+    return domain_text::domainInstanceDisplayText(domain);
 }
 
 bool containsAvailableChoice(const EndpointDomainAssignmentGroup& group,
@@ -62,15 +48,16 @@ QVector<EndpointDomainAssignmentGroup> buildEndpointDomainAssignmentGroups(
     QVector<EndpointDomainAssignmentGroup> groups;
 
     for (const DomainTypeDefinition& type : package.domainTypes) {
-        if (!type.appliesTo.contains(ElementKind::Endpoint)) {
+        const std::optional<DomainAssignmentRule> assignmentRule =
+            type.assignmentRule(ElementKind::Endpoint);
+        if (!assignmentRule) {
             continue;
         }
 
         EndpointDomainAssignmentGroup group;
         group.domainType = type.id;
-        group.domainTypeLabel = typeLabel(type);
-        group.cardinality = type.cardinality;
-        group.required = type.required;
+        group.domainTypeLabel = domain_text::domainTypeDisplayText(type);
+        group.assignmentRule = *assignmentRule;
         group.assignmentProvided =
             normalizedInitial.contains(type.id)
             && !normalizedInitial.value(type.id).isEmpty();
@@ -106,14 +93,16 @@ QVector<EndpointDomainAssignmentGroup> buildEndpointDomainAssignmentGroups(
         const qsizetype availableCount = std::count_if(
             group.choices.cbegin(), group.choices.cend(),
             [](const EndpointDomainChoice& choice) { return choice.available; });
-        if (group.required && group.selectedDomainIds.isEmpty()
-            && availableCount == 1) {
-            const auto available = std::find_if(
-                group.choices.cbegin(), group.choices.cend(),
-                [](const EndpointDomainChoice& choice) {
-                    return choice.available;
-                });
-            group.selectedDomainIds = {available->id};
+        if (group.assignmentRule.isValid()
+            && group.assignmentRule.requiresAssignment()
+            && group.selectedDomainIds.isEmpty()
+            && availableCount
+                == group.assignmentRule.minimumAssignments) {
+            for (const EndpointDomainChoice& choice : group.choices) {
+                if (choice.available) {
+                    group.selectedDomainIds.append(choice.id);
+                }
+            }
         }
         groups.append(std::move(group));
     }
@@ -132,24 +121,23 @@ bool endpointDomainAssignmentsRequireUserDecision(
             [&](const QString& domainId) {
                 return !containsAvailableChoice(group, domainId);
             });
-        const bool invalidCardinality =
-            group.cardinality != DomainCardinality::Single
-            && group.cardinality != DomainCardinality::Multiple;
-        const bool tooManyForSingle =
-            group.cardinality == DomainCardinality::Single
-            && group.selectedDomainIds.size() > 1;
-        const bool missingRequired =
-            group.required
-            && (group.selectedDomainIds.isEmpty()
-                || (mode == EndpointDomainAssignmentDecisionMode::Restore
-                    && !group.assignmentProvided));
-        if (invalidCardinality || tooManyForSingle || hasStaleSelection
-            || missingRequired || (group.required && availableCount == 0)) {
+        const bool invalidRule = !group.assignmentRule.isValid();
+        const bool assignmentCountRejected =
+            !group.assignmentRule.acceptsCount(
+                group.selectedDomainIds.size());
+        const bool restoredRequiredAssignmentWasMissing =
+            mode == EndpointDomainAssignmentDecisionMode::Restore
+            && group.assignmentRule.requiresAssignment()
+            && !group.assignmentProvided;
+        const bool insufficientChoices = group.assignmentRule.isValid()
+            && availableCount < group.assignmentRule.minimumAssignments;
+        if (invalidRule || assignmentCountRejected || hasStaleSelection
+            || restoredRequiredAssignmentWasMissing || insufficientChoices) {
             return true;
         }
         if (mode == EndpointDomainAssignmentDecisionMode::Creation
-            && (availableCount > 1
-                || (!group.required && availableCount > 0))) {
+            && availableCount
+                > group.assignmentRule.minimumAssignments) {
             return true;
         }
     }
@@ -215,35 +203,30 @@ EndpointDomainAssignmentEditor::EndpointDomainAssignmentEditor(
         GroupEditor editor;
         editor.group = group;
 
-        const QString heading = group.domainTypeLabel == group.domainType
-            ? group.domainType
-            : QStringLiteral("%1 (%2)")
-                  .arg(group.domainTypeLabel, group.domainType);
-        auto* box = new QGroupBox(heading, content);
+        auto* box = new QGroupBox(group.domainTypeLabel, content);
         box->setObjectName(editorObjectName(group.domainType,
                                             QStringLiteral("group")));
         box->setProperty("finepaper.domainType", group.domainType);
         auto* boxLayout = new QVBoxLayout(box);
 
-        const QString requirement = group.required
-            ? QStringLiteral("Required: choose %1.")
-                  .arg(cardinalityText(group.cardinality))
-            : QStringLiteral("Optional: choose %1, or leave it unassigned.")
-                  .arg(cardinalityText(group.cardinality));
+        const QString requirement =
+            domain_text::domainAssignmentConstraintText(
+                group.assignmentRule);
         auto* description = new QLabel(requirement, box);
         description->setObjectName(
             editorObjectName(group.domainType, QStringLiteral("description")));
         description->setWordWrap(true);
         boxLayout->addWidget(description);
 
-        if (group.cardinality == DomainCardinality::Single) {
+        if (group.assignmentRule.isSingleAssignment()) {
             editor.single = new QComboBox(box);
             editor.single->setObjectName(
                 editorObjectName(group.domainType, QStringLiteral("single")));
             editor.single->setProperty("finepaper.domainType", group.domainType);
             editor.single->addItem(
-                group.required ? QStringLiteral("Choose a Domain…")
-                               : QStringLiteral("Unassigned"),
+                group.assignmentRule.requiresAssignment()
+                    ? QStringLiteral("Choose a Domain…")
+                    : QStringLiteral("Unassigned"),
                 QString());
             for (const EndpointDomainChoice& choice : group.choices) {
                 editor.single->addItem(choice.label, choice.id);
@@ -364,34 +347,52 @@ QStringList EndpointDomainAssignmentEditor::localErrors() const {
     QStringList errors;
     for (const EndpointDomainAssignmentGroup& group : m_groups) {
         const QStringList domainIds = selected.value(group.domainType);
-        if (group.cardinality != DomainCardinality::Single
-            && group.cardinality != DomainCardinality::Multiple) {
+        if (!group.assignmentRule.isValid()) {
             errors.append(
-                QStringLiteral("%1 has an invalid Package cardinality.")
+                QStringLiteral("%1 has an invalid Package assignment rule.")
                     .arg(group.domainTypeLabel));
             continue;
         }
-        if (group.required && domainIds.isEmpty()) {
-            const bool hasAvailable = std::any_of(
+        if (domainIds.size()
+            < group.assignmentRule.minimumAssignments) {
+            const qsizetype availableCount = std::count_if(
                 group.choices.cbegin(), group.choices.cend(),
                 [](const EndpointDomainChoice& choice) {
                     return choice.available;
                 });
-            errors.append(
-                hasAvailable
-                    ? QStringLiteral("Choose %1 for required Domain Type %2.")
-                          .arg(cardinalityText(group.cardinality),
-                               group.domainTypeLabel)
-                    : QStringLiteral(
-                          "Required Domain Type %1 has no instances. Create "
-                          "one in Domain Manager first.")
-                          .arg(group.domainTypeLabel));
+            if (availableCount == 0) {
+                errors.append(
+                    QStringLiteral(
+                        "%1 has no instances, but its minimum is %2. Create "
+                        "the missing instance(s) in Domain Manager first.")
+                        .arg(group.domainTypeLabel)
+                        .arg(group.assignmentRule.minimumAssignments));
+            } else if (availableCount
+                       < group.assignmentRule.minimumAssignments) {
+                errors.append(
+                    QStringLiteral(
+                        "%1 has only %2 available Domain instance(s), but its "
+                        "minimum is %3. Create the missing instance(s) in "
+                        "Domain Manager first.")
+                        .arg(group.domainTypeLabel)
+                        .arg(availableCount)
+                        .arg(group.assignmentRule.minimumAssignments));
+            } else {
+                errors.append(
+                    QStringLiteral(
+                        "Choose at least %1 Domain(s) for %2 (minimum %1).")
+                        .arg(group.assignmentRule.minimumAssignments)
+                        .arg(group.domainTypeLabel));
+            }
         }
-        if (group.cardinality == DomainCardinality::Single
-            && domainIds.size() > 1) {
+        if (group.assignmentRule.maximumAssignments
+            && domainIds.size()
+                > *group.assignmentRule.maximumAssignments) {
             errors.append(
-                QStringLiteral("%1 accepts only one Domain.")
-                    .arg(group.domainTypeLabel));
+                QStringLiteral(
+                    "%1 accepts at most %2 Domain(s) (maximum %2).")
+                    .arg(group.domainTypeLabel)
+                    .arg(*group.assignmentRule.maximumAssignments));
         }
         for (const QString& domainId : domainIds) {
             if (!containsAvailableChoice(group, domainId)) {

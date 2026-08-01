@@ -189,7 +189,9 @@ int main(int argc, char** argv) {
             QVector<ElementRef>{router0, router1},
             QStringLiteral("security-zone"));
     check(commonMultiple.state == DomainAssignmentAggregateState::Common
-              && commonMultiple.cardinality == DomainCardinality::Multiple
+              && !commonMultiple.usesSingleAssignmentEditor()
+              && !commonMultiple.requiresAssignment()
+              && commonMultiple.permitsClearing()
               && commonMultiple.totalElements == 2
               && commonMultiple.eligibleElements == 2,
           QStringLiteral("equal normalized multiple assignments aggregate as Common"));
@@ -251,13 +253,85 @@ int main(int argc, char** argv) {
             QVector<ElementRef>{router0, router1},
             QStringLiteral("fabric-tier"));
     check(commonSingle.state == DomainAssignmentAggregateState::Common
-              && commonSingle.cardinality == DomainCardinality::Single
-              && commonSingle.required
+              && commonSingle.usesSingleAssignmentEditor()
+              && commonSingle.requiresAssignment()
+              && !commonSingle.permitsClearing()
               && commonSingle.commonAssignments
                   == QStringList{QStringLiteral("tier-core")}
               && commonSingle.presence(QStringLiteral("tier-core"))
                   == DomainAssignmentPresence::All,
           QStringLiteral("single-cardinality Package types use the same generic aggregate"));
+
+    PackageDefinition asymmetricPackage = package;
+    const auto asymmetricType = std::find_if(
+        asymmetricPackage.domainTypes.begin(),
+        asymmetricPackage.domainTypes.end(),
+        [](const DomainTypeDefinition& type) {
+            return type.id == QStringLiteral("security-zone");
+        });
+    if (asymmetricType != asymmetricPackage.domainTypes.end()) {
+        // Canonical per-kind rules deliberately disagree with the legacy
+        // global fields to catch accidental compatibility-field reads.
+        asymmetricType->cardinality = DomainCardinality::Single;
+        asymmetricType->required = true;
+        asymmetricType->assignmentRules = {
+            DomainAssignmentRule{
+                ElementKind::Router, 1, qsizetype{1}},
+            DomainAssignmentRule{
+                ElementKind::Endpoint, 0, qsizetype{2}}};
+    }
+    const DomainAssignmentAggregate asymmetricRouter =
+        buildDomainAssignmentAggregate(
+            design,
+            asymmetricPackage,
+            QVector<ElementRef>{router0},
+            QStringLiteral("security-zone"));
+    const DomainAssignmentAggregate asymmetricEndpoint =
+        buildDomainAssignmentAggregate(
+            design,
+            asymmetricPackage,
+            QVector<ElementRef>{endpoint},
+            QStringLiteral("security-zone"));
+    const DomainAssignmentAggregate asymmetricMixed =
+        buildDomainAssignmentAggregate(
+            design,
+            asymmetricPackage,
+            QVector<ElementRef>{router0, endpoint},
+            QStringLiteral("security-zone"));
+    const DomainAssignmentPatch addZoneC{
+        QStringList{QStringLiteral("zone-c")}, {}, std::nullopt};
+    const DomainAssignmentPatch removeZoneB{
+        {}, QStringList{QStringLiteral("zone-b")}, std::nullopt};
+    const DomainAssignmentPatch replaceWithOne{
+        {}, {}, QStringList{QStringLiteral("zone-a")}};
+    const DomainAssignmentPatch replaceWithTwo{
+        {}, {},
+        QStringList{QStringLiteral("zone-a"), QStringLiteral("zone-b")}};
+    const DomainAssignmentPatchEvaluation addZoneCEvaluation =
+        asymmetricMixed.evaluatePatch(addZoneC);
+    check(asymmetricRouter.usesSingleAssignmentEditor()
+              && asymmetricRouter.requiresAssignment()
+              && !asymmetricRouter.permitsClearing()
+              && !asymmetricEndpoint.usesSingleAssignmentEditor()
+              && !asymmetricEndpoint.requiresAssignment()
+              && asymmetricEndpoint.permitsClearing()
+              && !asymmetricMixed.usesSingleAssignmentEditor()
+              && asymmetricMixed.requiresAssignment()
+              && !asymmetricMixed.permitsClearing()
+              && !asymmetricMixed.acceptsReplacementCount(0)
+              && asymmetricMixed.acceptsReplacementCount(1)
+              && !asymmetricMixed.acceptsReplacementCount(2)
+              && !asymmetricMixed.acceptsPatch(addZoneC)
+              && !addZoneCEvaluation.accepted
+              && addZoneCEvaluation.violatingElement == router0
+              && addZoneCEvaluation.violatedRule
+              && addZoneCEvaluation.violatedRule->maximumAssignments == 1
+              && addZoneCEvaluation.resultingAssignmentCount == 3
+              && asymmetricMixed.acceptsPatch(removeZoneB)
+              && asymmetricMixed.acceptsPatch(replaceWithOne)
+              && !asymmetricMixed.acceptsPatch(replaceWithTwo)
+              && asymmetricMixed.eligibleRules.size() == 2,
+          QStringLiteral("per-element current sets and per-kind limits validate both delta and replacement patches"));
 
     const DomainAssignmentAggregate partiallyEligible =
         buildDomainAssignmentAggregate(

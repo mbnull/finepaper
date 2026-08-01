@@ -1,4 +1,5 @@
 #include "features/domain/domain_manager_panel.h"
+#include "features/domain/domain_instance_dialog.h"
 
 #include <QApplication>
 #include <QColor>
@@ -217,6 +218,8 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.tabs"));
     auto* assignmentState = panel.findChild<QLabel*>(
         QStringLiteral("finepaper.domainManager.assignmentState"));
+    auto* assignmentFeedback = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.domainManager.assignmentFeedback"));
     auto* singleAssignment = panel.findChild<QComboBox*>(
         QStringLiteral("finepaper.domainManager.assignmentEditor"));
     auto* multipleAssignment = panel.findChild<QListWidget*>(
@@ -242,13 +245,15 @@ int main(int argc, char** argv) {
     auto* selectUnassigned = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.selectUnassigned"));
 
-    check(typeSelector && instances && tabs && assignmentState && singleAssignment
+    check(typeSelector && instances && tabs && assignmentState
+              && assignmentFeedback && singleAssignment
               && multipleAssignment && applyAssignment && clearAssignment
               && discardAssignment
               && completeConfiguration && addDomain && editDomain && deleteDomain
               && selectMembers && selectAllEligible && selectUnassigned,
           QStringLiteral("Domain Manager exposes its stable test controls"));
-    if (!typeSelector || !instances || !tabs || !assignmentState || !singleAssignment
+    if (!typeSelector || !instances || !tabs || !assignmentState
+        || !assignmentFeedback || !singleAssignment
         || !multipleAssignment || !applyAssignment || !clearAssignment
         || !discardAssignment
         || !completeConfiguration || !addDomain || !editDomain || !deleteDomain
@@ -284,6 +289,8 @@ int main(int argc, char** argv) {
     check(typeSelector->count() == 2
               && typeSelector->itemData(0).toString()
                   == QStringLiteral("security-zone")
+              && typeSelector->itemText(0)
+                  == QStringLiteral("Security zones (security-zone)")
               && typeSelector->itemData(1).toString()
                   == QStringLiteral("fabric-tier")
               && panel.currentDomainType() == QStringLiteral("security-zone"),
@@ -653,6 +660,100 @@ int main(int argc, char** argv) {
               && calls.constLast().patch.ensureAbsent.isEmpty(),
           QStringLiteral("single Mixed selection emits an exact replacement patch"));
     discardAssignment->click();
+    QApplication::processEvents();
+
+    PackageDefinition asymmetricPackage = package;
+    auto asymmetricType = std::find_if(
+        asymmetricPackage.domainTypes.begin(),
+        asymmetricPackage.domainTypes.end(),
+        [](const DomainTypeDefinition& type) {
+            return type.id == QStringLiteral("security-zone");
+        });
+    if (asymmetricType != asymmetricPackage.domainTypes.end()) {
+        // Canonical Router/Endpoint rules intentionally conflict with the
+        // compatibility fields so the panel cannot accidentally use them.
+        asymmetricType->cardinality = DomainCardinality::Single;
+        asymmetricType->required = true;
+        asymmetricType->assignmentRules = {
+            DomainAssignmentRule{
+                ElementKind::Router, 1, qsizetype{1}},
+            DomainAssignmentRule{
+                ElementKind::Endpoint, 0, qsizetype{2}}};
+    }
+    DomainInstanceDialog asymmetricInstanceDialog(
+        asymmetricType == asymmetricPackage.domainTypes.end()
+            ? QVector<DomainTypeDefinition>{}
+            : QVector<DomainTypeDefinition>{*asymmetricType},
+        design.domains,
+        std::nullopt,
+        QStringLiteral("security-zone"),
+        {});
+    auto* asymmetricDescription = asymmetricInstanceDialog.findChild<QLabel*>(
+        QStringLiteral("finepaper.domainInstance.typeDescription"));
+    check(asymmetricDescription
+              && asymmetricDescription->text().contains(
+                  QStringLiteral("Security zones (security-zone)"))
+              && asymmetricDescription->text().contains(
+                  QStringLiteral("Router assignments: minimum 1, maximum 1"))
+              && asymmetricDescription->text().contains(
+                  QStringLiteral("Endpoint assignments: minimum 0, maximum 2")),
+          QStringLiteral("Domain instance summary uses stable type identity and every canonical per-kind limit"));
+    panel.setContext(&design, &resolved, &asymmetricPackage,
+                     QStringLiteral("security-zone"));
+    typeSelector->setCurrentIndex(
+        typeSelector->findData(QStringLiteral("security-zone")));
+    panel.setSelection({router0});
+    QApplication::processEvents();
+    check(singleAssignment->isVisible() && !multipleAssignment->isVisible()
+              && !clearAssignment->isEnabled()
+              && assignmentState->text().contains(
+                  QStringLiteral("Router assignments: minimum 1, maximum 1")),
+          QStringLiteral("Router assignment controls follow the canonical Router rule and show its limits"));
+    panel.setSelection({endpoint});
+    QApplication::processEvents();
+    check(!singleAssignment->isVisible() && multipleAssignment->isVisible()
+              && clearAssignment->isEnabled()
+              && assignmentState->text().contains(
+                  QStringLiteral("Endpoint assignments: minimum 0, maximum 2")),
+          QStringLiteral("Endpoint assignment controls follow the independent canonical Endpoint rule"));
+    panel.setSelection({router0, endpoint});
+    QApplication::processEvents();
+    check(!singleAssignment->isVisible() && multipleAssignment->isVisible()
+              && !clearAssignment->isEnabled()
+              && assignmentState->text().contains(
+                  QStringLiteral("Router assignments: minimum 1, maximum 1"))
+              && assignmentState->text().contains(
+                  QStringLiteral("Endpoint assignments: minimum 0, maximum 2")),
+          QStringLiteral("mixed-kind selection keeps both per-kind limits and blocks an invalid bulk clear"));
+    zoneC = assignmentItem(multipleAssignment, QStringLiteral("zone-c"));
+    zoneB = assignmentItem(multipleAssignment, QStringLiteral("zone-b"));
+    if (zoneC) {
+        zoneC->setCheckState(Qt::Checked);
+        QApplication::processEvents();
+    }
+    check(zoneC && !applyAssignment->isEnabled()
+              && assignmentFeedback->isVisible()
+              && assignmentFeedback->text().contains(
+                  QStringLiteral(
+                      "Router r-0-0 would have 3 Domain assignments; maximum is 1"))
+              && applyAssignment->accessibleDescription()
+                  == assignmentFeedback->text(),
+          QStringLiteral("Apply stays disabled when ensure-present would exceed the Router maximum in a mixed-kind selection"));
+    if (zoneC) {
+        zoneC->setCheckState(Qt::Unchecked);
+    }
+    if (zoneB) {
+        zoneB->setCheckState(Qt::Unchecked);
+    }
+    QApplication::processEvents();
+    check(zoneB && applyAssignment->isEnabled()
+              && !assignmentFeedback->isVisible()
+              && applyAssignment->accessibleDescription().isEmpty(),
+          QStringLiteral("Apply enables when the same delta leaves every mixed-kind target within its own limits"));
+    discardAssignment->click();
+    QApplication::processEvents();
+    panel.setContext(&design, &resolved, &package,
+                     QStringLiteral("security-zone"));
     QApplication::processEvents();
 
     typeSelector->setCurrentIndex(

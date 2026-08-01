@@ -33,8 +33,8 @@ namespace finepaper::topology_text {
 [[nodiscard]] inline QString compactDomainLegendEntryText(
     const QString& label,
     qsizetype totalEntries) {
-    return label + QStringLiteral(" · ") + QString::number(totalEntries)
-        + QStringLiteral(" total");
+    return QString::number(totalEntries) + QStringLiteral(" total · ")
+        + label;
 }
 
 } // namespace finepaper::topology_text

@@ -10,6 +10,7 @@
 #include <QWidget>
 
 #include <functional>
+#include <optional>
 
 class QComboBox;
 class QLabel;
@@ -76,6 +77,8 @@ private:
     void selectDomainMembers();
     void selectAllEligible();
     void selectUnassigned();
+    [[nodiscard]] std::optional<DomainAssignmentPatch>
+        stagedAssignmentPatch() const;
     void applyAssignment();
     void clearAssignment();
     void discardAssignment();
@@ -112,6 +115,7 @@ private:
     QPushButton* m_selectUnassigned = nullptr;
     QComboBox* m_singleAssignment = nullptr;
     QListWidget* m_multipleAssignment = nullptr;
+    QLabel* m_assignmentFeedback = nullptr;
     QPushButton* m_applyAssignment = nullptr;
     QPushButton* m_clearAssignment = nullptr;
     QPushButton* m_discardAssignment = nullptr;

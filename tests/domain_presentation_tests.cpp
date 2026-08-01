@@ -1,4 +1,5 @@
 #include "features/domain/domain_presentation.h"
+#include "features/domain/presentation/domain_text.h"
 
 #include <QCoreApplication>
 #include <QTextStream>
@@ -202,6 +203,102 @@ const DomainLegendEntry* legendEntry(const DomainPresentationSnapshot& snapshot,
     return iterator == snapshot.legend.cend() ? nullptr : &(*iterator);
 }
 
+void checkDomainTextPresentation() {
+    DomainTypeDefinition clockDomain;
+    clockDomain.id = QStringLiteral("clock-domain");
+    clockDomain.label = QStringLiteral("Clock %2");
+    clockDomain.assignmentRules = {
+        DomainAssignmentRule{
+            ElementKind::Router, 1, std::optional<qsizetype>{1}},
+        DomainAssignmentRule{
+            ElementKind::Endpoint, 0, std::optional<qsizetype>{3}}
+    };
+
+    const QVector<DomainDefinition> domains = {
+        DomainDefinition{
+            QStringLiteral("clock-a"),
+            QStringLiteral("clock-domain"),
+            QStringLiteral("Primary"),
+            {}},
+        DomainDefinition{
+            QStringLiteral("clock-b"),
+            QStringLiteral("clock-domain"),
+            QStringLiteral("Peripheral"),
+            {}}
+    };
+
+    check(domain_text::domainTypeDisplayText(clockDomain)
+              == QStringLiteral("Clock %2 (clock-domain)"),
+          QStringLiteral(
+              "Domain type text preserves its label and stable id literally"));
+    check(domain_text::domainInstanceDisplayText(domains.constFirst())
+              == QStringLiteral("Primary (clock-a)"),
+          QStringLiteral(
+              "Domain instance text preserves its name and stable id"));
+    check(domain_text::domainAssignmentConstraintText(
+              DomainAssignmentRule{
+                  ElementKind::Endpoint, 0, qsizetype{3}})
+              == QStringLiteral(
+                  "Endpoint assignments: minimum 0, maximum 3."),
+          QStringLiteral(
+              "a canonical assignment rule has a reusable plain-text description"));
+    check(domain_text::domainAssignmentConstraintText(
+              clockDomain, ElementKind::Router)
+              == QStringLiteral(
+                  "Router assignments: minimum 1, maximum 1."),
+          QStringLiteral(
+              "Router constraint text uses its canonical per-kind rule"));
+    check(domain_text::domainAssignmentConstraintText(
+              clockDomain, ElementKind::Endpoint)
+              == QStringLiteral(
+                  "Endpoint assignments: minimum 0, maximum 3."),
+          QStringLiteral(
+              "Endpoint constraint text is independent of the Router rule"));
+    check(domain_text::domainAssignmentConstraintText(
+              clockDomain, ElementKind::RouterLink)
+              == QStringLiteral(
+                  "Router Link assignments: not applicable."),
+          QStringLiteral(
+              "an absent per-kind rule is stated as not applicable"));
+    check(domain_text::domainAssignmentListText(
+              domains,
+              clockDomain.id,
+              QStringList{
+                  QStringLiteral("clock-b"),
+                  QStringLiteral("clock-a"),
+                  QStringLiteral("clock-b")})
+              == QStringLiteral(
+                  "Primary (clock-a), Peripheral (clock-b)"),
+          QStringLiteral(
+              "assignment text lists every semantic assignment by name and stable id"));
+    check(domain_text::domainAssignmentText(
+              clockDomain,
+              ElementKind::Endpoint,
+              domains,
+              {}) == QStringLiteral("Unassigned"),
+          QStringLiteral("an empty applicable assignment is stated as Unassigned"));
+    check(domain_text::domainAssignmentText(
+              clockDomain,
+              ElementKind::RouterLink,
+              domains,
+              {}) == QStringLiteral("Not applicable"),
+          QStringLiteral(
+              "an empty non-applicable assignment is not confused with Unassigned"));
+
+    DomainTypeDefinition unboundedDomain;
+    unboundedDomain.id = QStringLiteral("power-domain");
+    unboundedDomain.assignmentRules = {
+        DomainAssignmentRule{
+            ElementKind::Endpoint, 1, std::nullopt}
+    };
+    check(domain_text::domainAssignmentConstraintText(
+              unboundedDomain, ElementKind::Endpoint)
+              == QStringLiteral(
+                  "Endpoint assignments: minimum 1, maximum unbounded."),
+          QStringLiteral(
+              "an absent maximum is explicitly described as unbounded"));
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -209,6 +306,7 @@ int main(int argc, char** argv) {
 
     const PackageDefinition package = presentationPackage();
     const ResolvedDesign resolved = resolveDesign(presentationDesign());
+    checkDomainTextPresentation();
     const QString activeType = QStringLiteral("security-zone");
     const DomainPresentationSnapshot snapshot = buildDomainPresentationSnapshot(
         resolved, package, activeType);
@@ -276,6 +374,37 @@ int main(int argc, char** argv) {
               && tierEndpoint->state
                   == DomainAssignmentDisplayState::NotApplicable,
           QStringLiteral("Package appliesTo distinguishes unassigned from not applicable"));
+
+    PackageDefinition canonicalPresentationPackage = package;
+    auto canonicalTier = std::find_if(
+        canonicalPresentationPackage.domainTypes.begin(),
+        canonicalPresentationPackage.domainTypes.end(),
+        [](const DomainTypeDefinition& type) {
+            return type.id == QStringLiteral("fabric-tier");
+        });
+    canonicalTier->assignmentRules = {
+        DomainAssignmentRule{ElementKind::Endpoint, 0, qsizetype{1}}
+    };
+    const DomainPresentationSnapshot canonicalTierSnapshot =
+        buildDomainPresentationSnapshot(
+            resolved,
+            canonicalPresentationPackage,
+            QStringLiteral("fabric-tier"));
+    const DomainElementPresentation* canonicalTierRouter =
+        canonicalTierSnapshot.element(
+            ElementRef{ElementKind::Router, QStringLiteral("r-0-0")});
+    const DomainElementPresentation* canonicalTierEndpoint =
+        canonicalTierSnapshot.element(
+            ElementRef{ElementKind::Endpoint,
+                       QStringLiteral("ep-unassigned")});
+    check(canonicalTierRouter
+              && canonicalTierRouter->state
+                  == DomainAssignmentDisplayState::NotApplicable
+              && canonicalTierEndpoint
+              && canonicalTierEndpoint->state
+                  == DomainAssignmentDisplayState::Unassigned,
+          QStringLiteral(
+              "presentation applicability follows canonical per-kind rules instead of legacy appliesTo"));
 
     check(snapshot.legend.size() == 3
               && snapshot.legend[0].id == QStringLiteral("zone-a")

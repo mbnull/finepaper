@@ -23,8 +23,8 @@ struct MeshResizeDomainOption {
 struct MeshResizeDomainAssignmentPlan {
     QString domainType;
     QString label;
-    DomainCardinality cardinality = DomainCardinality::Invalid;
-    bool required = false;
+    // Canonical membership constraint consumed by planning and resolution.
+    DomainAssignmentRule assignmentRule;
     QStringList availableDomainIds;
     QStringList automaticAssignment;
 

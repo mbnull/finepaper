@@ -8,7 +8,9 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QEventLoop>
+#include <QFontMetrics>
 #include <QLabel>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -361,7 +363,33 @@ void duplicateDamagedRowsCanBeRemovedIndependently() {
 void meshElementsAreReferencesRatherThanEditableTopology() {
     NocDesign design = baseDesign();
     design.endpoints.front().id = QStringLiteral("ep%2-%3");
-    const PackageDefinition package = domainPackage();
+    PackageDefinition package = domainPackage();
+    DomainTypeDefinition* power = nullptr;
+    DomainTypeDefinition* clock = nullptr;
+    for (DomainTypeDefinition& type : package.domainTypes) {
+        if (type.id == QStringLiteral("power")) {
+            power = &type;
+        } else if (type.id == QStringLiteral("clock")) {
+            clock = &type;
+        }
+    }
+    if (power) {
+        power->cardinality = DomainCardinality::Multiple;
+        power->required = false;
+        power->assignmentRules = {
+            DomainAssignmentRule{
+                ElementKind::Router, 1, qsizetype{1}},
+            DomainAssignmentRule{
+                ElementKind::Endpoint, 0, qsizetype{2}}};
+    }
+    if (clock) {
+        // Canonical applicability intentionally conflicts with appliesTo.
+        clock->appliesTo = {ElementKind::Router};
+        clock->cardinality = DomainCardinality::Single;
+        clock->assignmentRules = {
+            DomainAssignmentRule{
+                ElementKind::Endpoint, 0, std::nullopt}};
+    }
     DomainConfiguration initial = completeConfiguration();
     initial.domainMemberships.clear();
     initial.edgeOverrides.clear();
@@ -373,6 +401,13 @@ void meshElementsAreReferencesRatherThanEditableTopology() {
         [&design](const DomainConfiguration& configuration) {
             return acceptedResult(design, configuration);
         });
+    QFont largeFont = dialog.font();
+    if (largeFont.pointSize() > 0) {
+        largeFont.setPointSize(largeFont.pointSize() + 6);
+    } else {
+        largeFont.setPixelSize(largeFont.pixelSize() + 8);
+    }
+    dialog.setFont(largeFont);
     dialog.show();
     processEventsFor();
 
@@ -397,6 +432,8 @@ void meshElementsAreReferencesRatherThanEditableTopology() {
 
     QStringList offeredElements;
     bool sawMembershipDialog = false;
+    bool routerRuleRendered = false;
+    bool endpointRulesRendered = false;
     QTimer::singleShot(0, [&] {
         auto* editor = qobject_cast<QDialog*>(QApplication::activeModalWidget());
         sawMembershipDialog = editor
@@ -415,6 +452,57 @@ void meshElementsAreReferencesRatherThanEditableTopology() {
                     element->itemText(index) + QLatin1Char('|')
                     + element->itemData(index).toString());
             }
+            auto* assignments = editor->findChild<QTableWidget*>(
+                QStringLiteral(
+                    "finepaper.domainConfiguration.membershipDialog.assignments"));
+            const QString powerEditorName = QStringLiteral(
+                "finepaper.domainConfiguration.membershipDialog.assignment.%1")
+                                                .arg(QString::fromLatin1(
+                                                    QStringLiteral("power")
+                                                        .toUtf8().toHex()));
+            routerRuleRendered = assignments
+                && assignments->rowCount() == 1
+                && assignments->item(0, 0)
+                && assignments->item(0, 0)->text().contains(
+                    QStringLiteral("Power domain (power)"))
+                && assignments->item(0, 0)->text().contains(
+                    QStringLiteral("minimum 1, maximum 1"))
+                && assignments->rowHeight(0)
+                    >= QFontMetrics(assignments->font()).lineSpacing() * 2
+                && editor->findChild<QComboBox*>(powerEditorName);
+
+            int endpointIndex = -1;
+            for (int index = 0; index < element->count(); ++index) {
+                if (element->itemText(index).startsWith(
+                        QStringLiteral("Endpoint "))) {
+                    endpointIndex = index;
+                    break;
+                }
+            }
+            if (endpointIndex >= 0) {
+                element->setCurrentIndex(endpointIndex);
+                QApplication::processEvents();
+            }
+            bool sawPowerLimits = false;
+            bool sawClockLimits = false;
+            if (assignments) {
+                for (int row = 0; row < assignments->rowCount(); ++row) {
+                    const QString text = assignments->item(row, 0)
+                        ? assignments->item(row, 0)->text() : QString();
+                    sawPowerLimits = sawPowerLimits
+                        || (text.contains(QStringLiteral("Power domain (power)"))
+                            && text.contains(QStringLiteral(
+                                "minimum 0, maximum 2")));
+                    sawClockLimits = sawClockLimits
+                        || (text.contains(QStringLiteral("Clock domain (clock)"))
+                            && text.contains(QStringLiteral(
+                                "minimum 0, maximum unbounded")));
+                }
+            }
+            endpointRulesRendered = assignments
+                && assignments->rowCount() == 2
+                && editor->findChild<QListWidget*>(powerEditorName)
+                && sawPowerLimits && sawClockLimits;
         }
         editor->reject();
     });
@@ -436,6 +524,9 @@ void meshElementsAreReferencesRatherThanEditableTopology() {
               "Membership choices preserve literal percent tokens in configurable "
               "Endpoint IDs and contain exactly Mesh-derived Routers and existing "
               "Endpoints, never Links"));
+    check(routerRuleRendered && endpointRulesRendered,
+          QStringLiteral(
+              "Membership applicability, editor type, and visible minimum/maximum limits follow canonical per-kind rules"));
     dialog.close();
 }
 

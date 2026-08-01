@@ -10,14 +10,39 @@ namespace finepaper {
 namespace {
 
 QStringList normalizedDomainIds(QStringList ids) {
-    std::sort(ids.begin(), ids.end());
-    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
-    return ids;
+    QStringList normalized;
+    normalized.reserve(ids.size());
+    for (const QString& id : std::as_const(ids)) {
+        const QString value = id.trimmed();
+        if (!value.isEmpty()) {
+            normalized.append(value);
+        }
+    }
+    std::sort(normalized.begin(), normalized.end());
+    normalized.erase(
+        std::unique(normalized.begin(), normalized.end()), normalized.end());
+    return normalized;
 }
 
-bool appliesTo(const DomainTypeDefinition& type, ElementKind kind) {
-    return std::find(type.appliesTo.cbegin(), type.appliesTo.cend(), kind)
-        != type.appliesTo.cend();
+QSet<QString> normalizedDomainIdSet(const QStringList& ids) {
+    QSet<QString> normalized;
+    for (const QString& id : ids) {
+        const QString value = id.trimmed();
+        if (!value.isEmpty()) {
+            normalized.insert(value);
+        }
+    }
+    return normalized;
+}
+
+const DomainAssignmentRule* ruleForKind(
+    const QVector<DomainAssignmentRule>& rules,
+    ElementKind kind) {
+    const auto rule = std::find_if(
+        rules.cbegin(), rules.cend(), [kind](const auto& rule) {
+            return rule.elementKind == kind;
+        });
+    return rule == rules.cend() ? nullptr : &*rule;
 }
 
 QHash<ElementRef, QStringList> assignmentsByElement(
@@ -52,6 +77,133 @@ DomainAssignmentPresence DomainAssignmentAggregate::presence(
     return presenceByDomain.value(domainId, DomainAssignmentPresence::None);
 }
 
+const QVector<DomainAssignmentRule>&
+DomainAssignmentAggregate::editingRules() const {
+    return eligibleRules.isEmpty() ? applicableRules : eligibleRules;
+}
+
+bool DomainAssignmentAggregate::usesSingleAssignmentEditor() const {
+    const QVector<DomainAssignmentRule>& rules = editingRules();
+    return !rules.isEmpty()
+        && std::all_of(rules.cbegin(), rules.cend(), [](const auto& rule) {
+               return rule.isSingleAssignment();
+           });
+}
+
+bool DomainAssignmentAggregate::requiresAssignment() const {
+    const QVector<DomainAssignmentRule>& rules = editingRules();
+    return std::any_of(rules.cbegin(), rules.cend(), [](const auto& rule) {
+        return rule.requiresAssignment();
+    });
+}
+
+bool DomainAssignmentAggregate::acceptsReplacementCount(
+    qsizetype count) const {
+    return !eligibleRules.isEmpty()
+        && std::all_of(
+            eligibleRules.cbegin(), eligibleRules.cend(),
+            [count](const auto& rule) {
+                return rule.acceptsCount(count);
+            });
+}
+
+DomainAssignmentPatchEvaluation DomainAssignmentAggregate::evaluatePatch(
+    const DomainAssignmentPatch& patch) const {
+    DomainAssignmentPatchEvaluation evaluation;
+    if (eligibleElementRefs.isEmpty()
+        || (patch.replacement
+            && (!patch.ensurePresent.isEmpty()
+                || !patch.ensureAbsent.isEmpty()))) {
+        return evaluation;
+    }
+
+    const QSet<QString> ensurePresent =
+        normalizedDomainIdSet(patch.ensurePresent);
+    const QSet<QString> ensureAbsent =
+        normalizedDomainIdSet(patch.ensureAbsent);
+    for (const QString& domainId : ensurePresent) {
+        if (ensureAbsent.contains(domainId)) {
+            return evaluation;
+        }
+    }
+
+    if (patch.replacement) {
+        const qsizetype replacementCount =
+            normalizedDomainIdSet(*patch.replacement).size();
+        for (const DomainAssignmentRule& rule : eligibleRules) {
+            if (rule.acceptsCount(replacementCount)) {
+                continue;
+            }
+            const auto reference = std::find_if(
+                eligibleElementRefs.cbegin(), eligibleElementRefs.cend(),
+                [&](const ElementRef& candidate) {
+                    return candidate.kind == rule.elementKind;
+                });
+            if (reference == eligibleElementRefs.cend()) {
+                return evaluation;
+            }
+            evaluation.violatingElement = *reference;
+            evaluation.violatedRule = rule;
+            evaluation.resultingAssignmentCount = replacementCount;
+            return evaluation;
+        }
+        evaluation.accepted = !eligibleRules.isEmpty();
+        return evaluation;
+    }
+
+    for (const ElementRef& reference : eligibleElementRefs) {
+        const DomainAssignmentRule* rule = ruleForKind(
+            eligibleRules, reference.kind);
+        const auto current = assignmentsByEligibleElement.constFind(reference);
+        if (!rule) {
+            return evaluation;
+        }
+
+        const QStringList* currentAssignments =
+            current == assignmentsByEligibleElement.constEnd()
+            ? nullptr : &current.value();
+        qsizetype resultingCount = currentAssignments
+            ? currentAssignments->size() : 0;
+        for (const QString& domainId : ensureAbsent) {
+            if (currentAssignments
+                && currentAssignments->contains(domainId)) {
+                --resultingCount;
+            }
+        }
+        for (const QString& domainId : ensurePresent) {
+            if (!currentAssignments
+                || !currentAssignments->contains(domainId)) {
+                ++resultingCount;
+            }
+        }
+        if (!rule->acceptsCount(resultingCount)) {
+            evaluation.violatingElement = reference;
+            evaluation.violatedRule = *rule;
+            evaluation.resultingAssignmentCount = resultingCount;
+            return evaluation;
+        }
+    }
+    evaluation.accepted = true;
+    return evaluation;
+}
+
+bool DomainAssignmentAggregate::acceptsPatch(
+    const DomainAssignmentPatch& patch) const {
+    return evaluatePatch(patch).accepted;
+}
+
+bool DomainAssignmentAggregate::permitsClearing() const {
+    return acceptsReplacementCount(0);
+}
+
+bool DomainAssignmentAggregate::assignmentRulesAreValid() const {
+    const QVector<DomainAssignmentRule>& rules = editingRules();
+    return !rules.isEmpty()
+        && std::all_of(rules.cbegin(), rules.cend(), [](const auto& rule) {
+               return rule.isValid();
+           });
+}
+
 DomainAssignmentAggregate buildDomainAssignmentAggregate(
     const NocDesign& design,
     const PackageDefinition& package,
@@ -78,8 +230,12 @@ DomainAssignmentAggregate buildDomainAssignmentAggregate(
     }
     aggregate.domainTypeLabel = type->label.isEmpty()
         ? aggregate.domainType : type->label;
-    aggregate.cardinality = type->cardinality;
-    aggregate.required = type->required;
+    for (ElementKind kind : {ElementKind::Router, ElementKind::Endpoint}) {
+        if (const std::optional<DomainAssignmentRule> rule =
+                type->assignmentRule(kind)) {
+            aggregate.applicableRules.append(*rule);
+        }
+    }
 
     QSet<QString> seenDomainIds;
     for (const DomainDefinition& domain : design.domains) {
@@ -97,12 +253,16 @@ DomainAssignmentAggregate buildDomainAssignmentAggregate(
     }
 
     for (const ElementRef& reference : std::as_const(normalizedSelection)) {
-        if (!isDomainMembershipElementKind(reference.kind)
-            || !appliesTo(*type, reference.kind)
+        const std::optional<DomainAssignmentRule> rule =
+            type->assignmentRule(reference.kind);
+        if (!isDomainMembershipElementKind(reference.kind) || !rule
             || !designReferenceExists(design, reference)) {
             continue;
         }
         aggregate.eligibleElementRefs.append(reference);
+        if (!ruleForKind(aggregate.eligibleRules, reference.kind)) {
+            aggregate.eligibleRules.append(*rule);
+        }
     }
     aggregate.eligibleElements = aggregate.eligibleElementRefs.size();
     if (aggregate.eligibleElements == 0) {
@@ -120,6 +280,10 @@ DomainAssignmentAggregate buildDomainAssignmentAggregate(
 
     for (const ElementRef& reference : std::as_const(aggregate.eligibleElementRefs)) {
         const QStringList assignments = elementAssignments.value(reference);
+        if (!assignments.isEmpty()) {
+            aggregate.assignmentsByEligibleElement.insert(
+                reference, assignments);
+        }
         if (first) {
             firstAssignments = assignments;
             aggregate.commonAssignments = assignments;
@@ -163,14 +327,14 @@ QVector<ElementRef> buildDomainAssignmentSelection(
     DomainAssignmentSelectionScope scope,
     const QString& domainId) {
     QVector<ElementRef> candidates;
-    if (appliesTo(type, ElementKind::Router)) {
+    if (type.assignmentRule(ElementKind::Router)) {
         candidates.reserve(resolved.topology.routers.size()
                            + resolved.topology.endpoints.size());
         for (const RouterView& router : resolved.topology.routers) {
             candidates.append(ElementRef{ElementKind::Router, router.id});
         }
     }
-    if (appliesTo(type, ElementKind::Endpoint)) {
+    if (type.assignmentRule(ElementKind::Endpoint)) {
         for (const EndpointView& endpoint : resolved.topology.endpoints) {
             candidates.append(ElementRef{ElementKind::Endpoint, endpoint.id});
         }

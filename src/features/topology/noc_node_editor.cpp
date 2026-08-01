@@ -1,6 +1,7 @@
 #include "features/topology/noc_node_editor.h"
 
 #include "application/endpoint_domain_assignment.h"
+#include "features/domain/presentation/domain_text.h"
 #include "features/topology/animated_graphics_view.h"
 #include "features/topology/noc_editor_style.h"
 #include "ui/workbench/workbench_config.h"
@@ -25,6 +26,7 @@
 #include <QDebug>
 #include <QDropEvent>
 #include <QEvent>
+#include <QFontMetrics>
 #include <QGraphicsItem>
 #include <QGraphicsPathItem>
 #include <QKeyEvent>
@@ -89,6 +91,16 @@ constexpr unsigned int individualVisibleRouterAttachmentPortCount(
     unsigned int logicalCount) {
     return logicalCount > kMaximumVisibleRouterAttachmentPorts
         ? kMaximumVisibleRouterAttachmentPorts - 1U : logicalCount;
+}
+
+QString routerAttachmentAggregateText(unsigned int logicalCount,
+                                      bool overflow) {
+    if (overflow) {
+        return QStringLiteral("%1 more ports").arg(
+            logicalCount
+            - individualVisibleRouterAttachmentPortCount(logicalCount));
+    }
+    return QStringLiteral("%1 endpoint ports").arg(logicalCount);
 }
 
 constexpr bool hasRouterAttachmentPortOverflow(unsigned int logicalCount) {
@@ -288,7 +300,15 @@ public:
             return nocEditorMetrics().endpointSize;
         }
         if (model->isCollapsed()) {
-            return nocEditorMetrics().collapsedRouterSize;
+            const QSize base = nocEditorMetrics().collapsedRouterSize;
+            const QFontMetrics metrics(nocEditorFont(
+                NocEditorFontRole::Caption, QApplication::font()));
+            const int requiredEdge = metrics.horizontalAdvance(
+                routerAttachmentAggregateText(
+                    model->attachmentPortCount(), false)) + 28;
+            const int edge = (std::max)(
+                (std::max)(base.width(), base.height()), requiredEdge);
+            return QSize(edge, edge);
         }
         const QSize base = nocEditorMetrics().expandedRouterSize;
         const unsigned int largestBandCount =
@@ -298,9 +318,17 @@ public:
             + static_cast<qreal>(largestBandCount > 0U
                                      ? largestBandCount - 1U : 0U)
                 * kRouterAttachmentPortSpacing * 2.0;
-        const int edge = (std::max)(
+        int edge = (std::max)(
             (std::max)(base.width(), base.height()),
             static_cast<int>(std::ceil(requiredEdge)));
+        if (hasRouterAttachmentPortOverflow(model->attachmentPortCount())) {
+            const QFontMetrics metrics(nocEditorFont(
+                NocEditorFontRole::Caption, QApplication::font()));
+            edge = (std::max)(
+                edge,
+                metrics.horizontalAdvance(routerAttachmentAggregateText(
+                    model->attachmentPortCount(), true)) + 28);
+        }
         return QSize(edge, edge);
     }
 
@@ -543,7 +571,10 @@ public:
             NocEditorFontRole::Label, QApplication::font()));
         const QRectF captionRect = model && model->isRouter()
             ? (model->isCollapsed()
-                   ? body.adjusted(18.0, 32.0, -18.0, -18.0)
+                   ? QRectF(body.left() + 14.0,
+                            body.top() + body.height() * 0.30,
+                            body.width() - 28.0,
+                            body.height() * 0.30)
                    : body.adjusted(38.0, 38.0, -38.0, -38.0))
             : body.adjusted(12.0, 7.0, -12.0, -7.0);
         painter->drawText(captionRect,
@@ -653,6 +684,7 @@ private:
             NocEditorFontRole::Caption, QApplication::font());
         portFont.setWeight(QFont::DemiBold);
         painter->setFont(portFont);
+        const QFontMetricsF portMetrics(portFont);
         for (unsigned int index = 0; index < paintedCount; ++index) {
             const bool collapsedAggregate = model
                 && model->isRouter() && model->isCollapsed()
@@ -673,13 +705,11 @@ private:
 
             QString label = model ? model->portCaption(type, index) : QString();
             if (collapsedAggregate) {
-                label = QStringLiteral("EP×%1").arg(
-                    model->attachmentPortCount());
+                label = routerAttachmentAggregateText(
+                    model->attachmentPortCount(), false);
             } else if (overflowAggregate) {
-                label = QStringLiteral("+%1").arg(
-                    model->attachmentPortCount()
-                    - individualVisibleRouterAttachmentPortCount(
-                        model->attachmentPortCount()));
+                label = routerAttachmentAggregateText(
+                    model->attachmentPortCount(), true);
             }
             if (label.isEmpty()) {
                 continue;
@@ -702,10 +732,23 @@ private:
                 if (westRouterPort) {
                     labelLeft = model->isCollapsed() ? 12.0 : 40.0;
                 }
+                const qreal labelHeight = aggregateAttachment
+                    ? (std::max)(16.0, portMetrics.height() + 2.0)
+                    : 16.0;
+                const qreal maximumWidth = (std::max)(
+                    28.0,
+                    static_cast<qreal>(nodeSize.width()) - labelLeft - 8.0);
+                const qreal labelWidth = aggregateAttachment
+                    ? (std::min)(
+                          maximumWidth,
+                          (std::max)(
+                              48.0,
+                              portMetrics.horizontalAdvance(label) + 6.0))
+                    : 28.0;
                 labelRect = QRectF(labelLeft,
-                                   center.y() - 8.0,
-                                   aggregateAttachment ? 48.0 : 28.0,
-                                   16.0);
+                                   center.y() - labelHeight / 2.0,
+                                   labelWidth,
+                                   labelHeight);
             } else {
                 labelRect = QRectF(nodeSize.width() - 36.0,
                                    center.y() - 8.0,
@@ -1038,9 +1081,13 @@ void NocNodeEditor::changeEvent(QEvent* event) {
     if (!event) {
         return;
     }
+    const bool geometryChanged = event->type() == QEvent::FontChange
+        || event->type() == QEvent::ApplicationFontChange
+        || event->type() == QEvent::StyleChange;
     if (event->type() != QEvent::PaletteChange
         && event->type() != QEvent::ApplicationPaletteChange
         && event->type() != QEvent::FontChange
+        && event->type() != QEvent::ApplicationFontChange
         && event->type() != QEvent::StyleChange) {
         return;
     }
@@ -1055,6 +1102,15 @@ void NocNodeEditor::changeEvent(QEvent* event) {
         && m_endpointAttachmentDraft->graphicsItem) {
         m_endpointAttachmentDraft->graphicsItem->setPen(
             draftConnectionPen(palette()));
+    }
+    if (geometryChanged && m_scene && m_graphModel) {
+        for (const QtNodes::NodeId nodeId : m_graphModel->allNodeIds()) {
+            if (auto* node = m_scene->nodeGraphicsObject(nodeId)) {
+                node->setGeometryChanged();
+                m_scene->nodeGeometry().recomputeSize(nodeId);
+                node->moveConnections();
+            }
+        }
     }
     if (m_scene) {
         m_scene->update();
@@ -1374,10 +1430,9 @@ void NocNodeEditor::setDomainPresentation(
     }
     m_domainPresentation = std::move(presentation);
     if (m_view) {
-        QString layerLabel = m_domainPresentation.domainTypeLabel.trimmed();
-        if (layerLabel.isEmpty()) {
-            layerLabel = m_domainPresentation.activeDomainType.trimmed();
-        }
+        QString layerLabel = domain_text::domainTypeDisplayText(
+            m_domainPresentation.activeDomainType,
+            m_domainPresentation.domainTypeLabel);
         if (m_domainPresentation.status == DomainPresentationStatus::Inactive
             || m_domainPresentation.activeDomainType.trimmed().isEmpty()) {
             m_view->setDomainLegend({}, {}, {});
@@ -1387,7 +1442,8 @@ void NocNodeEditor::setDomainPresentation(
             for (const DomainLegendEntry& entry : m_domainPresentation.legend) {
                 entries.append(CanvasDomainLegendEntry{
                     entry.id,
-                    entry.name.trimmed().isEmpty() ? entry.id : entry.name,
+                    domain_text::domainInstanceDisplayText(
+                        entry.id, entry.name),
                     entry.color,
                 });
             }
@@ -1614,6 +1670,16 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
             node->setZValue(
                 iterator->kind == NocEditorSelection::Kind::Router
                     ? kRouterNodeZValue : kEndpointNodeZValue);
+            if (iterator->kind == NocEditorSelection::Kind::Router) {
+                const QString action = routerCollapsed(iterator->id)
+                    ? QStringLiteral("expand")
+                    : QStringLiteral("collapse");
+                node->setToolTip(
+                    QStringLiteral(
+                        "Router %1. Click the top-right control to %2 "
+                        "details, or select the Router and press Space.")
+                        .arg(iterator->id, action));
+            }
         }
     }
     applyDomainPresentation();
@@ -3913,10 +3979,9 @@ void NocNodeEditor::updateCanvasAccessibleDescription() {
         return;
     }
 
-    QString layerLabel = m_domainPresentation.domainTypeLabel.trimmed();
-    if (layerLabel.isEmpty()) {
-        layerLabel = m_domainPresentation.activeDomainType.trimmed();
-    }
+    const QString layerLabel = domain_text::domainTypeDisplayText(
+        m_domainPresentation.activeDomainType,
+        m_domainPresentation.domainTypeLabel);
     description += QStringLiteral(" Current domain layer: %1.").arg(layerLabel);
     if (m_domainPresentation.status
         == DomainPresentationStatus::MissingPackageType) {
@@ -3933,8 +3998,8 @@ void NocNodeEditor::updateCanvasAccessibleDescription() {
     domainNames.reserve(visibleCount);
     for (qsizetype index = 0; index < visibleCount; ++index) {
         const DomainLegendEntry& entry = m_domainPresentation.legend.at(index);
-        domainNames.append(entry.name.trimmed().isEmpty()
-                               ? entry.id : entry.name);
+        domainNames.append(domain_text::domainInstanceDisplayText(
+            entry.id, entry.name));
     }
     if (domainNames.isEmpty()) {
         description += QStringLiteral(" No assigned domains.");
@@ -3946,6 +4011,9 @@ void NocNodeEditor::updateCanvasAccessibleDescription() {
                 m_domainPresentation.legend.size() - visibleCount);
         }
     }
+    description += QStringLiteral(
+        " Dashed connections indicate Domain crossings. A diamond marker "
+        "indicates an edge override.");
     m_view->setAccessibleDescription(description);
 }
 

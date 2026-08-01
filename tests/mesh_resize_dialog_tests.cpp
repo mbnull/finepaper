@@ -10,6 +10,7 @@
 #include <QTextStream>
 
 #include <algorithm>
+#include <optional>
 
 namespace {
 
@@ -40,6 +41,21 @@ DomainTypeDefinition domainType(
     return type;
 }
 
+DomainTypeDefinition constrainedDomainType(
+    const QString& id,
+    const QString& label,
+    qsizetype minimumAssignments,
+    std::optional<qsizetype> maximumAssignments) {
+    DomainTypeDefinition type;
+    type.id = id;
+    type.label = label;
+    type.assignmentRules = {DomainAssignmentRule{
+        ElementKind::Router,
+        minimumAssignments,
+        maximumAssignments}};
+    return type;
+}
+
 PackageDefinition packageFixture() {
     PackageDefinition package;
     package.formatVersion = 2;
@@ -56,10 +72,10 @@ PackageDefinition packageFixture() {
                    QStringLiteral("Fabric zone"),
                    DomainCardinality::Single,
                    true),
-        domainType(QStringLiteral("security-label"),
-                   QStringLiteral("Security labels"),
-                   DomainCardinality::Multiple,
-                   true),
+        constrainedDomainType(QStringLiteral("security-label"),
+                              QStringLiteral("Security labels"),
+                              2,
+                              3),
         domainType(QStringLiteral("retention-class"),
                    QStringLiteral("Retention class"),
                    DomainCardinality::Single,
@@ -104,6 +120,12 @@ NocDesign growthDesign() {
         domain(QStringLiteral("label-blue"),
                QStringLiteral("security-label"),
                QStringLiteral("Blue")),
+        domain(QStringLiteral("label-green"),
+               QStringLiteral("security-label"),
+               QStringLiteral("Green")),
+        domain(QStringLiteral("label-yellow"),
+               QStringLiteral("security-label"),
+               QStringLiteral("Yellow")),
         domain(QStringLiteral("retention-only"),
                QStringLiteral("retention-class"),
                QStringLiteral("Always retained")),
@@ -203,7 +225,7 @@ void configurableTopologyTextPreservesPercentPlaceholders() {
     const QString domainLabel = QStringLiteral("Power %2 / Clock %3");
     check(
         topology_text::compactDomainLegendEntryText(domainLabel, 4)
-            == QStringLiteral("Power %2 / Clock %3 · 4 total"),
+            == QStringLiteral("4 total · Power %2 / Clock %3"),
         QStringLiteral(
             "compact Domain legends preserve placeholder-like Package labels"));
 }
@@ -258,6 +280,10 @@ void arbitraryTypesAndPerRouterAssignmentsAreComplete() {
         dialog, firstRouter, QStringLiteral("retention-class"));
     auto* firstMarks = assignmentEditor<QListWidget>(
         dialog, firstRouter, QStringLiteral("traffic-mark"));
+    auto* boundedConstraint = assignmentEditor<QLabel>(
+        dialog, firstRouter, QStringLiteral("security-label"));
+    auto* unboundedConstraint = assignmentEditor<QLabel>(
+        dialog, firstRouter, QStringLiteral("traffic-mark"));
     check(firstZone && firstLabels && firstRetention && firstMarks,
           QStringLiteral("all arbitrary Router-applicable Package types get an editor"));
     check(!assignmentEditor<QComboBox>(
@@ -267,13 +293,49 @@ void arbitraryTypesAndPerRouterAssignmentsAreComplete() {
               && firstRetention->currentData().toString()
                   == QStringLiteral("retention-only"),
           QStringLiteral("a unique required instance is visibly selected automatically"));
+    check(boundedConstraint
+              && boundedConstraint->text().contains(
+                  QStringLiteral("minimum 2"))
+              && boundedConstraint->text().contains(
+                  QStringLiteral("maximum 3")),
+          QStringLiteral(
+              "finite canonical Router constraints are stated in visible text"));
+    check(unboundedConstraint
+              && unboundedConstraint->text().contains(
+                  QStringLiteral("minimum 0"))
+              && unboundedConstraint->text().contains(
+                  QStringLiteral("maximum unbounded")),
+          QStringLiteral(
+              "unbounded canonical Router constraints are stated in visible text"));
 
     check(chooseSingle(firstZone, QStringLiteral("zone-a"))
               && setMultiple(firstLabels,
-                             {QStringLiteral("label-red")})
+                             {QStringLiteral("label-red")}),
+          QStringLiteral(
+              "the bounded canonical editor accepts an assignment below its minimum"));
+    check(!routers->currentItem()->data(Qt::UserRole + 1).toBool(),
+          QStringLiteral(
+              "a Router remains incomplete below the canonical minimum"));
+    check(setMultiple(firstLabels,
+                      {QStringLiteral("label-blue"),
+                       QStringLiteral("label-green"),
+                       QStringLiteral("label-red"),
+                       QStringLiteral("label-yellow")}),
+          QStringLiteral(
+              "the bounded editor exposes all available Package instances"));
+    check(!routers->currentItem()->data(Qt::UserRole + 1).toBool()
+              && dialog.localErrors().join(QLatin1Char('\n')).contains(
+                  QStringLiteral("at most 3")),
+          QStringLiteral(
+              "a Router remains incomplete above the finite canonical maximum"));
+    check(setMultiple(firstLabels,
+                      {QStringLiteral("label-blue"),
+                       QStringLiteral("label-red")})
               && setMultiple(firstMarks,
-                             {QStringLiteral("mark-latency")}),
-          QStringLiteral("first Router accepts Single, required Multiple, and optional Multiple choices"));
+                             {QStringLiteral("mark-latency"),
+                              QStringLiteral("mark-bulk")}),
+          QStringLiteral(
+              "the Router accepts a min-two bounded choice and multiple unbounded choices"));
     check(routers->currentItem()->data(Qt::UserRole + 1).toBool(),
           QStringLiteral("Router navigator marks a fully assigned Router complete"));
 
@@ -288,7 +350,8 @@ void arbitraryTypesAndPerRouterAssignmentsAreComplete() {
               && setMultiple(
                   assignmentEditor<QListWidget>(
                       dialog, secondRouter, QStringLiteral("security-label")),
-                  {QStringLiteral("label-blue")}),
+                  {QStringLiteral("label-blue"),
+                   QStringLiteral("label-green")}),
           QStringLiteral("a second Router can receive a different explicit assignment"));
 
     routers->setCurrentRow(0);
@@ -306,7 +369,8 @@ void arbitraryTypesAndPerRouterAssignmentsAreComplete() {
               && setMultiple(
                   assignmentEditor<QListWidget>(
                       dialog, secondRouter, QStringLiteral("security-label")),
-                  {QStringLiteral("label-blue")}),
+                  {QStringLiteral("label-blue"),
+                   QStringLiteral("label-green")}),
           QStringLiteral("copied assignments remain independently editable per Router"));
 
     const QVector<DomainMembership> memberships =
@@ -319,17 +383,20 @@ void arbitraryTypesAndPerRouterAssignmentsAreComplete() {
               && first->assignments.value(QStringLiteral("fabric-zone"))
                   == QStringList{QStringLiteral("zone-a")}
               && first->assignments.value(QStringLiteral("security-label"))
-                  == QStringList{QStringLiteral("label-red")}
+                  == QStringList{QStringLiteral("label-blue"),
+                                 QStringLiteral("label-red")}
               && first->assignments.value(QStringLiteral("retention-class"))
                   == QStringList{QStringLiteral("retention-only")}
               && first->assignments.value(QStringLiteral("traffic-mark"))
-                  == QStringList{QStringLiteral("mark-latency")},
+                  == QStringList{QStringLiteral("mark-bulk"),
+                                 QStringLiteral("mark-latency")},
           QStringLiteral("first Router preserves its explicit and automatic assignments"));
     check(second
               && second->assignments.value(QStringLiteral("fabric-zone"))
                   == QStringList{QStringLiteral("zone-b")}
               && second->assignments.value(QStringLiteral("security-label"))
-                  == QStringList{QStringLiteral("label-blue")}
+                  == QStringList{QStringLiteral("label-blue"),
+                                 QStringLiteral("label-green")}
               && second->assignments.value(QStringLiteral("retention-class"))
                   == QStringList{QStringLiteral("retention-only")},
           QStringLiteral("second Router resolves a genuinely different Package-driven assignment"));

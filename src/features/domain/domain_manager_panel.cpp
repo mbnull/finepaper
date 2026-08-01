@@ -1,6 +1,7 @@
 #include "features/domain/domain_manager_panel.h"
 
 #include "features/domain/domain_instance_dialog.h"
+#include "features/domain/presentation/domain_text.h"
 #include "ui/theme/ui_tokens.h"
 
 #include <QAbstractItemView>
@@ -57,6 +58,59 @@ QString assignmentStateId(DomainAssignmentAggregateState state) {
 
 QString domainDisplayName(const DomainDefinition& domain) {
     return domain.name.trimmed().isEmpty() ? domain.id : domain.name;
+}
+
+QString assignmentLimitsText(
+    const QVector<DomainAssignmentRule>& rules) {
+    QStringList limits;
+    for (const DomainAssignmentRule& rule : rules) {
+        limits.append(
+            domain_text::domainAssignmentConstraintText(rule));
+    }
+    return limits.join(QLatin1Char(' '));
+}
+
+QString assignmentPatchFeedback(
+    const DomainAssignmentPatchEvaluation& evaluation) {
+    if (evaluation.accepted) {
+        return {};
+    }
+    if (!evaluation.violatingElement || !evaluation.violatedRule) {
+        return QStringLiteral(
+            "Cannot apply this incomplete Domain assignment change.");
+    }
+
+    const DomainAssignmentRule& rule = *evaluation.violatedRule;
+    const QString kind = domain_text::elementKindDisplayText(
+        evaluation.violatingElement->kind);
+    const QString count = evaluation.resultingAssignmentCount == 1
+        ? QStringLiteral("1 Domain assignment")
+        : QStringLiteral("%1 Domain assignments")
+              .arg(evaluation.resultingAssignmentCount);
+    if (!rule.isValid()) {
+        return QStringLiteral(
+                   "Cannot apply: the Package assignment rule for %1 %2 is "
+                   "invalid.")
+            .arg(kind, evaluation.violatingElement->id);
+    }
+    if (evaluation.resultingAssignmentCount < rule.minimumAssignments) {
+        return QStringLiteral(
+                   "Cannot apply: %1 %2 would have %3; minimum is %4.")
+            .arg(kind,
+                 evaluation.violatingElement->id,
+                 count,
+                 QString::number(rule.minimumAssignments));
+    }
+    if (rule.maximumAssignments
+        && evaluation.resultingAssignmentCount > *rule.maximumAssignments) {
+        return QStringLiteral(
+                   "Cannot apply: %1 %2 would have %3; maximum is %4.")
+            .arg(kind,
+                 evaluation.violatingElement->id,
+                 count,
+                 QString::number(*rule.maximumAssignments));
+    }
+    return QStringLiteral("Cannot apply this Domain assignment change.");
 }
 
 } // namespace
@@ -187,6 +241,15 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
         QStringLiteral("Domain assignments for the current selection"));
     m_multipleAssignment->setAlternatingRowColors(true);
     assignmentLayout->addWidget(m_multipleAssignment, 1);
+    m_assignmentFeedback = new QLabel;
+    m_assignmentFeedback->setObjectName(
+        QStringLiteral("finepaper.domainManager.assignmentFeedback"));
+    m_assignmentFeedback->setAccessibleName(
+        QStringLiteral("Domain assignment constraint feedback"));
+    m_assignmentFeedback->setTextFormat(Qt::PlainText);
+    m_assignmentFeedback->setWordWrap(true);
+    m_assignmentFeedback->hide();
+    assignmentLayout->addWidget(m_assignmentFeedback);
     auto* assignmentButtons = new QGridLayout;
     m_applyAssignment = new QPushButton(QStringLiteral("Apply changes"));
     m_applyAssignment->setObjectName(
@@ -387,8 +450,7 @@ void DomainManagerPanel::rebuildTypeSelector(const QString& preferredType) {
         && formatVersionSupportsDomains(m_package->formatVersion)) {
         for (const DomainTypeDefinition& type : m_package->domainTypes) {
             m_typeSelector->addItem(
-                type.label.trimmed().isEmpty() ? type.id : type.label,
-                type.id);
+                domain_text::domainTypeDisplayText(type), type.id);
         }
     }
     int selectedIndex = m_typeSelector->findData(preferredType);
@@ -535,9 +597,15 @@ void DomainManagerPanel::refreshAssignment() {
                                        .arg(m_assignment.totalElements));
         break;
     }
-
     const DomainTypeDefinition* type = selectedType();
-    const bool single = type && type->cardinality == DomainCardinality::Single;
+    const QString limits = assignmentLimitsText(m_assignment.editingRules());
+    if (!limits.isEmpty()) {
+        m_assignmentState->setText(
+            m_assignmentState->text()
+            + QStringLiteral("\nAssignment limits: %1").arg(limits));
+    }
+
+    const bool single = type && m_assignment.usesSingleAssignmentEditor();
     m_singleAssignment->setVisible(single);
     m_multipleAssignment->setVisible(type && !single);
     if (type && single) {
@@ -545,7 +613,7 @@ void DomainManagerPanel::refreshAssignment() {
             m_singleAssignment->addItem(
                 QStringLiteral("Mixed — choose a replacement"));
         }
-        if (!type->required) {
+        if (!m_assignment.requiresAssignment()) {
             m_singleAssignment->addItem(QStringLiteral("Unassigned"), QString());
         }
         for (const QString& domainId : m_assignment.domainIds) {
@@ -668,12 +736,26 @@ void DomainManagerPanel::updateActionState() {
         QStringLiteral("Select unassigned (%1)").arg(unassigned.size()));
     m_selectUnassigned->setEnabled(
         selectionEnabled && !unassigned.isEmpty());
-    const bool eligible = editable && m_assignment.eligibleElements > 0;
+    const bool eligible = editable && m_assignment.eligibleElements > 0
+        && m_assignment.assignmentRulesAreValid();
     m_singleAssignment->setEnabled(eligible && !m_clearAssignmentStaged);
     m_multipleAssignment->setEnabled(eligible && !m_clearAssignmentStaged);
-    m_applyAssignment->setEnabled(eligible && m_assignmentEdited);
+    const std::optional<DomainAssignmentPatch> stagedPatch =
+        stagedAssignmentPatch();
+    const DomainAssignmentPatchEvaluation patchEvaluation = stagedPatch
+        ? m_assignment.evaluatePatch(*stagedPatch)
+        : DomainAssignmentPatchEvaluation{};
+    const QString patchFeedback = m_assignmentEdited
+        ? assignmentPatchFeedback(patchEvaluation) : QString();
+    m_assignmentFeedback->setText(patchFeedback);
+    m_assignmentFeedback->setVisible(!patchFeedback.isEmpty());
+    m_applyAssignment->setToolTip(patchFeedback);
+    m_applyAssignment->setAccessibleDescription(patchFeedback);
+    m_applyAssignment->setEnabled(
+        eligible && m_assignmentEdited && stagedPatch
+        && patchEvaluation.accepted);
     m_clearAssignment->setEnabled(
-        eligible && !m_assignment.required
+        eligible && m_assignment.permitsClearing()
         && m_assignment.state != DomainAssignmentAggregateState::Unassigned
         && !m_assignmentEdited);
     m_discardAssignment->setEnabled(m_assignmentEdited);
@@ -780,17 +862,14 @@ void DomainManagerPanel::selectUnassigned() {
         DomainAssignmentSelectionScope::Unassigned));
 }
 
-void DomainManagerPanel::applyAssignment() {
-    if (!assignmentPatchRequested || m_assignment.eligibleElementRefs.isEmpty()
-        || !selectedType()) {
-        return;
-    }
+std::optional<DomainAssignmentPatch>
+DomainManagerPanel::stagedAssignmentPatch() const {
     DomainAssignmentPatch patch;
     if (m_clearAssignmentStaged) {
         patch.replacement = QStringList{};
-    } else if (selectedType()->cardinality == DomainCardinality::Single) {
+    } else if (m_assignment.usesSingleAssignmentEditor()) {
         if (!m_singleAssignment->currentData().isValid()) {
-            return;
+            return std::nullopt;
         }
         const QString domainId = m_singleAssignment->currentData().toString();
         patch.replacement = domainId.isEmpty()
@@ -806,15 +885,32 @@ void DomainManagerPanel::applyAssignment() {
                 patch.ensurePresent.append(domainId);
             } else if (item->checkState() == Qt::Unchecked) {
                 patch.ensureAbsent.append(domainId);
+            } else {
+                return std::nullopt;
             }
         }
     }
+    return patch;
+}
+
+void DomainManagerPanel::applyAssignment() {
+    if (!assignmentPatchRequested || m_assignment.eligibleElementRefs.isEmpty()
+        || !selectedType()) {
+        return;
+    }
+    std::optional<DomainAssignmentPatch> patch = stagedAssignmentPatch();
+    if (!patch || !m_assignment.acceptsPatch(*patch)) {
+        return;
+    }
     assignmentPatchRequested(
-        m_assignment.eligibleElementRefs, currentDomainType(), std::move(patch));
+        m_assignment.eligibleElementRefs,
+        currentDomainType(),
+        std::move(*patch));
 }
 
 void DomainManagerPanel::clearAssignment() {
-    if (m_assignment.eligibleElementRefs.isEmpty() || m_assignment.required
+    if (m_assignment.eligibleElementRefs.isEmpty()
+        || !m_assignment.permitsClearing()
         || m_assignmentEdited) {
         return;
     }
@@ -822,8 +918,7 @@ void DomainManagerPanel::clearAssignment() {
     m_assignmentEdited = true;
     m_touchedAssignmentDomains.clear();
     m_updating = true;
-    if (selectedType()
-        && selectedType()->cardinality == DomainCardinality::Single) {
+    if (selectedType() && m_assignment.usesSingleAssignmentEditor()) {
         const int unassigned = m_singleAssignment->findData(QString());
         if (unassigned >= 0) {
             m_singleAssignment->setCurrentIndex(unassigned);
@@ -881,7 +976,7 @@ void DomainManagerPanel::handleAssignmentItemChanged(QListWidgetItem* item) {
 void DomainManagerPanel::updateSingleAssignmentEdited() {
     const bool wasEdited = m_assignmentEdited;
     if (!selectedType()
-        || selectedType()->cardinality != DomainCardinality::Single
+        || !m_assignment.usesSingleAssignmentEditor()
         || !m_singleAssignment->currentData().isValid()) {
         m_assignmentEdited = false;
         if (m_selectionChangedWhileEditing) {
