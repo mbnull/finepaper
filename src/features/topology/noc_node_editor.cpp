@@ -18,6 +18,8 @@
 #include <QtNodes/internal/ConnectionGraphicsObject.hpp>
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 
+#include <QApplication>
+#include <QBrush>
 #include <QDragEnterEvent>
 #include <QContextMenuEvent>
 #include <QDebug>
@@ -25,9 +27,12 @@
 #include <QEvent>
 #include <QGraphicsItem>
 #include <QGraphicsPathItem>
+#include <QKeyEvent>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QPushButton>
 #include <QSet>
 #include <QSignalBlocker>
 #include <QTimer>
@@ -51,10 +56,62 @@ constexpr QtNodes::PortIndex kRouterEastOutPort = portIndex(RouterOutputPort::Ea
 constexpr QtNodes::PortIndex kRouterSouthOutPort = portIndex(RouterOutputPort::South);
 constexpr QtNodes::PortIndex kEndpointOutPort = portIndex(EndpointOutputPort::Attachment);
 constexpr qreal kInteractivePortHitRadius = 14.0;
+constexpr int kInteractiveConnectionHitRadius = 8;
+constexpr qreal kScenePortHitRadius = 10.0;
+constexpr unsigned int kMaximumVisibleRouterAttachmentPorts = 8U;
 constexpr qreal kRouterNodeZValue = 10.0;
 constexpr qreal kEndpointNodeZValue = 20.0;
+constexpr qsizetype kMaximumVisibleDomainStripSegments = 8;
+constexpr qreal kRouterAttachmentPortSpacing = 28.0;
+constexpr qreal kRouterAttachmentUpperStart = 38.0;
+constexpr qreal kRouterAttachmentCenterGapTop = 14.0;
+constexpr qreal kRouterAttachmentCenterGapBottom = 26.0;
+constexpr qreal kRouterAttachmentBottomInset = 26.0;
+
+constexpr qreal squared(qreal value) {
+    return value * value;
+}
+
+qreal squaredDistance(const QPointF& first, const QPointF& second) {
+    return squared(first.x() - second.x())
+        + squared(first.y() - second.y());
+}
 constexpr int kSemanticElementKindDataRole = 0x464e02;
 constexpr int kSemanticElementIdDataRole = 0x464e03;
+
+constexpr unsigned int visibleRouterAttachmentPortCount(
+    unsigned int logicalCount) {
+    return logicalCount > kMaximumVisibleRouterAttachmentPorts
+        ? kMaximumVisibleRouterAttachmentPorts : logicalCount;
+}
+
+constexpr unsigned int individualVisibleRouterAttachmentPortCount(
+    unsigned int logicalCount) {
+    return logicalCount > kMaximumVisibleRouterAttachmentPorts
+        ? kMaximumVisibleRouterAttachmentPorts - 1U : logicalCount;
+}
+
+constexpr bool hasRouterAttachmentPortOverflow(unsigned int logicalCount) {
+    return logicalCount > kMaximumVisibleRouterAttachmentPorts;
+}
+
+constexpr unsigned int visualRouterAttachmentPortOffset(
+    unsigned int logicalOffset,
+    unsigned int logicalCount) {
+    const unsigned int individualCount =
+        individualVisibleRouterAttachmentPortCount(logicalCount);
+    return hasRouterAttachmentPortOverflow(logicalCount)
+            && logicalOffset >= individualCount
+        ? individualCount : logicalOffset;
+}
+
+QPen draftConnectionPen(const QPalette& palette) {
+    QPen pen(nocEditorColors(palette).accent, 2.5, Qt::DashLine);
+    pen.setDashPattern({7.0, 5.0});
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    return pen;
+}
 
 struct DraftConnectionStart {
     bool startFromOutput = false;
@@ -177,25 +234,25 @@ public:
         m_pending = !router && pending;
         m_attachmentPortLabels = std::move(attachmentPortLabels);
         if (m_router && m_attachmentPortLabels.isEmpty()) {
-            m_attachmentPortLabels.append(QStringLiteral("EP"));
+            m_attachmentPortLabels = {QStringLiteral("EP")};
         }
+        const NocEditorColors visual = nocEditorColors(QApplication::palette());
         QtNodes::NodeStyle style = nodeStyle();
         style.ShadowEnabled = false;
         style.NormalBoundaryColor = m_pending
-            ? QColor(QStringLiteral("#2563eb"))
-            : QColor(QStringLiteral("#334155"));
-        style.SelectedBoundaryColor = QColor(QStringLiteral("#f97316"));
-        style.ConnectionPointColor = QColor(QStringLiteral("#1e293b"));
-        style.FilledConnectionPointColor = QColor(QStringLiteral("#1e293b"));
-        style.FontColor = QColor(QStringLiteral("#0f172a"));
+            ? visual.accent : visual.outlineStrong;
+        style.SelectedBoundaryColor = visual.accent;
+        style.ConnectionPointColor = visual.outlineStrong;
+        style.FilledConnectionPointColor = visual.portFill;
+        style.FontColor = visual.text;
         style.PenWidth = 1.4F;
         style.HoveredPenWidth = 2.0F;
-        style.ConnectionPointDiameter = 8.0F;
+        style.ConnectionPointDiameter = 10.0F;
         style.setBackgroundColor(router
-                                     ? QColor(QStringLiteral("#dbeafe"))
+                                     ? visual.routerSurface
                                      : m_pending
-                                           ? QColor(QStringLiteral("#e0f2fe"))
-                                           : QColor(QStringLiteral("#fef3c7")));
+                                           ? visual.pendingSurface
+                                           : visual.endpointSurface);
         setNodeStyle(style);
         emit requestNodeUpdate();
     }
@@ -230,8 +287,21 @@ public:
         if (!model || !model->isRouter()) {
             return nocEditorMetrics().endpointSize;
         }
-        return model->isCollapsed() ? nocEditorMetrics().collapsedRouterSize
-                                    : nocEditorMetrics().expandedRouterSize;
+        if (model->isCollapsed()) {
+            return nocEditorMetrics().collapsedRouterSize;
+        }
+        const QSize base = nocEditorMetrics().expandedRouterSize;
+        const unsigned int largestBandCount =
+            (visibleRouterAttachmentPortCount(model->attachmentPortCount())
+             + 1U) / 2U;
+        const qreal requiredEdge = 104.0
+            + static_cast<qreal>(largestBandCount > 0U
+                                     ? largestBandCount - 1U : 0U)
+                * kRouterAttachmentPortSpacing * 2.0;
+        const int edge = (std::max)(
+            (std::max)(base.width(), base.height()),
+            static_cast<int>(std::ceil(requiredEdge)));
+        return QSize(edge, edge);
     }
 
     void recomputeSize(QtNodes::NodeId) const override {}
@@ -249,16 +319,112 @@ public:
         if (type == QtNodes::PortType::In) {
             if (index == kRouterWestInPort) return QPointF(0.0, height / 2.0);
             if (index == kRouterNorthInPort) return QPointF(width / 2.0, 0.0);
-            const unsigned int count = std::max(1U, model->attachmentPortCount());
-            const unsigned int attachmentIndex = index - kRouterEndpointInPort;
-            const qreal top = height * 0.60;
-            const qreal bottom = height - 14.0;
-            const qreal y = top + (static_cast<qreal>(attachmentIndex) + 0.5)
-                * (bottom - top) / static_cast<qreal>(count);
+            if (model->isCollapsed()) {
+                return QPointF(0.0, height * 0.75);
+            }
+            const unsigned int logicalCount = (std::max)(
+                1U, model->attachmentPortCount());
+            const unsigned int count = visibleRouterAttachmentPortCount(
+                logicalCount);
+            const unsigned int attachmentIndex =
+                visualRouterAttachmentPortOffset(
+                    index - kRouterEndpointInPort, logicalCount);
+            const unsigned int upperCount = (count + 1U) / 2U;
+            const unsigned int lowerCount = count / 2U;
+            const bool upperBand = attachmentIndex < upperCount;
+            const unsigned int bandIndex = upperBand
+                ? attachmentIndex : attachmentIndex - upperCount;
+            const unsigned int bandCount = upperBand
+                ? upperCount : lowerCount;
+            const qreal bandStart = upperBand
+                ? kRouterAttachmentUpperStart
+                : height / 2.0 + kRouterAttachmentCenterGapBottom;
+            const qreal bandEnd = upperBand
+                ? height / 2.0 - kRouterAttachmentCenterGapTop
+                : height - kRouterAttachmentBottomInset;
+            const qreal y = bandCount <= 1U
+                ? (bandStart + bandEnd) / 2.0
+                : bandStart
+                    + static_cast<qreal>(bandIndex)
+                        * (bandEnd - bandStart)
+                        / static_cast<qreal>(bandCount - 1U);
             return QPointF(0.0, y);
         }
         if (index == kRouterEastOutPort) return QPointF(width, height / 2.0);
         return QPointF(width / 2.0, height);
+    }
+
+    bool attachmentAggregateHit(QtNodes::NodeId nodeId,
+                                const QPointF& nodePoint) const {
+        const NocNodeModel* model = modelFor(nodeId);
+        if (!model || !model->isRouter()
+            || model->attachmentPortCount() == 0U) {
+            return false;
+        }
+        const unsigned int logicalCount = model->attachmentPortCount();
+        if (!model->isCollapsed()
+            && !hasRouterAttachmentPortOverflow(logicalCount)) {
+            return false;
+        }
+        const unsigned int visualOffset = model->isCollapsed()
+            ? 0U : individualVisibleRouterAttachmentPortCount(logicalCount);
+        const QPointF aggregate = portPosition(
+            nodeId,
+            QtNodes::PortType::In,
+            kRouterEndpointInPort + visualOffset);
+        return squaredDistance(nodePoint, aggregate)
+            <= squared(kScenePortHitRadius);
+    }
+
+    QtNodes::PortIndex checkPortHit(
+        QtNodes::NodeId nodeId,
+        QtNodes::PortType type,
+        QPointF nodePoint) const override {
+        const NocNodeModel* model = modelFor(nodeId);
+        if (!model || !model->isRouter()) {
+            return QtNodes::AbstractNodeGeometry::checkPortHit(
+                nodeId, type, nodePoint);
+        }
+        const auto hits = [this, nodeId, type, &nodePoint](
+                              QtNodes::PortIndex index) {
+            return squaredDistance(
+                       nodePoint, portPosition(nodeId, type, index))
+                <= squared(kScenePortHitRadius);
+        };
+        if (type == QtNodes::PortType::Out) {
+            if (hits(kRouterEastOutPort)) {
+                return kRouterEastOutPort;
+            }
+            return hits(kRouterSouthOutPort)
+                ? kRouterSouthOutPort : QtNodes::InvalidPortIndex;
+        }
+        if (hits(kRouterWestInPort)) {
+            return kRouterWestInPort;
+        }
+        if (hits(kRouterNorthInPort)) {
+            return kRouterNorthInPort;
+        }
+
+        const unsigned int logicalCount = model->attachmentPortCount();
+        if (!model->isCollapsed()) {
+            const unsigned int individualCount =
+                individualVisibleRouterAttachmentPortCount(logicalCount);
+            for (unsigned int offset = 0; offset < individualCount; ++offset) {
+                const QtNodes::PortIndex index =
+                    kRouterEndpointInPort + offset;
+                if (hits(index)) {
+                    return index;
+                }
+            }
+        }
+        if (attachmentAggregateHit(nodeId, nodePoint)) {
+            return kRouterEndpointInPort
+                + (model->isCollapsed()
+                       ? 0U
+                       : individualVisibleRouterAttachmentPortCount(
+                             logicalCount));
+        }
+        return QtNodes::InvalidPortIndex;
     }
 
     QPointF portTextPosition(QtNodes::NodeId nodeId,
@@ -289,8 +455,12 @@ public:
     QPointF widgetPosition(QtNodes::NodeId) const override { return {}; }
     QRect resizeHandleRect(QtNodes::NodeId) const override { return {}; }
 
-    static QRectF collapseButtonRect(QSize nodeSize) {
-        return QRectF(nodeSize.width() - 24.0, 7.0, 17.0, 17.0);
+    static QRectF collapseButtonVisualRect(QSize nodeSize) {
+        return QRectF(nodeSize.width() - 29.0, 6.0, 22.0, 22.0);
+    }
+
+    static QRectF collapseButtonHitRect(QSize nodeSize) {
+        return QRectF(nodeSize.width() - 34.0, 1.0, 34.0, 34.0);
     }
 
 private:
@@ -310,38 +480,67 @@ public:
         auto const& geometry = node.nodeScene()->nodeGeometry();
         const QSize size = geometry.size(node.nodeId());
         const QRectF body(0.5, 0.5, size.width() - 1.0, size.height() - 1.0);
-        const QColor background = model
-            ? model->nodeStyle().backgroundColor()
-            : QColor(QStringLiteral("#e2e8f0"));
+        const QPalette applicationPalette = QApplication::palette();
+        const NocEditorColors visual = nocEditorColors(applicationPalette);
+        const QColor background = !model
+            ? visual.surfaceRaised
+            : model->isRouter()
+                ? visual.routerSurface
+                : model->isPending()
+                    ? visual.pendingSurface : visual.endpointSurface;
+        const QColor header = model && model->isRouter()
+            ? visual.routerHeader
+            : model && model->isPending()
+                ? visual.pendingHeader : visual.endpointHeader;
 
-        painter->setRenderHint(QPainter::Antialiasing, false);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        QPainterPath bodyPath;
+        bodyPath.addRoundedRect(body, 10.0, 10.0);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(background);
+        painter->drawPath(bodyPath);
+
+        const qreal headerHeight = qMin<qreal>(34.0, body.height());
+        painter->save();
+        painter->setClipPath(bodyPath);
+        painter->setBrush(header);
+        painter->drawRect(QRectF(
+            body.left(), body.top(), body.width(), headerHeight));
+        painter->restore();
+
         const bool relatedHighlighted = node.data(relatedHighlightDataRole).toBool();
         QPen boundaryPen(node.isSelected()
-                                 ? QColor(QStringLiteral("#f97316"))
+                                 ? visual.accent
                                  : relatedHighlighted
-                                       ? QColor(QStringLiteral("#2563eb"))
+                                       ? visual.warning
                                        : model && model->isPending()
-                                             ? QColor(QStringLiteral("#2563eb"))
-                                             : QColor(QStringLiteral("#334155")),
+                                             ? visual.accent
+                                             : visual.outlineStrong,
                          node.isSelected() || relatedHighlighted ? 2.5 : 1.5);
+        boundaryPen.setCapStyle(Qt::RoundCap);
+        boundaryPen.setJoinStyle(Qt::RoundJoin);
         if (model && model->isPending()) {
             boundaryPen.setStyle(Qt::DashLine);
+            boundaryPen.setDashPattern({6.0, 4.0});
         }
         painter->setPen(boundaryPen);
-        painter->setBrush(background);
-        painter->drawRect(body);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPath(bodyPath);
 
-        const qreal headerHeight = qMin<qreal>(32.0, body.height());
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(model && model->isRouter()
-                              ? QColor(QStringLiteral("#93c5fd"))
-                              : model && model->isPending()
-                                    ? QColor(QStringLiteral("#7dd3fc"))
-                                    : QColor(QStringLiteral("#fcd34d")));
-        painter->drawRect(QRectF(body.left(), body.top(), body.width(), headerHeight));
+        if (model && model->isRouter()) {
+            QPen corePen(visual.outline, 1.0);
+            corePen.setJoinStyle(Qt::RoundJoin);
+            painter->setPen(corePen);
+            painter->setBrush(Qt::NoBrush);
+            const qreal inset = model->isCollapsed() ? 26.0 : 42.0;
+            painter->drawRoundedRect(
+                body.adjusted(inset, inset, -inset, -inset), 6.0, 6.0);
+        }
 
-        painter->setPen(QColor(QStringLiteral("#0f172a")));
-        painter->setFont(QFont(QStringLiteral("Sans Serif"), 9, QFont::DemiBold));
+        painter->setPen(visual.text);
+        painter->setFont(nocEditorFont(
+            NocEditorFontRole::Label, QApplication::font()));
         const QRectF captionRect = model && model->isRouter()
             ? (model->isCollapsed()
                    ? body.adjusted(18.0, 32.0, -18.0, -18.0)
@@ -352,22 +551,22 @@ public:
                           model ? model->caption() : QString());
 
         if (model && model->isRouter()) {
-            drawCollapseButton(painter, *model, size);
-            painter->setPen(QPen(QColor(QStringLiteral("#64748b")), 1.0));
-            painter->setBrush(Qt::NoBrush);
-            const qreal inset = model->isCollapsed() ? 26.0 : 42.0;
-            painter->drawRect(body.adjusted(inset, inset, -inset, -inset));
+            drawCollapseButton(painter, *model, size, visual);
         }
 
-        drawDomainStrip(painter, node, body);
-        drawPorts(painter, node, model, geometry, QtNodes::PortType::In);
-        drawPorts(painter, node, model, geometry, QtNodes::PortType::Out);
+        drawDomainStrip(painter, node, body, visual);
+        drawPorts(painter, node, model, geometry,
+                  QtNodes::PortType::In, visual);
+        drawPorts(painter, node, model, geometry,
+                  QtNodes::PortType::Out, visual);
+        painter->restore();
     }
 
 private:
     static void drawDomainStrip(QPainter* painter,
                                 const QtNodes::NodeGraphicsObject& node,
-                                const QRectF& body) {
+                                const QRectF& body,
+                                const NocEditorColors& visual) {
         const auto state = static_cast<DomainAssignmentDisplayState>(
             node.data(domainAssignmentStateDataRole).toInt());
         if (state == DomainAssignmentDisplayState::Inactive
@@ -380,46 +579,50 @@ private:
                            body.width() - 4.0,
                            8.0);
         const QVariantList colorValues = node.data(domainColorsDataRole).toList();
-        QVector<QColor> colors;
-        colors.reserve(colorValues.size());
-        for (const QVariant& value : colorValues) {
-            const QColor color = value.value<QColor>();
-            if (color.isValid()) {
-                colors.append(color);
-            }
+        const QVariantList patternBrushes = node.data(
+            domainPatternBrushesDataRole).toList();
+        const qsizetype segmentCount = (std::min)(
+            colorValues.size(), patternBrushes.size());
+        if (segmentCount == 0) {
+            return;
         }
 
         painter->save();
-        painter->setClipRect(strip);
+        QPainterPath stripPath;
+        stripPath.addRoundedRect(strip, 3.0, 3.0);
+        painter->setClipPath(stripPath);
         painter->setPen(Qt::NoPen);
-        if (state == DomainAssignmentDisplayState::Assigned && !colors.isEmpty()) {
-            painter->setBrush(colors.front());
-            painter->drawRect(strip);
-        } else if (state == DomainAssignmentDisplayState::Multiple
-                   && !colors.isEmpty()) {
+        const auto fillTextured = [&](const QRectF& rectangle,
+                                      const QColor& base,
+                                      const QBrush& patternBrush) {
+            painter->fillRect(rectangle, base);
+            painter->fillRect(rectangle, patternBrush);
+        };
+        if (segmentCount == 1) {
+            fillTextured(
+                strip,
+                colorValues.front().value<QColor>(),
+                patternBrushes.front().value<QBrush>());
+        } else {
             const qreal segmentWidth = strip.width()
-                / static_cast<qreal>(colors.size());
-            for (qsizetype index = 0; index < colors.size(); ++index) {
+                / static_cast<qreal>(segmentCount);
+            for (qsizetype index = 0; index < segmentCount; ++index) {
                 const qreal left = strip.left()
                     + static_cast<qreal>(index) * segmentWidth;
-                const qreal right = index + 1 == colors.size()
+                const qreal right = index + 1 == segmentCount
                     ? strip.right() : left + segmentWidth;
-                painter->setBrush(colors.at(index));
-                painter->drawRect(QRectF(
-                    QPointF(left, strip.top()), QPointF(right, strip.bottom())));
-            }
-        } else {
-            painter->setBrush(state == DomainAssignmentDisplayState::Unavailable
-                                  ? QColor(QStringLiteral("#94a3b8"))
-                                  : QColor(QStringLiteral("#cbd5e1")));
-            painter->drawRect(strip);
-            painter->setPen(QPen(QColor(QStringLiteral("#64748b")), 1.0));
-            for (qreal x = strip.left() - strip.height();
-                 x < strip.right(); x += 7.0) {
-                painter->drawLine(QPointF(x, strip.bottom()),
-                                  QPointF(x + strip.height(), strip.top()));
+                fillTextured(
+                    QRectF(QPointF(left, strip.top()),
+                           QPointF(right, strip.bottom())),
+                    colorValues.at(index).value<QColor>(),
+                    patternBrushes.at(index).value<QBrush>());
             }
         }
+        QPen stripPen(visual.outlineStrong, 0.8);
+        stripPen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(stripPen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRoundedRect(strip, 3.0, 3.0);
         painter->restore();
     }
 
@@ -427,23 +630,61 @@ private:
                           QtNodes::NodeGraphicsObject& node,
                           const NocNodeModel* model,
                           QtNodes::AbstractNodeGeometry const& geometry,
-                          QtNodes::PortType type) {
-        const auto count = node.graphModel().nodeData<unsigned int>(
+                          QtNodes::PortType type,
+                          const NocEditorColors& visual) {
+        const unsigned int logicalCount = node.graphModel().nodeData<unsigned int>(
             node.nodeId(), type == QtNodes::PortType::In
                                ? QtNodes::NodeRole::InPortCount
                                : QtNodes::NodeRole::OutPortCount);
-        painter->setPen(QPen(QColor(QStringLiteral("#0f172a")), 1.0));
-        painter->setBrush(QColor(QStringLiteral("#475569")));
-        for (unsigned int index = 0; index < count; ++index) {
+        QPen portPen(visual.outlineStrong, 1.25);
+        portPen.setCapStyle(Qt::RoundCap);
+        portPen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(portPen);
+        painter->setBrush(visual.portFill);
+        unsigned int paintedCount = logicalCount;
+        if (model && model->isRouter() && type == QtNodes::PortType::In) {
+            paintedCount = kRouterEndpointInPort
+                + (model->isCollapsed()
+                       ? 1U
+                       : visibleRouterAttachmentPortCount(
+                             model->attachmentPortCount()));
+        }
+        QFont portFont = nocEditorFont(
+            NocEditorFontRole::Caption, QApplication::font());
+        portFont.setWeight(QFont::DemiBold);
+        painter->setFont(portFont);
+        for (unsigned int index = 0; index < paintedCount; ++index) {
+            const bool collapsedAggregate = model
+                && model->isRouter() && model->isCollapsed()
+                && type == QtNodes::PortType::In
+                && index == kRouterEndpointInPort;
+            const bool overflowAggregate = model
+                && model->isRouter() && !model->isCollapsed()
+                && type == QtNodes::PortType::In
+                && hasRouterAttachmentPortOverflow(
+                    model->attachmentPortCount())
+                && index == kRouterEndpointInPort
+                    + individualVisibleRouterAttachmentPortCount(
+                          model->attachmentPortCount());
+            const bool aggregateAttachment = collapsedAggregate
+                || overflowAggregate;
             const QPointF center = geometry.portPosition(node.nodeId(), type, index);
-            painter->drawRect(QRectF(center.x() - 4.0, center.y() - 4.0, 8.0, 8.0));
+            painter->drawEllipse(center, 5.0, 5.0);
 
-            const QString label = model ? model->portCaption(type, index) : QString();
+            QString label = model ? model->portCaption(type, index) : QString();
+            if (collapsedAggregate) {
+                label = QStringLiteral("EP×%1").arg(
+                    model->attachmentPortCount());
+            } else if (overflowAggregate) {
+                label = QStringLiteral("+%1").arg(
+                    model->attachmentPortCount()
+                    - individualVisibleRouterAttachmentPortCount(
+                        model->attachmentPortCount()));
+            }
             if (label.isEmpty()) {
                 continue;
             }
-            painter->setPen(QColor(QStringLiteral("#0f172a")));
-            painter->setFont(QFont(QStringLiteral("Sans Serif"), 7, QFont::Bold));
+            painter->setPen(visual.text);
             QRectF labelRect;
             const QSize nodeSize = geometry.size(node.nodeId());
             if (center.y() <= 0.5) {
@@ -454,7 +695,17 @@ private:
                                    24.0,
                                    16.0);
             } else if (center.x() <= 0.5) {
-                labelRect = QRectF(8.0, center.y() - 8.0, 28.0, 16.0);
+                const bool westRouterPort = model && model->isRouter()
+                    && type == QtNodes::PortType::In
+                    && index == kRouterWestInPort;
+                qreal labelLeft = 8.0;
+                if (westRouterPort) {
+                    labelLeft = model->isCollapsed() ? 12.0 : 40.0;
+                }
+                labelRect = QRectF(labelLeft,
+                                   center.y() - 8.0,
+                                   aggregateAttachment ? 48.0 : 28.0,
+                                   16.0);
             } else {
                 labelRect = QRectF(nodeSize.width() - 36.0,
                                    center.y() - 8.0,
@@ -462,22 +713,32 @@ private:
                                    16.0);
             }
             painter->drawText(labelRect, Qt::AlignCenter, label);
-            painter->setPen(QPen(QColor(QStringLiteral("#0f172a")), 1.0));
-            painter->setBrush(QColor(QStringLiteral("#475569")));
+            painter->setPen(portPen);
+            painter->setBrush(visual.portFill);
         }
     }
 
     static void drawCollapseButton(QPainter* painter,
                                    const NocNodeModel& model,
-                                   QSize nodeSize) {
-        const QRectF button = NocNodeGeometry::collapseButtonRect(nodeSize);
-        painter->setPen(QPen(QColor(QStringLiteral("#334155")), 1.0));
-        painter->setBrush(QColor(QStringLiteral("#f8fafc")));
-        painter->drawRect(button);
-        painter->setPen(QColor(QStringLiteral("#0f172a")));
-        painter->setFont(QFont(QStringLiteral("Sans Serif"), 8, QFont::Bold));
-        painter->drawText(button, Qt::AlignCenter,
-                          model.isCollapsed() ? QStringLiteral("+") : QStringLiteral("−"));
+                                   QSize nodeSize,
+                                   const NocEditorColors& visual) {
+        const QRectF button = NocNodeGeometry::collapseButtonVisualRect(nodeSize);
+        QPen buttonPen(visual.outlineStrong, 1.0);
+        buttonPen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(buttonPen);
+        painter->setBrush(visual.surfaceRaised);
+        painter->drawRoundedRect(button, 6.0, 6.0);
+
+        QPen glyphPen(visual.text, 1.7);
+        glyphPen.setCapStyle(Qt::RoundCap);
+        painter->setPen(glyphPen);
+        const QPointF center = button.center();
+        painter->drawLine(QPointF(center.x() - 4.0, center.y()),
+                          QPointF(center.x() + 4.0, center.y()));
+        if (model.isCollapsed()) {
+            painter->drawLine(QPointF(center.x(), center.y() - 4.0),
+                              QPointF(center.x(), center.y() + 4.0));
+        }
     }
 };
 
@@ -485,25 +746,26 @@ class NocOrthogonalConnectionPainter final : public QtNodes::AbstractConnectionP
 public:
     void paint(QPainter* painter,
                QtNodes::ConnectionGraphicsObject const& connection) const override {
-        auto const& style = QtNodes::StyleCollection::connectionStyle();
-        QColor color = style.normalColor();
+        const QPalette applicationPalette = QApplication::palette();
+        const NocEditorColors visual = nocEditorColors(applicationPalette);
+        QColor color = visual.connection;
         const bool relatedHighlighted = connection.data(
             relatedHighlightDataRole).toBool();
         const bool selected = connection.isSelected();
         const bool crossing = connection.data(domainCrossingDataRole).toBool();
         const bool hasOverride = connection.data(domainOverrideDataRole).toBool();
         const QColor crossingColor = connection.data(
-            domainCrossingColorDataRole).value<QColor>();
+            domainCrossingPaintColorDataRole).value<QColor>();
         if (selected) {
-            color = QColor(QStringLiteral("#f97316"));
+            color = visual.accent;
         } else if (relatedHighlighted) {
-            color = QColor(QStringLiteral("#f97316"));
+            color = visual.warning;
         } else if (crossing && crossingColor.isValid()) {
             color = crossingColor;
         } else if (connection.connectionState().hovered()) {
-            color = style.hoveredColor();
+            color = visual.accent;
         }
-        qreal width = style.lineWidth();
+        qreal width = 2.0;
         if (crossing) {
             width += 1.25;
         }
@@ -514,13 +776,13 @@ public:
             width += 2.0;
         }
         QPen pen(color, width);
-        pen.setCapStyle(Qt::SquareCap);
-        pen.setJoinStyle(Qt::MiterJoin);
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
         if (crossing) {
             pen.setStyle(Qt::DashLine);
             pen.setDashPattern({6.0, 4.0});
         }
-        painter->setRenderHint(QPainter::Antialiasing, false);
+        painter->setRenderHint(QPainter::Antialiasing, true);
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
         const QPainterPath path = orthogonalConnectionPath(
@@ -530,18 +792,20 @@ public:
             painter->save();
             painter->translate(path.pointAtPercent(0.5));
             painter->rotate(45.0);
-            painter->setPen(QPen(color, 1.5));
-            painter->setBrush(QColor(QStringLiteral("#f8fafc")));
-            painter->drawRect(QRectF(-4.0, -4.0, 8.0, 8.0));
+            QPen markerPen(color, 1.5);
+            markerPen.setJoinStyle(Qt::RoundJoin);
+            painter->setPen(markerPen);
+            painter->setBrush(visual.surfaceRaised);
+            painter->drawRoundedRect(
+                QRectF(-4.5, -4.5, 9.0, 9.0), 1.5, 1.5);
             painter->restore();
         }
     }
 
     QPainterPath getPainterStroke(
         QtNodes::ConnectionGraphicsObject const& connection) const override {
-        auto const& style = QtNodes::StyleCollection::connectionStyle();
         QPainterPathStroker stroker;
-        qreal width = style.lineWidth() + 10.0;
+        qreal width = 12.0;
         if (connection.data(domainCrossingDataRole).toBool()) {
             width += 2.5;
         }
@@ -549,8 +813,8 @@ public:
             width += 2.5;
         }
         stroker.setWidth(width);
-        stroker.setCapStyle(Qt::SquareCap);
-        stroker.setJoinStyle(Qt::MiterJoin);
+        stroker.setCapStyle(Qt::RoundCap);
+        stroker.setJoinStyle(Qt::RoundJoin);
         return stroker.createStroke(
             orthogonalConnectionPath(
                 connection.out(), connection.in(), routeAxis(connection)));
@@ -664,6 +928,7 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
     : QWidget(parent),
       m_registry(std::make_shared<QtNodes::NodeDelegateModelRegistry>()),
       m_graphModel(std::make_unique<NocGraphModel>(m_registry)) {
+    applyNocEditorPalette(palette());
     m_registry->registerModel<NocNodeModel>(QStringLiteral("NoC"));
 
     m_scene = new NocGraphicsScene(
@@ -672,9 +937,18 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
     m_scene->setNodePainter(std::make_unique<NocBlockNodePainter>());
     m_scene->setConnectionPainter(std::make_unique<NocOrthogonalConnectionPainter>());
     m_view = new AnimatedGraphicsView(m_scene, this);
+    m_view->semanticDeleteRequested = [this] {
+        if (m_editingEnabled) {
+            deleteSelectedSemanticItem();
+        }
+    };
+    m_view->setObjectName(QStringLiteral("finepaper.canvasView"));
+    m_view->setAccessibleName(QStringLiteral("NoC topology canvas"));
+    updateCanvasAccessibleDescription();
     m_view->setScaleRange(0.25, 2.5);
     m_view->setAcceptDrops(true);
     m_view->viewport()->setAcceptDrops(true);
+    m_view->installEventFilter(this);
     m_view->viewport()->installEventFilter(this);
     setCanvasInteractionMode(NocCanvasInteractionMode::Pan);
 
@@ -726,10 +1000,31 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
 }
 
 NocNodeEditor::~NocNodeEditor() {
+    // QGraphicsScene emits selectionChanged while its selected items are
+    // removed. Disconnect before destroying the scene so teardown cannot
+    // re-enter selection/highlight code with half-destroyed graphics items.
+    if (m_scene) {
+        disconnect(m_scene, nullptr, this, nullptr);
+    }
+    if (m_graphModel) {
+        disconnect(m_graphModel.get(), nullptr, this, nullptr);
+        auto& graphModel = static_cast<NocGraphModel&>(*m_graphModel);
+        graphModel.userConnectionPossible = {};
+        graphModel.userConnectionDeletable = {};
+    }
+    if (m_view) {
+        m_view->semanticDeleteRequested = {};
+    }
+    m_highlightedNodeIds.clear();
+    m_highlightedConnectionIds.clear();
+    m_stackingNodeIds.clear();
     clearEndpointAttachmentDraft();
     clearRouterEndpointDraft();
     if (m_view && m_view->viewport()) {
         m_view->viewport()->removeEventFilter(this);
+    }
+    if (m_view) {
+        m_view->removeEventFilter(this);
     }
     delete m_view;
     m_view = nullptr;
@@ -738,8 +1033,64 @@ NocNodeEditor::~NocNodeEditor() {
     m_graphModel.reset();
 }
 
+void NocNodeEditor::changeEvent(QEvent* event) {
+    QWidget::changeEvent(event);
+    if (!event) {
+        return;
+    }
+    if (event->type() != QEvent::PaletteChange
+        && event->type() != QEvent::ApplicationPaletteChange
+        && event->type() != QEvent::FontChange
+        && event->type() != QEvent::StyleChange) {
+        return;
+    }
+
+    applyNocEditorPalette(palette());
+    applyDomainPresentation();
+    if (m_routerEndpointDraft && m_routerEndpointDraft->graphicsItem) {
+        m_routerEndpointDraft->graphicsItem->setPen(
+            draftConnectionPen(palette()));
+    }
+    if (m_endpointAttachmentDraft
+        && m_endpointAttachmentDraft->graphicsItem) {
+        m_endpointAttachmentDraft->graphicsItem->setPen(
+            draftConnectionPen(palette()));
+    }
+    if (m_scene) {
+        m_scene->update();
+    }
+    if (m_view && m_view->viewport()) {
+        m_view->viewport()->update();
+    }
+}
+
 void NocNodeEditor::setDesign(const NocDesign* design) {
     applyDesign(design, m_attachmentPolicy);
+}
+
+void NocNodeEditor::setReducedMotion(bool reduced) {
+    if (m_view) {
+        m_view->setReducedMotion(reduced);
+    }
+}
+
+bool NocNodeEditor::reducedMotion() const {
+    return m_view && m_view->reducedMotion();
+}
+
+attachment::SlotResolution NocNodeEditor::endpointAttachmentAvailability(
+    RouterPosition router) const {
+    attachment::SlotResolution unavailable;
+    if (!m_editingEnabled || !m_design) {
+        unavailable.rejection = attachment::Rejection::ReadOnly;
+        return unavailable;
+    }
+    return attachment::resolveSlot(
+        *m_design,
+        m_attachmentIndex,
+        NocAttachmentTarget{router, std::nullopt},
+        {},
+        attachment::SlotResolutionDetail::ValidateOnly);
 }
 
 void NocNodeEditor::setDesign(
@@ -918,6 +1269,9 @@ void NocNodeEditor::selectElements(const QVector<ElementRef>& elements) {
     });
     m_selectedItems = std::move(requested);
     restoreSelection();
+    if (m_selectedItems.size() == 1) {
+        ensureSelectionVisible(m_selectedItems.front());
+    }
     if (m_view) {
         m_view->setFocus(Qt::OtherFocusReason);
     }
@@ -978,12 +1332,19 @@ bool NocNodeEditor::routerCollapsed(const QString& routerId) const {
         && m_workspaceState.collapsedRouterIds->contains(routerId);
 }
 
-void NocNodeEditor::regularizeLayout() {
+TopologyWorkspaceRegularizeResult NocNodeEditor::regularizeLayout() {
     const bool repairingWorkspace = m_workspacePersistenceBlocked;
     m_workspacePersistenceBlocked = false;
+    const TopologyWorkspaceState previousState = m_workspaceState;
     m_workspaceState.routerPositionOverrides.clear();
     m_workspaceState.endpointPositionOverrides.clear();
     const bool saved = saveWorkspaceState();
+    if (!saved) {
+        // Keep the visible workspace and the durable record in agreement. A
+        // failed Regularize can be retried after storage becomes available;
+        // it must not silently discard this session's placement state.
+        m_workspaceState = previousState;
+    }
     if (repairingWorkspace) {
         m_workspacePersistenceBlocked = !saved;
         if (saved) {
@@ -992,6 +1353,12 @@ void NocNodeEditor::regularizeLayout() {
         }
     }
     rebuildGraph(false);
+    if (!saved) {
+        return TopologyWorkspaceRegularizeResult::SaveFailed;
+    }
+    return repairingWorkspace
+        ? TopologyWorkspaceRegularizeResult::Repaired
+        : TopologyWorkspaceRegularizeResult::Saved;
 }
 
 void NocNodeEditor::zoomToFit() {
@@ -1006,6 +1373,34 @@ void NocNodeEditor::setDomainPresentation(
         return;
     }
     m_domainPresentation = std::move(presentation);
+    if (m_view) {
+        QString layerLabel = m_domainPresentation.domainTypeLabel.trimmed();
+        if (layerLabel.isEmpty()) {
+            layerLabel = m_domainPresentation.activeDomainType.trimmed();
+        }
+        if (m_domainPresentation.status == DomainPresentationStatus::Inactive
+            || m_domainPresentation.activeDomainType.trimmed().isEmpty()) {
+            m_view->setDomainLegend({}, {}, {});
+        } else {
+            QVector<CanvasDomainLegendEntry> entries;
+            entries.reserve(m_domainPresentation.legend.size());
+            for (const DomainLegendEntry& entry : m_domainPresentation.legend) {
+                entries.append(CanvasDomainLegendEntry{
+                    entry.id,
+                    entry.name.trimmed().isEmpty() ? entry.id : entry.name,
+                    entry.color,
+                });
+            }
+            const QString emptyMessage =
+                m_domainPresentation.status
+                        == DomainPresentationStatus::MissingPackageType
+                    ? QStringLiteral("Layer unavailable for this package")
+                    : QStringLiteral("No assigned domains");
+            m_view->setDomainLegend(
+                std::move(layerLabel), std::move(entries), emptyMessage);
+        }
+        updateCanvasAccessibleDescription();
+    }
     applyDomainPresentation();
 }
 
@@ -1030,6 +1425,8 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
     m_pendingConnectionDetachments.clear();
     clearEndpointAttachmentDraft();
     clearRouterEndpointDraft();
+    clearNeighborhoodHighlight();
+    m_stackingNodeIds.clear();
     auto& graphModel = static_cast<NocGraphModel&>(*m_graphModel);
     graphModel.clearProjection();
     m_metadata.clear();
@@ -1214,6 +1611,9 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
                     && (iterator->kind == NocEditorSelection::Kind::Endpoint
                         || iterator->kind == NocEditorSelection::Kind::PendingEndpoint));
             node->setFlag(QGraphicsItem::ItemIsMovable, movable);
+            node->setZValue(
+                iterator->kind == NocEditorSelection::Kind::Router
+                    ? kRouterNodeZValue : kEndpointNodeZValue);
         }
     }
     applyDomainPresentation();
@@ -1225,11 +1625,58 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
 }
 
 bool NocNodeEditor::eventFilter(QObject* watched, QEvent* event) {
-    if (!m_view || watched != m_view->viewport()) {
+    if (!m_view
+        || (watched != m_view && watched != m_view->viewport())) {
+        return QWidget::eventFilter(watched, event);
+    }
+    if (watched == m_view && event->type() != QEvent::KeyPress) {
         return QWidget::eventFilter(watched, event);
     }
 
     switch (event->type()) {
+    case QEvent::KeyPress: {
+        auto* key = static_cast<QKeyEvent*>(event);
+        const bool backwards = key->key() == Qt::Key_Backtab
+            || (key->key() == Qt::Key_Tab
+                && key->modifiers() == Qt::ShiftModifier);
+        if ((key->key() == Qt::Key_Tab || key->key() == Qt::Key_Backtab)
+            && (key->modifiers() == Qt::NoModifier
+                || key->modifiers() == Qt::ShiftModifier)) {
+            if (selectAdjacentCanvasItem(backwards)) {
+                key->accept();
+                return true;
+            }
+            return focusNextPrevChild(!backwards);
+        }
+        if ((key->key() == Qt::Key_Menu
+             && key->modifiers() == Qt::NoModifier)
+            || (key->key() == Qt::Key_F10
+                && key->modifiers() == Qt::ShiftModifier)) {
+            if (showSelectedContextMenuFromKeyboard()) {
+                key->accept();
+                return true;
+            }
+            return false;
+        }
+        if (key->key() == Qt::Key_Space
+            && key->modifiers() == Qt::NoModifier
+            && m_selectedItems.size() == 1
+            && m_selectedItems.front().kind
+                == NocEditorSelection::Kind::Router) {
+            const QString routerId = m_selectedItems.front().id;
+            setRouterCollapsed(routerId, !routerCollapsed(routerId));
+            key->accept();
+            return true;
+        }
+        if (key->key() == Qt::Key_Delete
+            && key->modifiers() == Qt::NoModifier
+            && m_editingEnabled
+            && deleteSelectedSemanticItem()) {
+            key->accept();
+            return true;
+        }
+        return false;
+    }
     case QEvent::DragEnter: {
         auto* drag = static_cast<QDragEnterEvent*>(event);
         if (!drag->mimeData()->hasFormat(workbench::endpointTypeMime)) {
@@ -1396,11 +1843,14 @@ void NocNodeEditor::handleSceneSelectionChanged() {
         return;
     }
 
+    applyNodeStacking();
     QVector<SelectionIdentity> selected;
+    QSet<QtNodes::NodeId> selectedNodeIds;
     for (QGraphicsItem* item : m_scene->selectedItems()) {
         if (auto* node = qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item)) {
             const auto metadata = m_metadata.constFind(node->nodeId());
             if (metadata != m_metadata.constEnd()) {
+                selectedNodeIds.insert(node->nodeId());
                 const SelectionIdentity identity{metadata->kind, metadata->id};
                 if (!selected.contains(identity)) {
                     selected.append(identity);
@@ -1431,6 +1881,7 @@ void NocNodeEditor::handleSceneSelectionChanged() {
         return left.id < right.id;
     });
     m_selectedItems = std::move(selected);
+    m_stackingNodeIds = std::move(selectedNodeIds);
 
     clearNeighborhoodHighlight();
     if (m_selectedItems.size() == 1) {
@@ -1447,16 +1898,8 @@ void NocNodeEditor::handleSceneSelectionChanged() {
                    || elementKind == ElementKind::EndpointAttachment) {
             const auto connection = m_elementConnections.constFind(element);
             if (connection != m_elementConnections.constEnd()) {
-                if (auto* source = m_scene->nodeGraphicsObject(
-                        connection->outNodeId)) {
-                    source->setData(relatedHighlightDataRole, true);
-                    source->update();
-                }
-                if (auto* target = m_scene->nodeGraphicsObject(
-                        connection->inNodeId)) {
-                    target->setData(relatedHighlightDataRole, true);
-                    target->update();
-                }
+                setNodeRelatedHighlight(connection->outNodeId);
+                setNodeRelatedHighlight(connection->inNodeId);
             }
         }
     }
@@ -1478,13 +1921,13 @@ void NocNodeEditor::handlePointerReleased(const QPoint& viewportPosition) {
             && node) {
             const QPointF currentPosition = m_graphModel->nodeData(
                 *hitNodeId, QtNodes::NodeRole::Position).toPointF();
-            const bool nodeMoved = QLineF(
-                currentPosition, hitMetadata->projectedPosition).length() >= 4.0;
+            const bool nodeMoved = squaredDistance(
+                currentPosition, hitMetadata->projectedPosition) >= squared(4.0);
             const QPointF scenePosition = m_view->mapToScene(viewportPosition);
             const QPointF localPosition = node->mapFromScene(scenePosition);
             const QSize nodeSize = m_scene->nodeGeometry().size(*hitNodeId);
             if (!nodeMoved
-                && NocNodeGeometry::collapseButtonRect(nodeSize).contains(localPosition)) {
+                && NocNodeGeometry::collapseButtonHitRect(nodeSize).contains(localPosition)) {
                 setRouterCollapsed(hitMetadata->id,
                                    !routerCollapsed(hitMetadata->id));
                 return;
@@ -1513,7 +1956,8 @@ void NocNodeEditor::handlePointerReleased(const QPoint& viewportPosition) {
         }
         const QPointF position = m_graphModel->nodeData(
             nodeId, QtNodes::NodeRole::Position).toPointF();
-        if (QLineF(position, metadata.projectedPosition).length() < 4.0) {
+        if (squaredDistance(position, metadata.projectedPosition)
+            < squared(4.0)) {
             continue;
         }
         if (!m_editingEnabled
@@ -1664,8 +2108,8 @@ bool NocNodeEditor::beginEndpointAttachmentDraft(const QPoint& viewportPosition)
     const QPoint portPosition = m_view->mapFromScene(node->mapToScene(
         m_scene->nodeGeometry().portPosition(
             *nodeId, QtNodes::PortType::Out, kEndpointOutPort)));
-    if (QLineF(QPointF(viewportPosition), QPointF(portPosition)).length()
-        > kInteractivePortHitRadius) {
+    if (squaredDistance(QPointF(viewportPosition), QPointF(portPosition))
+        > squared(kInteractivePortHitRadius)) {
         return false;
     }
 
@@ -1673,9 +2117,7 @@ bool NocNodeEditor::beginEndpointAttachmentDraft(const QPoint& viewportPosition)
         m_scene->nodeGeometry().portPosition(
             *nodeId, QtNodes::PortType::Out, kEndpointOutPort));
     auto* graphicsItem = new QGraphicsPathItem;
-    QPen pen(QColor(QStringLiteral("#2563eb")), 2.5, Qt::DashLine);
-    pen.setDashPattern({7.0, 5.0});
-    graphicsItem->setPen(pen);
+    graphicsItem->setPen(draftConnectionPen(palette()));
     graphicsItem->setZValue(1000.0);
     graphicsItem->setData(Qt::UserRole, QStringLiteral("finepaper.endpointAttachmentDraft"));
     m_scene->addItem(graphicsItem);
@@ -1768,34 +2210,72 @@ bool NocNodeEditor::beginRouterEndpointDraft(const QPoint& viewportPosition) {
         return false;
     }
 
+    const unsigned int logicalAttachmentCount =
+        static_cast<unsigned int>(m_attachmentPolicy.ports.size());
+    const bool collapsed = routerCollapsed(metadata->id);
+    const bool hasAggregate = collapsed
+        || hasRouterAttachmentPortOverflow(logicalAttachmentCount);
+    const unsigned int individualCount = collapsed
+        ? 0U
+        : individualVisibleRouterAttachmentPortCount(
+              logicalAttachmentCount);
+    const auto& geometry = m_scene->nodeGeometry();
     QtNodes::PortIndex hitPort = QtNodes::InvalidPortIndex;
-    qreal closestDistance = kInteractivePortHitRadius;
-    for (QtNodes::PortIndex portIndex = kRouterEndpointInPort;
-         portIndex < kRouterEndpointInPort
-             + static_cast<QtNodes::PortIndex>(m_attachmentPolicy.ports.size());
-         ++portIndex) {
-        const QPoint portPosition = m_view->mapFromScene(node->mapToScene(
-            m_scene->nodeGeometry().portPosition(
-                *nodeId, QtNodes::PortType::In, portIndex)));
-        const qreal distance = QLineF(
-            QPointF(viewportPosition), QPointF(portPosition)).length();
-        if (distance <= closestDistance) {
-            closestDistance = distance;
+    QPointF startScenePosition;
+    qreal closestSquaredDistance = squared(
+        kInteractivePortHitRadius + 0.001);
+    for (unsigned int offset = 0; offset < individualCount; ++offset) {
+        const QtNodes::PortIndex portIndex = kRouterEndpointInPort + offset;
+        if (!attachmentPortAvailable(*nodeId, portIndex)) {
+            continue;
+        }
+        const QPointF candidateScenePosition = node->mapToScene(
+            geometry.portPosition(
+                *nodeId, QtNodes::PortType::In, portIndex));
+        const QPoint candidateViewportPosition = m_view->mapFromScene(
+            candidateScenePosition);
+        const qreal candidateSquaredDistance = squaredDistance(
+            QPointF(viewportPosition),
+            QPointF(candidateViewportPosition));
+        if (candidateSquaredDistance < closestSquaredDistance) {
+            closestSquaredDistance = candidateSquaredDistance;
             hitPort = portIndex;
+            startScenePosition = candidateScenePosition;
         }
     }
-    if (hitPort == QtNodes::InvalidPortIndex
-        || !attachmentPortAvailable(*nodeId, hitPort)) {
+
+    if (hasAggregate) {
+        const unsigned int aggregateOffset = collapsed ? 0U : individualCount;
+        const QPointF aggregateScenePosition = node->mapToScene(
+            geometry.portPosition(
+                *nodeId,
+                QtNodes::PortType::In,
+                kRouterEndpointInPort + aggregateOffset));
+        const qreal aggregateSquaredDistance = squaredDistance(
+            QPointF(viewportPosition),
+            QPointF(m_view->mapFromScene(aggregateScenePosition)));
+        if (aggregateSquaredDistance < closestSquaredDistance) {
+            const attachment::TargetResolution bodyResolution =
+                resolveAttachmentTarget(
+                    *nodeId,
+                    attachment::RouterHitKind::Body,
+                    std::nullopt,
+                    std::nullopt);
+            if (bodyResolution.decision.allowed
+                && bodyResolution.displayPort) {
+                hitPort = kRouterEndpointInPort
+                    + static_cast<QtNodes::PortIndex>(
+                        *bodyResolution.displayPort);
+                startScenePosition = aggregateScenePosition;
+            }
+        }
+    }
+    if (hitPort == QtNodes::InvalidPortIndex) {
         return false;
     }
 
-    const QPointF startScenePosition = node->mapToScene(
-        m_scene->nodeGeometry().portPosition(
-            *nodeId, QtNodes::PortType::In, hitPort));
     auto* graphicsItem = new QGraphicsPathItem;
-    QPen pen(QColor(QStringLiteral("#2563eb")), 2.5, Qt::DashLine);
-    pen.setDashPattern({7.0, 5.0});
-    graphicsItem->setPen(pen);
+    graphicsItem->setPen(draftConnectionPen(palette()));
     graphicsItem->setZValue(1000.0);
     graphicsItem->setData(Qt::UserRole, QStringLiteral("finepaper.routerEndpointDraft"));
     m_scene->addItem(graphicsItem);
@@ -2157,6 +2637,314 @@ bool NocNodeEditor::detachEndpoint(QtNodes::NodeId nodeId,
     return true;
 }
 
+bool NocNodeEditor::deleteEndpointNode(QtNodes::NodeId nodeId) {
+    const auto metadataIterator = m_metadata.constFind(nodeId);
+    if (metadataIterator == m_metadata.constEnd() || !m_editingEnabled) {
+        return false;
+    }
+    const NodeMetadata metadata = *metadataIterator;
+    const bool pending =
+        metadata.kind == NocEditorSelection::Kind::PendingEndpoint;
+    if (!pending && metadata.kind != NocEditorSelection::Kind::Endpoint) {
+        return false;
+    }
+
+    if (pending) {
+        const auto pendingIterator = m_pendingEndpoints.constFind(metadata.id);
+        if (pendingIterator == m_pendingEndpoints.cend()) {
+            return true;
+        }
+        const bool detached = pendingIterator->detached.has_value();
+        const QString endpointLabel = detached
+            ? pendingIterator->detached->endpoint.id : pendingIterator->type;
+        QMessageBox confirmation(
+            QMessageBox::Warning,
+            detached
+                ? QStringLiteral("Delete detached Endpoint?")
+                : QStringLiteral("Discard unattached Endpoint?"),
+            detached
+                ? QStringLiteral(
+                      "Permanently delete Endpoint %1 and discard the Domain, "
+                      "attachment, and configuration data held by this canvas draft?")
+                      .arg(endpointLabel.toHtmlEscaped())
+                : QStringLiteral(
+                      "Discard the unattached %1 Endpoint from the canvas?")
+                      .arg(endpointLabel.toHtmlEscaped()),
+            QMessageBox::Yes | QMessageBox::Cancel,
+            this);
+        confirmation.setObjectName(
+            QStringLiteral("finepaper.deletePendingEndpointConfirmation"));
+        confirmation.setTextFormat(Qt::RichText);
+        confirmation.setDefaultButton(QMessageBox::Cancel);
+        confirmation.setEscapeButton(QMessageBox::Cancel);
+        if (QPushButton* deleteButton = qobject_cast<QPushButton*>(
+                confirmation.button(QMessageBox::Yes))) {
+            deleteButton->setText(
+                detached
+                    ? QStringLiteral("Delete Endpoint")
+                    : QStringLiteral("Discard Endpoint"));
+            deleteButton->setProperty(
+                "finepaperRole", QStringLiteral("danger"));
+        }
+        if (confirmation.exec() != QMessageBox::Yes) {
+            return true;
+        }
+        const auto iterator = m_pendingEndpoints.constFind(metadata.id);
+        if (iterator == m_pendingEndpoints.cend()) {
+            return true;
+        }
+        attachment::EndpointSubject subject;
+        subject.lifecycle = iterator->detached
+            ? attachment::EndpointLifecycle::Detached
+            : attachment::EndpointLifecycle::PendingNew;
+        if (iterator->detached) {
+            subject.endpointId = iterator->detached->endpoint.id;
+            subject.durableAttachment = iterator->detached->endpoint.attachment;
+        }
+        const attachment::TransitionPlan plan = attachment::decideTransition(
+            m_editingEnabled,
+            m_attachmentPolicy,
+            {subject, attachment::TransitionIntent::Delete, std::nullopt});
+        if (!plan.decision.allowed) {
+            reportAttachmentRejection(plan.decision.rejection);
+            return true;
+        }
+        const QString durableEndpointId = subject.endpointId;
+        m_pendingEndpoints.remove(metadata.id);
+        if (plan.command
+                == attachment::AttachmentCommandKind::DiscardDetachedDraft
+            && !durableEndpointId.isEmpty()
+            && detachedEndpointDeletionRequested) {
+            detachedEndpointDeletionRequested(durableEndpointId);
+        }
+        rebuildGraph(false);
+        return true;
+    }
+
+    if (!m_design || !endpointDeletionRequested) {
+        return true;
+    }
+    const auto endpoint = std::find_if(
+        m_design->endpoints.cbegin(),
+        m_design->endpoints.cend(),
+        [&](const EndpointInstance& candidate) {
+            return candidate.id == metadata.id;
+        });
+    if (endpoint == m_design->endpoints.cend()) {
+        return true;
+    }
+    const attachment::TransitionPlan plan = attachment::decideTransition(
+        m_editingEnabled,
+        m_attachmentPolicy,
+        {{attachment::EndpointLifecycle::Attached,
+          endpoint->id,
+          endpoint->attachment},
+         attachment::TransitionIntent::Delete,
+         std::nullopt});
+    if (plan.decision.allowed
+        && plan.command
+            == attachment::AttachmentCommandKind::DeleteAttachedEndpoint) {
+        const QString endpointId = metadata.id;
+        beginSemanticMutation();
+        endpointDeletionRequested(endpointId);
+        endSemanticMutation(true);
+    } else {
+        reportAttachmentRejection(
+            plan.decision.rejection, endpoint->attachment.router);
+    }
+    return true;
+}
+
+bool NocNodeEditor::deleteSelectedSemanticItem() {
+    if (m_selectedItems.size() != 1) {
+        return false;
+    }
+    const SelectionIdentity selection = m_selectedItems.front();
+    if (selection.kind == NocEditorSelection::Kind::Endpoint) {
+        const auto node = m_elementNodes.constFind(
+            ElementRef{ElementKind::Endpoint, selection.id});
+        return node != m_elementNodes.constEnd()
+            && deleteEndpointNode(node.value());
+    }
+    if (selection.kind == NocEditorSelection::Kind::PendingEndpoint) {
+        for (auto iterator = m_metadata.constBegin();
+             iterator != m_metadata.constEnd(); ++iterator) {
+            if (iterator->kind == selection.kind
+                && iterator->id == selection.id) {
+                return deleteEndpointNode(iterator.key());
+            }
+        }
+        return true;
+    }
+    if (selection.kind == NocEditorSelection::Kind::EndpointAttachment) {
+        const auto connection = m_elementConnections.constFind(
+            ElementRef{ElementKind::EndpointAttachment, selection.id});
+        if (connection != m_elementConnections.constEnd()) {
+            detachEndpoint(connection->outNodeId, true);
+        }
+        return true;
+    }
+    return false;
+}
+
+QGraphicsItem* NocNodeEditor::graphicsItemForSelection(
+    const SelectionIdentity& selection) {
+    if (!m_scene) {
+        return nullptr;
+    }
+    if (const std::optional<QtNodes::NodeId> nodeId =
+            nodeIdForSelection(selection)) {
+        return m_scene->nodeGraphicsObject(*nodeId);
+    }
+
+    const ElementKind kind = elementKindForSelection(selection.kind);
+    const ElementRef element{kind, selection.id};
+    if (kind == ElementKind::RouterLink
+        || kind == ElementKind::EndpointAttachment) {
+        const auto connection = m_elementConnections.constFind(element);
+        return connection == m_elementConnections.constEnd()
+            ? nullptr
+            : m_scene->connectionGraphicsObject(connection.value());
+    }
+    return nullptr;
+}
+
+std::optional<QtNodes::NodeId> NocNodeEditor::nodeIdForSelection(
+    const SelectionIdentity& selection) const {
+    if (selection.kind == NocEditorSelection::Kind::PendingEndpoint) {
+        for (auto iterator = m_metadata.constBegin();
+             iterator != m_metadata.constEnd(); ++iterator) {
+            if (iterator->kind == selection.kind
+                && iterator->id == selection.id) {
+                return iterator.key();
+            }
+        }
+        return std::nullopt;
+    }
+
+    const ElementKind kind = elementKindForSelection(selection.kind);
+    const ElementRef element{kind, selection.id};
+    if (kind == ElementKind::Router || kind == ElementKind::Endpoint) {
+        const auto node = m_elementNodes.constFind(element);
+        return node == m_elementNodes.constEnd()
+            ? std::nullopt
+            : std::optional<QtNodes::NodeId>{node.value()};
+    }
+    return std::nullopt;
+}
+
+void NocNodeEditor::ensureSelectionVisible(
+    const SelectionIdentity& selection) {
+    if (!m_view) {
+        return;
+    }
+    if (QGraphicsItem* item = graphicsItemForSelection(selection)) {
+        m_view->ensureVisible(item, 48, 48);
+    }
+}
+
+bool NocNodeEditor::selectAdjacentCanvasItem(bool backwards) {
+    if (!m_scene || !m_view) {
+        return false;
+    }
+    struct CanvasTarget {
+        SelectionIdentity selection;
+        QPointF center;
+    };
+    QVector<CanvasTarget> targets;
+    targets.reserve(m_metadata.size() + m_elementConnections.size());
+    for (auto iterator = m_metadata.constBegin();
+         iterator != m_metadata.constEnd(); ++iterator) {
+        if (iterator->kind != NocEditorSelection::Kind::Router
+            && iterator->kind != NocEditorSelection::Kind::Endpoint
+            && iterator->kind
+                != NocEditorSelection::Kind::PendingEndpoint) {
+            continue;
+        }
+        const SelectionIdentity selection{iterator->kind, iterator->id};
+        if (QGraphicsItem* item = graphicsItemForSelection(selection)) {
+            targets.append({selection, item->sceneBoundingRect().center()});
+        }
+    }
+    for (auto iterator = m_elementConnections.constBegin();
+         iterator != m_elementConnections.constEnd(); ++iterator) {
+        const NocEditorSelection::Kind kind = selectionKindForElement(
+            iterator.key().kind);
+        const SelectionIdentity selection{kind, iterator.key().id};
+        if (kind != NocEditorSelection::Kind::None) {
+            if (QGraphicsItem* item = graphicsItemForSelection(selection)) {
+                targets.append(
+                    {selection, item->sceneBoundingRect().center()});
+            }
+        }
+    }
+    std::sort(targets.begin(), targets.end(), [](const CanvasTarget& left,
+                                                  const CanvasTarget& right) {
+        if (left.center.y() != right.center.y()) {
+            return left.center.y() < right.center.y();
+        }
+        if (left.center.x() != right.center.x()) {
+            return left.center.x() < right.center.x();
+        }
+        if (left.selection.kind != right.selection.kind) {
+            return static_cast<int>(left.selection.kind)
+                < static_cast<int>(right.selection.kind);
+        }
+        return left.selection.id < right.selection.id;
+    });
+    if (targets.isEmpty()) {
+        return false;
+    }
+
+    qsizetype targetIndex = backwards ? targets.size() - 1 : 0;
+    if (m_selectedItems.size() == 1) {
+        const auto current = std::find_if(
+            targets.cbegin(), targets.cend(), [this](const CanvasTarget& target) {
+                return target.selection == m_selectedItems.front();
+            });
+        if (current != targets.cend()) {
+            const qsizetype currentIndex = current - targets.cbegin();
+            if ((!backwards && currentIndex + 1 >= targets.size())
+                || (backwards && currentIndex == 0)) {
+                return false;
+            }
+            targetIndex = currentIndex + (backwards ? -1 : 1);
+        }
+    }
+
+    m_selectedItems = {targets.at(targetIndex).selection};
+    restoreSelection();
+    ensureSelectionVisible(m_selectedItems.front());
+    return true;
+}
+
+bool NocNodeEditor::showSelectedContextMenuFromKeyboard() {
+    if (!m_view || m_selectedItems.size() != 1) {
+        return false;
+    }
+    const SelectionIdentity selection = m_selectedItems.front();
+    QGraphicsItem* item = graphicsItemForSelection(selection);
+    if (!item) {
+        return false;
+    }
+    const QPoint viewportPosition = m_view->mapFromScene(
+        item->sceneBoundingRect().center());
+    const QPoint globalPosition = m_view->viewport()->mapToGlobal(
+        viewportPosition);
+    if (auto* node = qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item)) {
+        showNodeContextMenu(node->nodeId(), globalPosition);
+        return true;
+    }
+    auto* connection =
+        qgraphicsitem_cast<QtNodes::ConnectionGraphicsObject*>(item);
+    if (!connection
+        || !isEndpointAttachmentConnection(connection->connectionId())) {
+        return false;
+    }
+    showConnectionContextMenu(connection->connectionId(), globalPosition);
+    return true;
+}
+
 void NocNodeEditor::showContextMenu(const QPoint& viewportPosition,
                                     const QPoint& globalPosition) {
     if (QtNodes::ConnectionGraphicsObject* connection = connectionAt(viewportPosition)) {
@@ -2203,8 +2991,16 @@ void NocNodeEditor::showConnectionContextMenu(
     QAction* disconnect = menu->addAction(
         QStringLiteral("Disconnect Endpoint from Router"));
     disconnect->setObjectName(workbench::disconnectConnectionActionName);
-    connect(disconnect, &QAction::triggered, this, [this, connectionId] {
-        m_graphModel->deleteConnection(connectionId);
+    const std::optional<ElementRef> attachment = elementForConnection(
+        connectionId);
+    connect(disconnect, &QAction::triggered, this, [this, attachment] {
+        if (!attachment) {
+            return;
+        }
+        const auto current = m_elementConnections.constFind(*attachment);
+        if (current != m_elementConnections.constEnd()) {
+            m_graphModel->deleteConnection(current.value());
+        }
     });
     menu->popup(globalPosition);
 }
@@ -2278,9 +3074,10 @@ void NocNodeEditor::showNodeContextMenu(QtNodes::NodeId nodeId,
         return;
     }
     menu->setObjectName(workbench::endpointContextMenuName);
+    const SelectionIdentity endpointSelection{metadata->kind, metadata->id};
     QMenu* connectMenu = menu->addMenu(QStringLiteral("Connect to Router"));
     connectMenu->setObjectName(workbench::connectRouterMenuName);
-    QVector<QPair<RouterPosition, QString>> routers;
+    QVector<std::pair<RouterPosition, QString>> routers;
     routers.reserve(m_routerNodes.size());
     for (auto iterator = m_routerNodes.constBegin(); iterator != m_routerNodes.constEnd(); ++iterator) {
         const NodeMetadata routerMetadata = m_metadata.value(iterator.value());
@@ -2297,123 +3094,96 @@ void NocNodeEditor::showNodeContextMenu(QtNodes::NodeId nodeId,
     for (const auto& router : std::as_const(routers)) {
         QAction* action = connectMenu->addAction(router.second);
         action->setData(router.second);
-        connect(action, &QAction::triggered, this, [this, nodeId, position = router.first] {
-            attachNodeToRouter(
-                nodeId, NocAttachmentTarget{position, std::nullopt});
+        connect(action, &QAction::triggered, this,
+                [this, endpointSelection, position = router.first] {
+            if (const std::optional<QtNodes::NodeId> currentNode =
+                    nodeIdForSelection(endpointSelection)) {
+                attachNodeToRouter(
+                    *currentNode,
+                    NocAttachmentTarget{position, std::nullopt});
+            }
         });
     }
     menu->addSeparator();
     if (!pending) {
         QAction* detach = menu->addAction(QStringLiteral("Disconnect from Router"));
         detach->setObjectName(workbench::detachEndpointActionName);
-        connect(detach, &QAction::triggered, this, [this, nodeId] {
-            detachEndpoint(nodeId);
+        connect(detach, &QAction::triggered, this, [this, endpointSelection] {
+            if (const std::optional<QtNodes::NodeId> currentNode =
+                    nodeIdForSelection(endpointSelection)) {
+                detachEndpoint(*currentNode);
+            }
         });
     }
     QAction* remove = menu->addAction(
         pending ? QStringLiteral("Delete Unattached Endpoint")
                 : QStringLiteral("Delete Endpoint"));
     remove->setObjectName(workbench::deleteEndpointActionName);
-    const QString endpointId = metadata->id;
-    connect(remove, &QAction::triggered, this, [this, pending, endpointId] {
-        if (pending) {
-            const auto iterator = m_pendingEndpoints.constFind(endpointId);
-            if (iterator == m_pendingEndpoints.cend()) {
-                return;
-            }
-            attachment::EndpointSubject subject;
-            subject.lifecycle = iterator->detached
-                ? attachment::EndpointLifecycle::Detached
-                : attachment::EndpointLifecycle::PendingNew;
-            if (iterator->detached) {
-                subject.endpointId = iterator->detached->endpoint.id;
-                subject.durableAttachment =
-                    iterator->detached->endpoint.attachment;
-            }
-            const attachment::TransitionPlan plan = attachment::decideTransition(
-                m_editingEnabled,
-                m_attachmentPolicy,
-                {subject, attachment::TransitionIntent::Delete, std::nullopt});
-            if (!plan.decision.allowed) {
-                reportAttachmentRejection(plan.decision.rejection);
-                return;
-            }
-            const QString durableEndpointId = subject.endpointId;
-            m_pendingEndpoints.remove(endpointId);
-            if (plan.command
-                    == attachment::AttachmentCommandKind::DiscardDetachedDraft
-                && !durableEndpointId.isEmpty()
-                && detachedEndpointDeletionRequested) {
-                detachedEndpointDeletionRequested(durableEndpointId);
-            }
-            rebuildGraph(false);
-            return;
-        }
-        if (!m_design || !endpointDeletionRequested) {
-            return;
-        }
-        const auto endpoint = std::find_if(
-            m_design->endpoints.cbegin(),
-            m_design->endpoints.cend(),
-            [&](const EndpointInstance& candidate) {
-                return candidate.id == endpointId;
-            });
-        if (endpoint == m_design->endpoints.cend()) {
-            return;
-        }
-        const attachment::TransitionPlan plan = attachment::decideTransition(
-            m_editingEnabled,
-            m_attachmentPolicy,
-            {{attachment::EndpointLifecycle::Attached,
-              endpoint->id,
-              endpoint->attachment},
-             attachment::TransitionIntent::Delete,
-             std::nullopt});
-        if (plan.decision.allowed
-            && plan.command
-                == attachment::AttachmentCommandKind::DeleteAttachedEndpoint) {
-            beginSemanticMutation();
-            endpointDeletionRequested(endpointId);
-            endSemanticMutation(true);
-        } else {
-            reportAttachmentRejection(
-                plan.decision.rejection, endpoint->attachment.router);
+    connect(remove, &QAction::triggered, this, [this, endpointSelection] {
+        if (const std::optional<QtNodes::NodeId> currentNode =
+                nodeIdForSelection(endpointSelection)) {
+            deleteEndpointNode(*currentNode);
         }
     });
     menu->popup(globalPosition);
 }
 
 void NocNodeEditor::highlightNeighborhood(QtNodes::NodeId nodeId) {
-    clearNeighborhoodHighlight();
     if (!m_scene || !m_graphModel->nodeExists(nodeId)) {
         return;
     }
     for (const QtNodes::ConnectionId& connectionId
          : m_graphModel->allConnectionIds(nodeId)) {
-        if (auto* connection = m_scene->connectionGraphicsObject(connectionId)) {
-            connection->setData(relatedHighlightDataRole, true);
-            connection->update();
-        }
+        setConnectionRelatedHighlight(connectionId);
         const QtNodes::NodeId relatedNodeId = connectionId.outNodeId == nodeId
             ? connectionId.inNodeId
             : connectionId.outNodeId;
-        if (auto* relatedNode = m_scene->nodeGraphicsObject(relatedNodeId)) {
-            relatedNode->setData(relatedHighlightDataRole, true);
-            relatedNode->update();
-        }
+        setNodeRelatedHighlight(relatedNodeId);
+    }
+}
+
+void NocNodeEditor::setNodeRelatedHighlight(QtNodes::NodeId nodeId) {
+    if (!m_scene || m_highlightedNodeIds.contains(nodeId)) {
+        return;
+    }
+    if (auto* node = m_scene->nodeGraphicsObject(nodeId)) {
+        node->setData(relatedHighlightDataRole, true);
+        node->update();
+        m_highlightedNodeIds.insert(nodeId);
+    }
+}
+
+void NocNodeEditor::setConnectionRelatedHighlight(
+    QtNodes::ConnectionId connectionId) {
+    if (!m_scene) {
+        return;
+    }
+    if (auto* connection = m_scene->connectionGraphicsObject(connectionId)) {
+        connection->setData(relatedHighlightDataRole, true);
+        connection->update();
+        m_highlightedConnectionIds.append(connectionId);
     }
 }
 
 void NocNodeEditor::clearNeighborhoodHighlight() {
-    if (!m_scene) {
-        return;
-    }
-    for (QGraphicsItem* item : m_scene->items()) {
-        if (item->data(relatedHighlightDataRole).toBool()) {
-            item->setData(relatedHighlightDataRole, false);
-            item->update();
+    if (m_scene) {
+        for (const QtNodes::NodeId nodeId : std::as_const(m_highlightedNodeIds)) {
+            if (auto* node = m_scene->nodeGraphicsObject(nodeId)) {
+                node->setData(relatedHighlightDataRole, false);
+                node->update();
+            }
+        }
+        for (const QtNodes::ConnectionId& connectionId
+             : std::as_const(m_highlightedConnectionIds)) {
+            if (auto* connection =
+                    m_scene->connectionGraphicsObject(connectionId)) {
+                connection->setData(relatedHighlightDataRole, false);
+                connection->update();
+            }
         }
     }
+    m_highlightedNodeIds.clear();
+    m_highlightedConnectionIds.clear();
 }
 
 void NocNodeEditor::loadWorkspaceState() {
@@ -2536,7 +3306,11 @@ bool NocNodeEditor::handleEndpointDrop(const QString& endpointType,
     const attachment::CreateEndpointResult created = endpointTypeDropped(
         endpointType, *resolution.target);
     endSemanticMutation(true);
-    return created.success;
+    if (!created.success || created.endpointId.trimmed().isEmpty()) {
+        return false;
+    }
+    selectElements({{ElementKind::Endpoint, created.endpointId}});
+    return true;
 }
 
 void NocNodeEditor::addPendingEndpoint(const QString& endpointType,
@@ -2603,12 +3377,22 @@ QtNodes::ConnectionGraphicsObject* NocNodeEditor::connectionAt(
     if (!m_view) {
         return nullptr;
     }
+    if (nodeAt(viewportPosition)) {
+        return nullptr;
+    }
+    const QRect hitArea(
+        viewportPosition
+            - QPoint(kInteractiveConnectionHitRadius,
+                     kInteractiveConnectionHitRadius),
+        QSize(kInteractiveConnectionHitRadius * 2 + 1,
+              kInteractiveConnectionHitRadius * 2 + 1));
     QtNodes::ConnectionGraphicsObject* firstConnection = nullptr;
-    for (QGraphicsItem* hitItem : m_view->items(viewportPosition)) {
+    for (QGraphicsItem* hitItem
+         : m_view->items(hitArea, Qt::IntersectsItemShape)) {
         QGraphicsItem* item = hitItem;
         while (item) {
             if (qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item)) {
-                return nullptr;
+                break;
             }
             if (auto* connection =
                     qgraphicsitem_cast<QtNodes::ConnectionGraphicsObject*>(item)) {
@@ -2773,15 +3557,44 @@ attachment::TargetResolution NocNodeEditor::resolveAttachmentTargetAt(
         return rejected;
     }
     auto* routerGraphics = m_scene->nodeGraphicsObject(routerNode);
-    if (!routerGraphics) {
+    const auto routerMetadata = m_metadata.constFind(routerNode);
+    if (!routerGraphics || routerMetadata == m_metadata.constEnd()
+        || routerMetadata->kind != NocEditorSelection::Kind::Router) {
         attachment::TargetResolution rejected;
         rejected.decision = attachment::RuleDecision::reject(
             attachment::Rejection::UnknownRouter);
         return rejected;
     }
 
-    const QPointF localPosition = routerGraphics->mapFromScene(scenePosition);
     const auto& geometry = m_scene->nodeGeometry();
+    const unsigned int logicalAttachmentCount =
+        static_cast<unsigned int>(m_attachmentPolicy.ports.size());
+    const bool collapsed = routerCollapsed(routerMetadata->id);
+    const bool hasAggregate = collapsed
+        || hasRouterAttachmentPortOverflow(logicalAttachmentCount);
+    if (hasAggregate && m_view) {
+        const unsigned int aggregateOffset = collapsed
+            ? 0U
+            : individualVisibleRouterAttachmentPortCount(
+                  logicalAttachmentCount);
+        const QPointF aggregateScenePosition = routerGraphics->mapToScene(
+            geometry.portPosition(
+                routerNode,
+                QtNodes::PortType::In,
+                kRouterEndpointInPort + aggregateOffset));
+        if (squaredDistance(
+                QPointF(m_view->mapFromScene(scenePosition)),
+                QPointF(m_view->mapFromScene(aggregateScenePosition)))
+            <= squared(kInteractivePortHitRadius)) {
+            return resolveAttachmentTarget(
+                routerNode,
+                attachment::RouterHitKind::Body,
+                std::nullopt,
+                ignoredEndpoint);
+        }
+    }
+
+    const QPointF localPosition = routerGraphics->mapFromScene(scenePosition);
     const QtNodes::PortIndex inputPort = geometry.checkPortHit(
         routerNode, QtNodes::PortType::In, localPosition);
     if (inputPort != QtNodes::InvalidPortIndex) {
@@ -2915,7 +3728,7 @@ std::optional<NocEditorSelection> NocNodeEditor::selectionForIdentity(
     if (!m_elementConnections.contains(element)) {
         return std::nullopt;
     }
-    std::optional<RouterPosition> router;
+    std::optional<RouterPosition> router = std::nullopt;
     if (elementKind == ElementKind::EndpointAttachment && m_design) {
         const auto endpoint = std::find_if(
             m_design->endpoints.cbegin(), m_design->endpoints.cend(),
@@ -2952,13 +3765,21 @@ void NocNodeEditor::applyNodeStacking() {
     if (!m_scene) {
         return;
     }
-    for (auto iterator = m_metadata.constBegin();
-         iterator != m_metadata.constEnd(); ++iterator) {
-        if (auto* node = m_scene->nodeGraphicsObject(iterator.key())) {
-            node->setZValue(iterator->kind == NocEditorSelection::Kind::Router
-                                ? kRouterNodeZValue
-                                : kEndpointNodeZValue);
+    // QtNodes only raises selected nodes. Track that small set so restoring
+    // semantic Router/Endpoint layering does not sort and scan the full scene
+    // on every pointer or context-menu event.
+    for (QtNodes::NodeId nodeId : std::as_const(m_stackingNodeIds)) {
+        const auto metadata = m_metadata.constFind(nodeId);
+        if (metadata == m_metadata.constEnd()) {
+            continue;
         }
+        auto* node = m_scene->nodeGraphicsObject(nodeId);
+        if (!node) {
+            continue;
+        }
+        node->setZValue(metadata->kind == NocEditorSelection::Kind::Router
+                            ? kRouterNodeZValue
+                            : kEndpointNodeZValue);
     }
 }
 
@@ -2966,6 +3787,9 @@ void NocNodeEditor::applyDomainPresentation() {
     if (!m_scene) {
         return;
     }
+
+    const QPalette applicationPalette = palette();
+    const NocEditorColors visual = nocEditorColors(applicationPalette);
 
     for (auto iterator = m_metadata.constBegin();
          iterator != m_metadata.constEnd(); ++iterator) {
@@ -2982,13 +3806,60 @@ void NocNodeEditor::applyDomainPresentation() {
             domainElement == m_domainPresentation.elements.constEnd()
             ? nullptr : &domainElement.value();
         QVariantList colors;
+        QVariantList patternBrushes;
+        QStringList domainIds;
         if (presentation) {
-            colors.reserve(presentation->colors.size());
-            for (const QColor& color : presentation->colors) {
-                colors.append(color);
+            domainIds = presentation->domainIds;
+            const qsizetype visibleCount = (std::min)(
+                kMaximumVisibleDomainStripSegments,
+                presentation->colors.size());
+            colors.reserve(visibleCount);
+            patternBrushes.reserve(visibleCount);
+            for (qsizetype index = 0; index < visibleCount; ++index) {
+                const bool overflow = presentation->colors.size()
+                        > kMaximumVisibleDomainStripSegments
+                    && index + 1 == visibleCount;
+                QColor base = overflow
+                    ? visual.domainUnassigned
+                    : presentation->colors.at(index);
+                if (!base.isValid()) {
+                    base = visual.domainUnassigned;
+                }
+                QColor ink = nocDomainPatternInk(base, applicationPalette);
+                ink.setAlpha(150);
+                const QString domainId = overflow
+                    ? QString{} : presentation->domainIds.value(index);
+                const Qt::BrushStyle fallback = overflow
+                    ? Qt::Dense4Pattern
+                    : (index % 2 == 0
+                           ? Qt::BDiagPattern : Qt::FDiagPattern);
+                colors.append(base);
+                patternBrushes.append(QBrush(
+                    ink,
+                    domainId.isEmpty()
+                        ? fallback : nocDomainPattern(domainId)));
+            }
+            if (colors.isEmpty()
+                && presentation->state
+                    != DomainAssignmentDisplayState::Inactive
+                && presentation->state
+                    != DomainAssignmentDisplayState::NotApplicable) {
+                const bool unavailable = presentation->state
+                    == DomainAssignmentDisplayState::Unavailable;
+                const QColor base = unavailable
+                    ? visual.domainUnavailable : visual.domainUnassigned;
+                QColor ink = nocDomainPatternInk(base, applicationPalette);
+                ink.setAlpha(150);
+                colors.append(base);
+                patternBrushes.append(QBrush(
+                    ink,
+                    unavailable
+                        ? Qt::DiagCrossPattern : Qt::BDiagPattern));
             }
         }
         graphics->setData(domainColorsDataRole, colors);
+        graphics->setData(domainPatternBrushesDataRole, patternBrushes);
+        graphics->setData(domainIdsDataRole, domainIds);
         graphics->setData(
             domainAssignmentStateDataRole,
             static_cast<int>(presentation
@@ -3014,9 +3885,68 @@ void NocNodeEditor::applyDomainPresentation() {
         graphics->setData(domainCrossingDataRole, crossing != nullptr);
         graphics->setData(domainCrossingColorDataRole,
                           crossing ? crossing->primaryAccent : QColor{});
+        graphics->setData(
+            domainCrossingPaintColorDataRole,
+            crossing && crossing->primaryAccent.isValid()
+                ? readableNocCanvasAccent(
+                      crossing->primaryAccent, applicationPalette)
+                : QColor{});
         graphics->setData(domainOverrideDataRole, hasOverride);
         graphics->update();
     }
+}
+
+void NocNodeEditor::updateCanvasAccessibleDescription() {
+    if (!m_view) {
+        return;
+    }
+
+    QString description = QStringLiteral(
+        "Pan with a pointer drag. Hold Shift to box-select, or use the "
+        "Select and Pan toolbar actions. With keyboard focus on the canvas, "
+        "Tab and Shift+Tab move through elements, Space collapses or expands "
+        "a selected Router, Shift+F10 opens element actions, and Delete "
+        "removes an editable Endpoint or disconnects its attachment.");
+    if (m_domainPresentation.status == DomainPresentationStatus::Inactive
+        || m_domainPresentation.activeDomainType.trimmed().isEmpty()) {
+        m_view->setAccessibleDescription(description);
+        return;
+    }
+
+    QString layerLabel = m_domainPresentation.domainTypeLabel.trimmed();
+    if (layerLabel.isEmpty()) {
+        layerLabel = m_domainPresentation.activeDomainType.trimmed();
+    }
+    description += QStringLiteral(" Current domain layer: %1.").arg(layerLabel);
+    if (m_domainPresentation.status
+        == DomainPresentationStatus::MissingPackageType) {
+        description += QStringLiteral(
+            " This layer is unavailable for the current package.");
+        m_view->setAccessibleDescription(description);
+        return;
+    }
+
+    constexpr qsizetype maximumSpokenEntries = 8;
+    QStringList domainNames;
+    const qsizetype visibleCount = (std::min)(
+        maximumSpokenEntries, m_domainPresentation.legend.size());
+    domainNames.reserve(visibleCount);
+    for (qsizetype index = 0; index < visibleCount; ++index) {
+        const DomainLegendEntry& entry = m_domainPresentation.legend.at(index);
+        domainNames.append(entry.name.trimmed().isEmpty()
+                               ? entry.id : entry.name);
+    }
+    if (domainNames.isEmpty()) {
+        description += QStringLiteral(" No assigned domains.");
+    } else {
+        description += QStringLiteral(" Domains: %1.").arg(
+            domainNames.join(QStringLiteral(", ")));
+        if (m_domainPresentation.legend.size() > visibleCount) {
+            description += QStringLiteral(" %1 more domains.").arg(
+                m_domainPresentation.legend.size() - visibleCount);
+        }
+    }
+    m_view->setAccessibleDescription(description);
 }
 
 void NocNodeEditor::restoreSelection() {

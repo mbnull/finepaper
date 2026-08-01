@@ -1,4 +1,5 @@
 #include "gui/main_window.h"
+#include "ui/theme/workbench_style.h"
 
 #include <QApplication>
 
@@ -20,6 +21,7 @@ int main(int argc, char** argv) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Finepaper"));
     QCoreApplication::setApplicationName(QStringLiteral("finepaper"));
+    finepaper::ui::applyWorkbenchStyle(application);
     finepaper::FinepaperMainWindow window(
         finepaper::resolveRuntimeLocations(explicitPackageRoots(QCoreApplication::arguments())));
     window.show();

@@ -4,11 +4,14 @@
 #include "features/domain/domain_configuration_workspace.h"
 #include "features/design_extensions/design_extensions_workspace.h"
 #include "features/domain/domain_manager_panel.h"
+#include "features/attachment/endpoint_attachment_rules.h"
 #include "gui/element_configuration_panel.h"
 #include "gui/endpoint_configuration_panel.h"
 #include "features/domain/endpoint_domain_assignment_dialog.h"
 #include "features/topology/mesh_resize_dialog.h"
 #include "gui/package_parameter_form.h"
+#include "ui/components/empty_state.h"
+#include "ui/theme/ui_tokens.h"
 #include "ui/workbench/workbench_config.h"
 #include "storage/json.h"
 
@@ -33,7 +36,6 @@
 #include <QHeaderView>
 #include <QHash>
 #include <QJsonDocument>
-#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -51,8 +53,8 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
+#include <QStackedLayout>
 #include <QStatusBar>
-#include <QStyle>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QToolBar>
@@ -117,7 +119,7 @@ QString domainCrossingInspectorHtml(
               .arg(label.toHtmlEscaped(),
                    snapshot.activeDomainType.toHtmlEscaped());
 
-    QStringList lines{
+    QStringList lines = {
         QStringLiteral("<b>Color-by Domain crossing — %1</b>").arg(layer),
         QStringLiteral("From set: %1").arg(
             domainSetHtml(crossing->fromDomainIds)),
@@ -179,12 +181,13 @@ QTableWidgetItem* readOnlyItem(const QString& text) {
 QWidget* placeholderPage(const QString& title, const QString& description, QLabel** summary) {
     auto* page = new QWidget;
     auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(32, 32, 32, 32);
+    layout->setContentsMargins(
+        ui::UiMetrics::spacing32, ui::UiMetrics::spacing32,
+        ui::UiMetrics::spacing32, ui::UiMetrics::spacing32);
     auto* heading = new QLabel(title);
-    QFont font = heading->font();
-    font.setPointSize(18);
-    font.setBold(true);
-    heading->setFont(font);
+    heading->setProperty("finepaperRole", QStringLiteral("title"));
+    heading->setFont(
+        ui::fontForRole(ui::UiFontRole::Title, heading->font()));
     layout->addWidget(heading);
     auto* text = new QLabel(description);
     text->setWordWrap(true);
@@ -389,8 +392,6 @@ protected:
         }
         QDrag drag(this);
         drag.setMimeData(payload);
-        drag.setPixmap(style()->standardIcon(QStyle::SP_ArrowRight).pixmap(32, 32));
-        drag.setHotSpot(QPoint(16, 16));
         drag.exec(Qt::CopyAction, Qt::CopyAction);
     }
 };
@@ -457,8 +458,9 @@ bool FinepaperMainWindow::operationBusy() const {
 }
 
 void FinepaperMainWindow::createUi() {
+    setObjectName(QStringLiteral("finepaper.workbenchWindow"));
     setWindowTitle(QStringLiteral("Finepaper — NoC Workbench[*]"));
-    resize(1480, 920);
+    resize(workbench::defaultWindowWidth, workbench::defaultWindowHeight);
     setDockOptions(QMainWindow::AnimatedDocks
                    | QMainWindow::AllowNestedDocks
                    | QMainWindow::AllowTabbedDocks
@@ -478,26 +480,102 @@ void FinepaperMainWindow::createUi() {
     m_operationProgress->setRange(0, 0);
     m_operationProgress->setMaximumWidth(180);
     m_operationProgress->setTextVisible(false);
+    m_operationProgress->setAccessibleName(
+        QStringLiteral("Background operation in progress"));
     m_operationProgress->hide();
     statusBar()->addPermanentWidget(m_operationProgress);
 
-    resizeDocks({m_packageDock, m_inspectorDock}, {285, 360}, Qt::Horizontal);
-    resizeDocks({m_resultsDock}, {250}, Qt::Vertical);
+    resetWorkbenchLayout();
     updateUiState();
+}
+
+void FinepaperMainWindow::resetWorkbenchLayout() {
+    if (!m_packageDock || !m_inspectorDock || !m_domainDock
+        || !m_resultsDock) {
+        return;
+    }
+    for (QDockWidget* dock : {
+             m_packageDock, m_inspectorDock, m_domainDock, m_resultsDock}) {
+        dock->setFloating(false);
+    }
+    addDockWidget(Qt::LeftDockWidgetArea, m_packageDock);
+    addDockWidget(Qt::RightDockWidgetArea, m_inspectorDock);
+    addDockWidget(Qt::RightDockWidgetArea, m_domainDock);
+    tabifyDockWidget(m_inspectorDock, m_domainDock);
+    addDockWidget(Qt::BottomDockWidgetArea, m_resultsDock);
+    m_packageDock->show();
+    m_inspectorDock->show();
+    m_domainDock->show();
+    m_inspectorDock->raise();
+    m_resultsDock->hide();
+    resizeDocks(
+        {m_packageDock, m_inspectorDock},
+        {workbench::defaultPackageDockWidth,
+         workbench::defaultInspectorDockWidth},
+        Qt::Horizontal);
+    resizeDocks(
+        {m_resultsDock}, {workbench::defaultResultsDockHeight}, Qt::Vertical);
+    if (m_centerViews) {
+        selectCenterView(workbench::editorViewId);
+    }
 }
 
 void FinepaperMainWindow::createCentralViews() {
     m_centerViews = new QTabWidget(this);
+    m_centerViews->setObjectName(QStringLiteral("finepaper.centerViews"));
+    m_centerViews->setAccessibleName(QStringLiteral("Workbench views"));
     m_centerViews->setDocumentMode(true);
     m_centerViews->setMovable(true);
     m_centerViews->setTabsClosable(false);
+    m_centerViews->setElideMode(Qt::ElideRight);
     setCentralWidget(m_centerViews);
     m_viewRegistry.emplace(m_centerViews);
 
-    m_nodeEditor = new NocNodeEditor(m_centerViews);
+    m_editorPage = new QWidget(m_centerViews);
+    m_editorPage->setObjectName(QStringLiteral("finepaper.editorPage"));
+    m_editorStack = new QStackedLayout(m_editorPage);
+    m_editorStack->setContentsMargins(0, 0, 0, 0);
+    m_editorStack->setStackingMode(QStackedLayout::StackAll);
+
+    m_nodeEditor = new NocNodeEditor(m_editorPage);
     m_nodeEditor->setObjectName(QStringLiteral("finepaper.nodeEditor"));
+    m_editorStack->addWidget(m_nodeEditor);
+
+    m_editorEmptyStateOverlay = new QWidget(m_editorPage);
+    m_editorEmptyStateOverlay->setObjectName(
+        QStringLiteral("finepaper.canvasEmptyState"));
+    m_editorEmptyStateOverlay->setAutoFillBackground(true);
+    auto* emptyLayout = new QVBoxLayout(m_editorEmptyStateOverlay);
+    emptyLayout->setContentsMargins(
+        ui::UiMetrics::spacing32, ui::UiMetrics::spacing32,
+        ui::UiMetrics::spacing32, ui::UiMetrics::spacing32);
+    emptyLayout->addStretch(1);
+    m_editorEmptyState = new ui::EmptyState(m_editorEmptyStateOverlay);
+    m_editorEmptyState->setEyebrow(QStringLiteral("NO DESIGN OPEN"));
+    m_emptyCreateButton = m_editorEmptyState->addActionButton(
+        QStringLiteral("Create NoC Design"), QStringLiteral("primary"));
+    m_emptyCreateButton->setObjectName(
+        QStringLiteral("finepaper.emptyStateCreate"));
+    m_emptyOpenButton = m_editorEmptyState->addActionButton(
+        QStringLiteral("Open Design…"), QStringLiteral("quiet"));
+    m_emptyOpenButton->setObjectName(
+        QStringLiteral("finepaper.emptyStateOpen"));
+    m_emptyInstallButton = m_editorEmptyState->addActionButton(
+        QStringLiteral("Install NoC IP…"), QStringLiteral("primary"));
+    m_emptyInstallButton->setObjectName(
+        QStringLiteral("finepaper.emptyStateInstall"));
+    emptyLayout->addWidget(m_editorEmptyState, 0, Qt::AlignHCenter);
+    emptyLayout->addStretch(2);
+    m_editorStack->addWidget(m_editorEmptyStateOverlay);
+
+    connect(m_emptyCreateButton, &QPushButton::clicked,
+            this, &FinepaperMainWindow::createDesign);
+    connect(m_emptyOpenButton, &QPushButton::clicked,
+            this, &FinepaperMainWindow::openDesign);
+    connect(m_emptyInstallButton, &QPushButton::clicked,
+            this, &FinepaperMainWindow::installPackage);
     m_viewRegistry->addView(
-        {workbench::editorViewId, workbench::editorViewTitle}, m_nodeEditor);
+        {workbench::editorViewId, workbench::editorViewTitle}, m_editorPage);
 
     m_domainConfigurationWorkspace = new DomainConfigurationWorkspace(
         m_centerViews);
@@ -590,12 +668,13 @@ void FinepaperMainWindow::createCentralViews() {
 
     auto* problemPage = new QWidget;
     auto* problemLayout = new QVBoxLayout(problemPage);
-    problemLayout->setContentsMargins(16, 16, 16, 16);
+    problemLayout->setContentsMargins(
+        ui::UiMetrics::spacing16, ui::UiMetrics::spacing16,
+        ui::UiMetrics::spacing16, ui::UiMetrics::spacing16);
     auto* problemHeading = new QLabel(QStringLiteral("Problem Report"));
-    QFont problemFont = problemHeading->font();
-    problemFont.setPointSize(18);
-    problemFont.setBold(true);
-    problemHeading->setFont(problemFont);
+    problemHeading->setProperty("finepaperRole", QStringLiteral("title"));
+    problemHeading->setFont(
+        ui::fontForRole(ui::UiFontRole::Title, problemHeading->font()));
     m_problemReport = new QPlainTextEdit;
     m_problemReport->setReadOnly(true);
     m_problemReport->setPlaceholderText(
@@ -733,18 +812,26 @@ void FinepaperMainWindow::createPackageDock() {
     m_packageDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
     auto* content = new QWidget;
+    content->setObjectName(QStringLiteral("finepaper.packageLibraryContent"));
     auto* layout = new QVBoxLayout(content);
-    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setContentsMargins(
+        ui::UiMetrics::spacing12, ui::UiMetrics::spacing12,
+        ui::UiMetrics::spacing12, ui::UiMetrics::spacing12);
 
     auto* currentDesignGroup = new QGroupBox(QStringLiteral("Current Design"));
     auto* currentDesignLayout = new QVBoxLayout(currentDesignGroup);
     m_activePackageLabel = new QLabel(QStringLiteral("No design is open."));
     m_activePackageLabel->setObjectName(QStringLiteral("finepaper.activePackage"));
     m_activePackageLabel->setWordWrap(true);
+    m_activePackageLabel->setTextFormat(Qt::PlainText);
     m_activePackageLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_activePackageLabel->setProperty(
+        "finepaperRole", QStringLiteral("subtitle"));
     currentDesignLayout->addWidget(m_activePackageLabel);
     m_createDesignButton = new QPushButton(QStringLiteral("New NoC Design…"));
     m_createDesignButton->setObjectName(QStringLiteral("finepaper.createDesign"));
+    m_createDesignButton->setProperty(
+        "finepaperRole", QStringLiteral("primary"));
     currentDesignLayout->addWidget(m_createDesignButton);
     layout->addWidget(currentDesignGroup);
 
@@ -754,11 +841,16 @@ void FinepaperMainWindow::createPackageDock() {
     m_availablePackagesLabel->setObjectName(
         QStringLiteral("finepaper.availablePackages"));
     m_availablePackagesLabel->setWordWrap(true);
+    m_availablePackagesLabel->setTextFormat(Qt::PlainText);
     m_availablePackagesLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_availablePackagesLabel->setProperty(
+        "finepaperRole", QStringLiteral("muted"));
     packageLayout->addWidget(m_availablePackagesLabel);
     auto* packageButtons = new QHBoxLayout;
     m_installPackageButton = new QPushButton(QStringLiteral("Install…"));
     m_reloadPackagesButton = new QPushButton(QStringLiteral("Reload"));
+    m_reloadPackagesButton->setProperty(
+        "finepaperRole", QStringLiteral("quiet"));
     packageButtons->addWidget(m_installPackageButton);
     packageButtons->addWidget(m_reloadPackagesButton);
     packageLayout->addLayout(packageButtons);
@@ -769,17 +861,51 @@ void FinepaperMainWindow::createPackageDock() {
     paletteFont.setBold(true);
     paletteHeading->setFont(paletteFont);
     layout->addWidget(paletteHeading);
-    layout->addWidget(new QLabel(
-        QStringLiteral("Drag onto the canvas. Drop on a Router to attach immediately, "
-                       "or connect the new Endpoint afterward.")));
+    auto* paletteHelp = new QLabel(
+        QStringLiteral("Drag onto the canvas, or select a Router and activate "
+                       "an Endpoint type with Enter."));
+    paletteHelp->setWordWrap(true);
+    paletteHelp->setProperty("finepaperRole", QStringLiteral("muted"));
+    layout->addWidget(paletteHelp);
+    m_endpointFilter = new QLineEdit;
+    m_endpointFilter->setObjectName(
+        QStringLiteral("finepaper.endpointPaletteFilter"));
+    m_endpointFilter->setPlaceholderText(
+        QStringLiteral("Filter Endpoint types…"));
+    m_endpointFilter->setClearButtonEnabled(true);
+    m_endpointFilter->setAccessibleName(
+        QStringLiteral("Filter Endpoint types"));
+    layout->addWidget(m_endpointFilter);
     m_endpointPalette = new EndpointPaletteList;
     m_endpointPalette->setObjectName(QStringLiteral("finepaper.endpointPalette"));
+    m_endpointPalette->setAccessibleName(
+        QStringLiteral("Endpoint types"));
+    m_endpointPalette->setAccessibleDescription(QStringLiteral(
+        "Drag a type to the canvas, or press Enter to add it to the "
+        "selected Router."));
     m_endpointPalette->setDragEnabled(true);
     m_endpointPalette->setDragDropMode(QAbstractItemView::DragOnly);
     m_endpointPalette->setDefaultDropAction(Qt::CopyAction);
     m_endpointPalette->setSelectionMode(QAbstractItemView::SingleSelection);
     m_endpointPalette->setAlternatingRowColors(true);
     layout->addWidget(m_endpointPalette, 1);
+    paletteHeading->setBuddy(m_endpointPalette);
+
+    m_endpointPaletteHint = new QLabel;
+    m_endpointPaletteHint->setObjectName(
+        QStringLiteral("finepaper.endpointPaletteHint"));
+    m_endpointPaletteHint->setWordWrap(true);
+    m_endpointPaletteHint->setTextFormat(Qt::PlainText);
+    m_endpointPaletteHint->setProperty(
+        "finepaperRole", QStringLiteral("muted"));
+    layout->addWidget(m_endpointPaletteHint);
+    m_addEndpointButton = new QPushButton(
+        QStringLiteral("Add to selected Router"));
+    m_addEndpointButton->setObjectName(
+        QStringLiteral("finepaper.addEndpointToRouter"));
+    m_addEndpointButton->setProperty(
+        "finepaperRole", QStringLiteral("primary"));
+    layout->addWidget(m_addEndpointButton);
 
     m_packageDock->setWidget(content);
     addDockWidget(Qt::LeftDockWidgetArea, m_packageDock);
@@ -790,21 +916,104 @@ void FinepaperMainWindow::createPackageDock() {
             this, &FinepaperMainWindow::reloadPackages);
     connect(m_createDesignButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::createDesign);
-    connect(m_endpointPalette, &QListWidget::itemDoubleClicked,
+    connect(m_endpointPalette, &QListWidget::itemActivated,
             this, [this](QListWidgetItem* item) {
-                if (!item) {
-                    return;
-                }
-                if (!m_selectedRouter) {
-                    statusBar()->showMessage(
-                        QStringLiteral("Select a Router before double-clicking an Endpoint type."),
-                        5000);
-                    return;
-                }
-                addEndpoint(
-                    item->data(Qt::UserRole).toString(),
-                    NocAttachmentTarget{*m_selectedRouter, std::nullopt});
+                addEndpointFromPalette(item);
             });
+    connect(m_endpointPalette, &QListWidget::itemSelectionChanged,
+            this, &FinepaperMainWindow::updateEndpointQuickAddState);
+    connect(m_addEndpointButton, &QPushButton::clicked,
+            this, [this] { addEndpointFromPalette(); });
+    connect(m_endpointFilter, &QLineEdit::textChanged,
+            this, &FinepaperMainWindow::filterEndpointPalette);
+}
+
+void FinepaperMainWindow::filterEndpointPalette(const QString& text) {
+    if (!m_endpointPalette) {
+        return;
+    }
+    const QString filter = text.trimmed();
+    for (int row = 0; row < m_endpointPalette->count(); ++row) {
+        QListWidgetItem* item = m_endpointPalette->item(row);
+        const bool matches = filter.isEmpty()
+            || item->text().contains(filter, Qt::CaseInsensitive)
+            || item->data(Qt::UserRole).toString().contains(
+                filter, Qt::CaseInsensitive);
+        item->setHidden(!matches);
+    }
+    updateEndpointQuickAddState();
+}
+
+void FinepaperMainWindow::addEndpointFromPalette(QListWidgetItem* item) {
+    QListWidgetItem* selectedItem = item ? item : m_endpointPalette->currentItem();
+    if (!selectedItem || selectedItem->isHidden()) {
+        statusBar()->showMessage(
+            QStringLiteral("Choose an Endpoint type first."), 4000);
+        return;
+    }
+    if (!m_selectedRouter) {
+        statusBar()->showMessage(
+            QStringLiteral(
+                "Select a Router before adding an Endpoint from the library."),
+            5000);
+        return;
+    }
+    const attachment::CreateEndpointResult created = addEndpoint(
+        selectedItem->data(Qt::UserRole).toString(),
+        NocAttachmentTarget{*m_selectedRouter, std::nullopt});
+    if (created.success && !created.endpointId.trimmed().isEmpty()) {
+        m_nodeEditor->selectElements(
+            {{ElementKind::Endpoint, created.endpointId}});
+    }
+}
+
+void FinepaperMainWindow::updateEndpointQuickAddState() {
+    if (!m_addEndpointButton || !m_endpointPaletteHint
+        || !m_endpointPalette) {
+        return;
+    }
+    QListWidgetItem* item = m_endpointPalette->currentItem();
+    if (item && item->isHidden()) {
+        item = nullptr;
+    }
+    const bool hasEditableDesign = m_design && packageForDesign()
+        && !m_operationBusy;
+    attachment::SlotResolution slotResolution;
+    if (hasEditableDesign && m_selectedRouter && m_nodeEditor) {
+        slotResolution = m_nodeEditor->endpointAttachmentAvailability(
+            *m_selectedRouter);
+    }
+    const bool attachmentAvailable = !m_selectedRouter
+        || slotResolution.kind != attachment::SlotResolutionKind::Rejected;
+    const bool canAdd = hasEditableDesign && m_selectedRouter && item
+        && attachmentAvailable;
+    m_addEndpointButton->setEnabled(canAdd);
+
+    if (!m_design) {
+        m_endpointPaletteHint->setText(
+            QStringLiteral("Create or open a design to add Endpoints."));
+    } else if (!packageForDesign()) {
+        m_endpointPaletteHint->setText(QStringLiteral(
+            "Endpoint editing is unavailable until the design Package is loaded."));
+    } else if (m_operationBusy) {
+        m_endpointPaletteHint->setText(
+            QStringLiteral("Wait for the current operation to finish."));
+    } else if (!m_selectedRouter) {
+        m_endpointPaletteHint->setText(
+            QStringLiteral("Select a Router to enable keyboard quick-add."));
+    } else if (!item) {
+        m_endpointPaletteHint->setText(
+            QStringLiteral("Choose an Endpoint type for %1.")
+                .arg(routerId(*m_selectedRouter)));
+    } else if (!attachmentAvailable) {
+        m_endpointPaletteHint->setText(
+            attachment::rejectionMessage(
+                slotResolution.rejection, *m_selectedRouter));
+    } else {
+        m_endpointPaletteHint->setText(
+            QStringLiteral("Ready to add %1 to %2.")
+                .arg(item->text(), routerId(*m_selectedRouter)));
+    }
 }
 
 void FinepaperMainWindow::createInspectorDock() {
@@ -823,39 +1032,45 @@ void FinepaperMainWindow::createInspectorDock() {
     auto* content = new QWidget(inspectorScroll);
     content->setObjectName(QStringLiteral("finepaper.inspectorContent"));
     auto* layout = new QVBoxLayout(content);
-    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setContentsMargins(
+        ui::UiMetrics::spacing12, ui::UiMetrics::spacing12,
+        ui::UiMetrics::spacing12, ui::UiMetrics::spacing12);
     m_designOverview = new QLabel(QStringLiteral("No design is open."));
     m_designOverview->setObjectName(
         QStringLiteral("finepaper.designOverview"));
     m_designOverview->setWordWrap(true);
     m_designOverview->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_designOverview->setProperty(
+        "finepaperRole", QStringLiteral("subtitle"));
     layout->addWidget(m_designOverview);
 
-    auto* topologyGroup = new QGroupBox(QStringLiteral("Mesh Topology"));
-    topologyGroup->setObjectName(QStringLiteral("finepaper.meshTopologyGroup"));
-    auto* topologyLayout = new QVBoxLayout(topologyGroup);
+    m_topologyGroup = new QGroupBox(QStringLiteral("Mesh Topology"));
+    m_topologyGroup->setObjectName(
+        QStringLiteral("finepaper.meshTopologyGroup"));
+    auto* topologyLayout = new QVBoxLayout(m_topologyGroup);
     auto* topologyNote = new QLabel(
         QStringLiteral(
             "Routers and Router links are generated by the Mesh. Resize the "
             "topology here; Router creation and deletion are not exposed as "
             "independent operations."),
-        topologyGroup);
+        m_topologyGroup);
     topologyNote->setWordWrap(true);
     m_resizeMeshButton = new QPushButton(
-        QStringLiteral("Resize Mesh…"), topologyGroup);
+        QStringLiteral("Resize Mesh…"), m_topologyGroup);
     m_resizeMeshButton->setObjectName(QStringLiteral("finepaper.resizeMesh"));
+    m_resizeMeshButton->setProperty(
+        "finepaperRole", QStringLiteral("quiet"));
     topologyLayout->addWidget(topologyNote);
     topologyLayout->addWidget(m_resizeMeshButton);
-    layout->addWidget(topologyGroup);
 
-    auto* selectionGroup = new QGroupBox(QStringLiteral("Selection"));
-    selectionGroup->setObjectName(workbench::selectionInspectorName);
-    auto* selectionLayout = new QVBoxLayout(selectionGroup);
+    m_selectionGroup = new QGroupBox(QStringLiteral("Selection"));
+    m_selectionGroup->setObjectName(workbench::selectionInspectorName);
+    auto* selectionLayout = new QVBoxLayout(m_selectionGroup);
     m_selectionSummary = new QLabel(QStringLiteral("Nothing selected."));
     m_selectionSummary->setWordWrap(true);
     m_selectionSummary->setTextInteractionFlags(Qt::TextSelectableByMouse);
     selectionLayout->addWidget(m_selectionSummary);
-    layout->addWidget(selectionGroup);
+    layout->addWidget(m_selectionGroup);
 
     m_endpointConfigurationGroup = new QGroupBox(
         QStringLiteral("Endpoint Configuration"), content);
@@ -881,6 +1096,10 @@ void FinepaperMainWindow::createInspectorDock() {
     m_elementConfigurationGroup->setVisible(false);
     layout->addWidget(m_elementConfigurationGroup);
 
+    // Keep the active object's properties ahead of global Mesh operations so
+    // the common inspect-and-edit flow remains visible in a compact dock.
+    layout->addWidget(m_topologyGroup);
+
     m_parameterGroup = new QGroupBox(QStringLiteral("NoC Parameters"));
     m_parameterGroup->setObjectName(QStringLiteral("finepaper.parameterGroup"));
     auto* parameterGroupLayout = new QVBoxLayout(m_parameterGroup);
@@ -892,6 +1111,8 @@ void FinepaperMainWindow::createInspectorDock() {
     parameterScroll->setWidget(m_parameterForm);
     m_applyParametersButton = new QPushButton(QStringLiteral("Apply Parameters"));
     m_applyParametersButton->setObjectName(QStringLiteral("finepaper.applyParameters"));
+    m_applyParametersButton->setProperty(
+        "finepaperRole", QStringLiteral("primary"));
     parameterGroupLayout->addWidget(parameterScroll, 1);
     parameterGroupLayout->addWidget(m_applyParametersButton);
     layout->addWidget(m_parameterGroup, 1);
@@ -1031,8 +1252,16 @@ void FinepaperMainWindow::createDomainDock() {
     m_domainDock->setAllowedAreas(
         Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    m_domainManager = new DomainManagerPanel(m_domainDock);
-    m_domainDock->setWidget(m_domainManager);
+    auto* domainScroll = new QScrollArea(m_domainDock);
+    domainScroll->setObjectName(
+        QStringLiteral("finepaper.domainManagerScroll"));
+    domainScroll->setAccessibleName(QStringLiteral("Domain Manager content"));
+    domainScroll->setWidgetResizable(true);
+    domainScroll->setFrameShape(QFrame::NoFrame);
+    domainScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_domainManager = new DomainManagerPanel;
+    domainScroll->setWidget(m_domainManager);
+    m_domainDock->setWidget(domainScroll);
     addDockWidget(Qt::RightDockWidgetArea, m_domainDock);
     tabifyDockWidget(m_inspectorDock, m_domainDock);
     m_inspectorDock->raise();
@@ -1156,10 +1385,14 @@ void FinepaperMainWindow::createResultsDock() {
     m_resultsDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
 
     m_resultTabs = new QTabWidget;
+    m_resultTabs->setObjectName(QStringLiteral("finepaper.resultTabs"));
+    m_resultTabs->setAccessibleName(
+        QStringLiteral("Diagnostics and generation results"));
     m_resultTabs->setDocumentMode(true);
 
     m_drcTable = new QTableWidget;
     m_drcTable->setObjectName(QStringLiteral("finepaper.drcTable"));
+    m_drcTable->setAccessibleName(QStringLiteral("Design rule diagnostics"));
     m_drcTable->setColumnCount(4);
     m_drcTable->setHorizontalHeaderLabels({
         QStringLiteral("Severity"), QStringLiteral("Code"),
@@ -1171,20 +1404,27 @@ void FinepaperMainWindow::createResultsDock() {
 
     m_activityLog = new QPlainTextEdit;
     m_activityLog->setObjectName(QStringLiteral("finepaper.activityLog"));
+    m_activityLog->setAccessibleName(QStringLiteral("Workbench activity log"));
     m_activityLog->setReadOnly(true);
     m_activityLog->setMaximumBlockCount(5000);
     m_resultTabs->addTab(m_activityLog, workbench::activityTabTitle);
 
     auto* outputPage = new QWidget;
     auto* outputLayout = new QVBoxLayout(outputPage);
-    outputLayout->setContentsMargins(8, 8, 8, 8);
+    outputLayout->setContentsMargins(
+        ui::UiMetrics::spacing8, ui::UiMetrics::spacing8,
+        ui::UiMetrics::spacing8, ui::UiMetrics::spacing8);
     auto* outputControls = new QHBoxLayout;
     m_outputRoot = new QLineEdit(m_locations.defaultOutputRoot);
     m_outputRoot->setObjectName(QStringLiteral("finepaper.outputRoot"));
     m_browseOutputButton = new QPushButton(QStringLiteral("Browse…"));
     m_generateButton = new QPushButton(QStringLiteral("Generate RTL"));
     m_generateButton->setObjectName(QStringLiteral("finepaper.generateButton"));
-    outputControls->addWidget(new QLabel(QStringLiteral("Output root")));
+    m_generateButton->setProperty(
+        "finepaperRole", QStringLiteral("primary"));
+    auto* outputRootLabel = new QLabel(QStringLiteral("Output root"));
+    outputRootLabel->setBuddy(m_outputRoot);
+    outputControls->addWidget(outputRootLabel);
     outputControls->addWidget(m_outputRoot, 1);
     outputControls->addWidget(m_browseOutputButton);
     outputControls->addWidget(m_generateButton);
@@ -1193,6 +1433,8 @@ void FinepaperMainWindow::createResultsDock() {
     auto* outputSplitter = new QSplitter(Qt::Vertical);
     m_artifactTable = new QTableWidget;
     m_artifactTable->setObjectName(QStringLiteral("finepaper.artifactTable"));
+    m_artifactTable->setAccessibleName(
+        QStringLiteral("Generated RTL artifacts"));
     m_artifactTable->setColumnCount(4);
     m_artifactTable->setHorizontalHeaderLabels({
         QStringLiteral("Artifact"), QStringLiteral("Type"),
@@ -1224,20 +1466,20 @@ void FinepaperMainWindow::createResultsDock() {
 }
 
 void FinepaperMainWindow::createActions() {
-    m_newAction = new QAction(
-        style()->standardIcon(QStyle::SP_FileIcon), QStringLiteral("New NoC Design…"), this);
+    m_newAction = new QAction(QStringLiteral("New NoC Design…"), this);
+    m_newAction->setIconText(QStringLiteral("New Design"));
     m_newAction->setShortcut(QKeySequence::New);
-    m_openAction = new QAction(
-        style()->standardIcon(QStyle::SP_DialogOpenButton), QStringLiteral("Open…"), this);
+    m_openAction = new QAction(QStringLiteral("Open…"), this);
+    m_openAction->setIconText(QStringLiteral("Open"));
     m_openAction->setShortcut(QKeySequence::Open);
-    m_saveAction = new QAction(
-        style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("Save"), this);
+    m_saveAction = new QAction(QStringLiteral("Save"), this);
     m_saveAction->setShortcut(QKeySequence::Save);
     m_saveAsAction = new QAction(QStringLiteral("Save As…"), this);
     m_saveAsAction->setShortcut(QKeySequence::SaveAs);
     m_installAction = new QAction(QStringLiteral("Install Package Directory…"), this);
     m_reloadAction = new QAction(QStringLiteral("Reload Packages"), this);
     m_validateAction = new QAction(QStringLiteral("Validate / DRC"), this);
+    m_validateAction->setIconText(QStringLiteral("Validate"));
     m_validateAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+V")));
     m_generateAction = new QAction(QStringLiteral("Generate RTL"), this);
     m_generateAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+G")));
@@ -1246,15 +1488,14 @@ void FinepaperMainWindow::createActions() {
         QStringLiteral("finepaper.resizeMeshAction"));
     m_resizeMeshAction->setShortcut(
         QKeySequence(QStringLiteral("Ctrl+Shift+M")));
-    m_regularizeAction = new QAction(
-        style()->standardIcon(QStyle::SP_BrowserReload),
-        QStringLiteral("Regularize Layout"), this);
+    m_regularizeAction = new QAction(QStringLiteral("Regularize Layout"), this);
     m_regularizeAction->setObjectName(workbench::regularizeActionName);
     m_regularizeAction->setShortcut(QKeySequence(QStringLiteral("R")));
     m_regularizeAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     m_regularizeAction->setStatusTip(
         QStringLiteral("Restore Router and Endpoint positions to the topology layout"));
     m_fitAction = new QAction(QStringLiteral("Fit NoC in View"), this);
+    m_fitAction->setIconText(QStringLiteral("Fit View"));
     m_fitAction->setShortcut(QKeySequence(QStringLiteral("F")));
     m_fitAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     m_selectCanvasAction = new QAction(QStringLiteral("Select"), this);
@@ -1278,6 +1519,25 @@ void FinepaperMainWindow::createActions() {
     canvasModeGroup->setExclusive(true);
     canvasModeGroup->addAction(m_selectCanvasAction);
     canvasModeGroup->addAction(m_panCanvasAction);
+    m_reduceMotionAction = new QAction(
+        QStringLiteral("Reduce Motion"), this);
+    m_reduceMotionAction->setObjectName(
+        workbench::reducedMotionActionName);
+    m_reduceMotionAction->setCheckable(true);
+    m_reduceMotionAction->setChecked(
+        QSettings().value(workbench::reducedMotionSetting, false).toBool());
+    m_nodeEditor->setReducedMotion(m_reduceMotionAction->isChecked());
+    QMainWindow::DockOptions initialDockOptions = dockOptions();
+    initialDockOptions.setFlag(
+        QMainWindow::AnimatedDocks,
+        !m_reduceMotionAction->isChecked());
+    setDockOptions(initialDockOptions);
+    m_reduceMotionAction->setStatusTip(QStringLiteral(
+        "Replace canvas pulses, fades, and Dock transitions with static changes"));
+    m_resetWorkbenchLayoutAction = new QAction(
+        QStringLiteral("Reset Workbench Layout"), this);
+    m_resetWorkbenchLayoutAction->setObjectName(
+        workbench::resetWorkbenchLayoutActionName);
     m_nodeEditor->addAction(m_regularizeAction);
     m_nodeEditor->addAction(m_fitAction);
     m_nodeEditor->addAction(m_selectCanvasAction);
@@ -1299,8 +1559,39 @@ void FinepaperMainWindow::createActions() {
             this, &FinepaperMainWindow::generateDesign);
     connect(m_resizeMeshAction, &QAction::triggered,
             this, &FinepaperMainWindow::resizeMesh);
-    connect(m_regularizeAction, &QAction::triggered,
-            m_nodeEditor, &NocNodeEditor::regularizeLayout);
+    connect(m_regularizeAction, &QAction::triggered, this, [this] {
+        QMessageBox confirmation(
+            QMessageBox::Warning,
+            QStringLiteral("Regularize canvas layout?"),
+            QStringLiteral(
+                "This resets every custom Router and Endpoint position in the "
+                "current canvas workspace. The NoC design itself is unchanged."),
+            QMessageBox::Yes | QMessageBox::Cancel,
+            this);
+        confirmation.setObjectName(
+            QStringLiteral("finepaper.regularizeLayoutConfirmation"));
+        confirmation.setDefaultButton(QMessageBox::Cancel);
+        confirmation.setEscapeButton(QMessageBox::Cancel);
+        if (QPushButton* regularizeButton = qobject_cast<QPushButton*>(
+                confirmation.button(QMessageBox::Yes))) {
+            regularizeButton->setText(QStringLiteral("Regularize Layout"));
+            regularizeButton->setProperty(
+                "finepaperRole", QStringLiteral("danger"));
+        }
+        if (confirmation.exec() == QMessageBox::Yes) {
+            const TopologyWorkspaceRegularizeResult result =
+                m_nodeEditor->regularizeLayout();
+            if (result == TopologyWorkspaceRegularizeResult::Saved) {
+                statusBar()->showMessage(
+                    QStringLiteral(
+                        "Canvas positions restored to the topology layout."),
+                    5000);
+            } else if (result
+                       == TopologyWorkspaceRegularizeResult::SaveFailed) {
+                showWorkspaceStatusMessage();
+            }
+        }
+    });
     connect(m_fitAction, &QAction::triggered, m_nodeEditor, &NocNodeEditor::zoomToFit);
     connect(m_selectCanvasAction, &QAction::triggered, this, [this] {
         m_nodeEditor->setCanvasInteractionMode(NocCanvasInteractionMode::Select);
@@ -1315,21 +1606,38 @@ void FinepaperMainWindow::createActions() {
                 "Pan mode: drag to move the view; hold Shift and drag to box-select."),
             5000);
     });
+    connect(m_reduceMotionAction, &QAction::toggled,
+            this, [this](bool reduced) {
+                QSettings().setValue(
+                    workbench::reducedMotionSetting, reduced);
+                m_nodeEditor->setReducedMotion(reduced);
+                QMainWindow::DockOptions options = dockOptions();
+                options.setFlag(QMainWindow::AnimatedDocks, !reduced);
+                setDockOptions(options);
+                statusBar()->showMessage(
+                    reduced
+                        ? QStringLiteral("Reduced motion enabled.")
+                        : QStringLiteral("Motion feedback enabled."),
+                    4000);
+            });
+    connect(m_resetWorkbenchLayoutAction, &QAction::triggered,
+            this, [this] {
+                resetWorkbenchLayout();
+                statusBar()->showMessage(
+                    QStringLiteral(
+                        "Workbench layout restored. Diagnostics open when needed."),
+                    4000);
+            });
 
     QAction* packagePanelAction = m_packageDock->toggleViewAction();
     packagePanelAction->setObjectName(workbench::packageToggleActionName);
     packagePanelAction->setText(QStringLiteral("NoC IP && Endpoint Library"));
-    packagePanelAction->setIcon(QIcon::fromTheme(
-        QStringLiteral("folder-symbolic"), style()->standardIcon(QStyle::SP_DirIcon)));
     packagePanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+B")));
     packagePanelAction->setStatusTip(QStringLiteral("Show or hide the NoC IP and Endpoint panel"));
 
     QAction* inspectorPanelAction = m_inspectorDock->toggleViewAction();
     inspectorPanelAction->setObjectName(workbench::inspectorToggleActionName);
     inspectorPanelAction->setText(QStringLiteral("Inspector"));
-    inspectorPanelAction->setIcon(QIcon::fromTheme(
-        QStringLiteral("view-list-details-symbolic"),
-        style()->standardIcon(QStyle::SP_FileDialogDetailedView)));
     inspectorPanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+B")));
     inspectorPanelAction->setStatusTip(QStringLiteral("Show or hide the right Inspector panel"));
 
@@ -1337,9 +1645,6 @@ void FinepaperMainWindow::createActions() {
     domainManagerPanelAction->setObjectName(
         workbench::domainManagerToggleActionName);
     domainManagerPanelAction->setText(QStringLiteral("Domain Manager"));
-    domainManagerPanelAction->setIcon(QIcon::fromTheme(
-        QStringLiteral("preferences-system-symbolic"),
-        style()->standardIcon(QStyle::SP_DriveNetIcon)));
     domainManagerPanelAction->setShortcut(
         QKeySequence(QStringLiteral("Ctrl+Shift+D")));
     domainManagerPanelAction->setStatusTip(
@@ -1348,9 +1653,6 @@ void FinepaperMainWindow::createActions() {
     QAction* resultsPanelAction = m_resultsDock->toggleViewAction();
     resultsPanelAction->setObjectName(workbench::resultsToggleActionName);
     resultsPanelAction->setText(QStringLiteral("Diagnostics && Output"));
-    resultsPanelAction->setIcon(QIcon::fromTheme(
-        QStringLiteral("dialog-warning-symbolic"),
-        style()->standardIcon(QStyle::SP_MessageBoxWarning)));
     resultsPanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+J")));
     resultsPanelAction->setStatusTip(QStringLiteral("Show or hide the bottom diagnostics panel"));
 
@@ -1364,6 +1666,8 @@ void FinepaperMainWindow::createActions() {
     packageMenu->addAction(m_reloadAction);
     QMenu* designMenu = menuBar()->addMenu(QStringLiteral("&Design"));
     designMenu->addAction(m_resizeMeshAction);
+    designMenu->addSeparator();
+    designMenu->addAction(m_regularizeAction);
     QMenu* runMenu = menuBar()->addMenu(QStringLiteral("&Run"));
     runMenu->addAction(m_validateAction);
     runMenu->addAction(m_generateAction);
@@ -1392,8 +1696,10 @@ void FinepaperMainWindow::createActions() {
     viewMenu->addAction(m_selectCanvasAction);
     viewMenu->addAction(m_panCanvasAction);
     viewMenu->addSeparator();
-    viewMenu->addAction(m_regularizeAction);
     viewMenu->addAction(m_fitAction);
+    viewMenu->addSeparator();
+    viewMenu->addAction(m_reduceMotionAction);
+    viewMenu->addAction(m_resetWorkbenchLayoutAction);
     connect(m_centerViews, &QTabWidget::currentChanged, this, [this, viewGroup](int index) {
         Q_UNUSED(index);
         const QString id = m_viewRegistry->currentViewId();
@@ -1403,8 +1709,11 @@ void FinepaperMainWindow::createActions() {
     });
 
     QToolBar* toolbar = addToolBar(QStringLiteral("NoC Workbench"));
-    toolbar->setObjectName(QStringLiteral("finepaper.mainToolbar"));
-    toolbar->setMovable(true);
+    toolbar->setObjectName(workbench::mainToolbarName);
+    toolbar->setAccessibleName(QStringLiteral("NoC workbench actions"));
+    toolbar->setMovable(false);
+    toolbar->setFloatable(false);
+    toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
     toolbar->addAction(m_newAction);
     toolbar->addAction(m_openAction);
     toolbar->addAction(m_saveAction);
@@ -1412,25 +1721,32 @@ void FinepaperMainWindow::createActions() {
     toolbar->addAction(m_validateAction);
     toolbar->addAction(m_generateAction);
     toolbar->addSeparator();
-    toolbar->addAction(m_regularizeAction);
-    toolbar->addSeparator();
     toolbar->addAction(m_selectCanvasAction);
     toolbar->addAction(m_panCanvasAction);
+    toolbar->addAction(m_fitAction);
+    if (auto* button = qobject_cast<QToolButton*>(
+            toolbar->widgetForAction(m_generateAction))) {
+        button->setProperty("finepaperRole", QStringLiteral("primary"));
+    }
     if (auto* button = qobject_cast<QToolButton*>(
             toolbar->widgetForAction(m_selectCanvasAction))) {
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setProperty("finepaperRole", QStringLiteral("canvasMode"));
     }
     if (auto* button = qobject_cast<QToolButton*>(
             toolbar->widgetForAction(m_panCanvasAction))) {
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setProperty("finepaperRole", QStringLiteral("canvasMode"));
     }
     toolbar->addSeparator();
-    toolbar->addWidget(new QLabel(QStringLiteral("Color by"), toolbar));
+    auto* domainLayerLabel = new QLabel(QStringLiteral("Domain layer"), toolbar);
+    domainLayerLabel->setProperty("finepaperRole", QStringLiteral("muted"));
+    toolbar->addWidget(domainLayerLabel);
     m_domainLayerSelector = new QComboBox(toolbar);
     m_domainLayerSelector->setObjectName(workbench::domainLayerSelectorName);
     m_domainLayerSelector->setMinimumContentsLength(16);
     m_domainLayerSelector->addItem(QStringLiteral("None"), QString());
     m_domainLayerSelector->setEnabled(false);
+    m_domainLayerSelector->setAccessibleName(QStringLiteral("Canvas Domain layer"));
+    domainLayerLabel->setBuddy(m_domainLayerSelector);
     toolbar->addWidget(m_domainLayerSelector);
     connect(m_domainLayerSelector, &QComboBox::currentIndexChanged, this, [this] {
         const QString domainType = m_domainLayerSelector->currentData().toString();
@@ -1447,36 +1763,83 @@ void FinepaperMainWindow::createActions() {
         updateInspector(m_editorSelection);
     });
 
-    QToolBar* activityBar = new QToolBar(QStringLiteral("Workbench Panels"), this);
-    activityBar->setObjectName(workbench::activityBarName);
-    activityBar->setMovable(false);
-    activityBar->setFloatable(false);
-    activityBar->setOrientation(Qt::Vertical);
-    activityBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    activityBar->setIconSize(QSize(24, 24));
-    activityBar->addAction(packagePanelAction);
-    activityBar->addAction(inspectorPanelAction);
-    activityBar->addAction(domainManagerPanelAction);
-    activityBar->addSeparator();
-    activityBar->addAction(resultsPanelAction);
-    addToolBar(Qt::LeftToolBarArea, activityBar);
+    auto* panelNavigationButton = new QToolButton(toolbar);
+    panelNavigationButton->setObjectName(workbench::panelNavigationButtonName);
+    panelNavigationButton->setText(QStringLiteral("Panels"));
+    panelNavigationButton->setAccessibleName(
+        QStringLiteral("Open a workbench panel"));
+    panelNavigationButton->setPopupMode(QToolButton::InstantPopup);
+    auto* panelNavigationMenu = new QMenu(
+        QStringLiteral("Workbench Panels"), panelNavigationButton);
+    panelNavigationButton->setMenu(panelNavigationMenu);
+    const auto addPanelNavigation = [panelNavigationMenu](
+        const QString& objectName,
+        const QString& text,
+        QDockWidget* dock,
+        QWidget* primaryFocusTarget,
+        QWidget* fallbackFocusTarget) {
+        auto* action = new QAction(text, panelNavigationMenu);
+        action->setObjectName(objectName);
+        panelNavigationMenu->addAction(action);
+        QObject::connect(
+            action, &QAction::triggered, dock,
+            [dock, primaryFocusTarget, fallbackFocusTarget] {
+                dock->show();
+                dock->raise();
+                QWidget* focusTarget = primaryFocusTarget
+                        && primaryFocusTarget->isEnabled()
+                        && primaryFocusTarget->isVisibleTo(dock)
+                    ? primaryFocusTarget : fallbackFocusTarget;
+                if (focusTarget && focusTarget->isEnabled()) {
+                    focusTarget->setFocus(Qt::ShortcutFocusReason);
+                }
+            });
+    };
+    addPanelNavigation(
+        workbench::packageNavigationActionName,
+        QStringLiteral("Package Library"), m_packageDock,
+        m_endpointFilter, m_packageDock->widget());
+    addPanelNavigation(
+        workbench::inspectorNavigationActionName,
+        QStringLiteral("Inspector"), m_inspectorDock,
+        m_resizeMeshButton, m_inspectorDock->widget());
+    addPanelNavigation(
+        workbench::domainNavigationActionName,
+        QStringLiteral("Domain Manager"), m_domainDock,
+        m_domainManager->findChild<QComboBox*>(
+            QStringLiteral("finepaper.domainManager.typeSelector")),
+        m_domainManager);
+    panelNavigationMenu->addSeparator();
+    addPanelNavigation(
+        workbench::resultsNavigationActionName,
+        QStringLiteral("Diagnostics && Output"), m_resultsDock,
+        m_resultTabs, m_resultsDock->widget());
+    toolbar->addSeparator();
+    toolbar->addWidget(panelNavigationButton);
 }
 
 void FinepaperMainWindow::restoreWorkbenchState() {
     QSettings settings;
     const QByteArray geometry = settings.value(workbench::geometrySetting).toByteArray();
     const QByteArray state = settings.value(workbench::windowStateSetting).toByteArray();
-    if (!geometry.isEmpty()) {
-        restoreGeometry(geometry);
+    if (!geometry.isEmpty() && !restoreGeometry(geometry)) {
+        settings.remove(workbench::geometrySetting);
+        resize(workbench::defaultWindowWidth, workbench::defaultWindowHeight);
     }
-    if (!state.isEmpty()) {
-        restoreState(state);
+    if (!state.isEmpty() && !restoreState(state)) {
+        settings.remove(workbench::windowStateSetting);
+        resetWorkbenchLayout();
+        statusBar()->showMessage(
+            QStringLiteral(
+                "The saved workbench layout was invalid and has been reset."),
+            6000);
     }
     selectCenterView(settings.value(workbench::centerViewSetting,
                                     workbench::editorViewId).toString());
-    m_resultTabs->setCurrentIndex(
-        qBound(0, settings.value(workbench::resultTabSetting, 0).toInt(),
-               m_resultTabs->count() - 1));
+    m_resultTabs->setCurrentIndex(std::clamp(
+        settings.value(workbench::resultTabSetting, 0).toInt(),
+        0,
+        (std::max)(0, m_resultTabs->count() - 1)));
 }
 
 void FinepaperMainWindow::closeEvent(QCloseEvent* event) {
@@ -1776,6 +2139,50 @@ void FinepaperMainWindow::updatePackageControls() {
     updateUiState();
 }
 
+void FinepaperMainWindow::updateEditorEmptyState() {
+    if (!m_editorEmptyStateOverlay || !m_editorEmptyState) {
+        return;
+    }
+    const bool hasDesign = m_design.has_value();
+    const bool hasRunnablePackages = !m_runtimeAvailablePackageKeys.isEmpty();
+    m_editorEmptyStateOverlay->setVisible(!hasDesign);
+    if (m_editorStack) {
+        m_editorStack->setCurrentWidget(
+            hasDesign ? static_cast<QWidget*>(m_nodeEditor)
+                      : m_editorEmptyStateOverlay);
+    }
+    if (hasDesign) {
+        return;
+    }
+    if (hasRunnablePackages) {
+        m_editorEmptyState->setTitle(QStringLiteral("Start a NoC design"));
+        m_editorEmptyState->setDescription(QStringLiteral(
+            "Choose an installed NoC IP Package to create a topology, or open "
+            "an existing design. Package rules remain the source of truth for "
+            "the Mesh, Endpoint types, parameters, and Domains."));
+    } else {
+        m_editorEmptyState->setTitle(
+            QStringLiteral("Install a NoC IP Package first"));
+        m_editorEmptyState->setDescription(QStringLiteral(
+            "Finepaper needs a runnable Package before it can create a new "
+            "design. You can still open an existing design for inspection, or "
+            "install a Package directory now."));
+    }
+    if (m_emptyCreateButton) {
+        m_emptyCreateButton->setVisible(hasRunnablePackages);
+        m_emptyCreateButton->setEnabled(
+            hasRunnablePackages && !m_operationBusy);
+    }
+    if (m_emptyInstallButton) {
+        m_emptyInstallButton->setVisible(!hasRunnablePackages);
+        m_emptyInstallButton->setEnabled(!m_operationBusy);
+    }
+    if (m_emptyOpenButton) {
+        m_emptyOpenButton->setEnabled(!m_operationBusy);
+    }
+    m_editorEmptyStateOverlay->raise();
+}
+
 void FinepaperMainWindow::updateDomainLayerControls() {
     if (!m_domainLayerSelector) {
         return;
@@ -1909,6 +2316,8 @@ void FinepaperMainWindow::updateEndpointPalette() {
     m_nodeEditor->setEndpointTypes(std::move(editorTypes));
     m_nodeEditor->setAttachmentPolicy(
         attachment::policyFromPackage(package->attachment));
+    filterEndpointPalette(
+        m_endpointFilter ? m_endpointFilter->text() : QString());
     updateUiState();
 }
 
@@ -1922,6 +2331,7 @@ void FinepaperMainWindow::updateUiState() {
         && m_endpointConfigurationPanel->hasUnappliedDrafts(
             m_designSessionIdentity);
     setWindowModified(m_dirty || hasEndpointDrafts);
+    updateEditorEmptyState();
 
     if (m_newAction) {
         m_newAction->setEnabled(hasRunnablePackages && !m_operationBusy);
@@ -1989,7 +2399,16 @@ void FinepaperMainWindow::updateUiState() {
         }
     }
     if (m_parameterGroup) {
+        m_parameterGroup->setVisible(
+            hasDesignMetadata && m_parameterForm
+            && !m_parameterForm->isEmpty());
         m_parameterGroup->setEnabled(hasDesignMetadata && !m_operationBusy);
+    }
+    if (m_topologyGroup) {
+        m_topologyGroup->setVisible(hasDesign);
+    }
+    if (m_selectionGroup) {
+        m_selectionGroup->setVisible(hasDesign);
     }
     if (m_resizeMeshButton) {
         m_resizeMeshButton->setEnabled(hasDesignMetadata && !m_operationBusy);
@@ -2035,6 +2454,7 @@ void FinepaperMainWindow::updateUiState() {
             m_nodeEditor->setToolTip({});
         }
     }
+    updateEndpointQuickAddState();
     if (m_domainManager) {
         m_domainManager->setBusy(m_operationBusy);
     }
@@ -2739,6 +3159,31 @@ bool FinepaperMainWindow::removeEndpoint(
     if (m_operationBusy || !m_design || !packageForDesign() || endpointId.isEmpty()) {
         return false;
     }
+    if (discardConfigurationDraft) {
+        QMessageBox confirmation(
+            QMessageBox::Warning,
+            QStringLiteral("Delete Endpoint?"),
+            QStringLiteral(
+                "Delete Endpoint %1 and its attachment from this design? "
+                "Unapplied Endpoint configuration for it will also be discarded.")
+                .arg(endpointId.toHtmlEscaped()),
+            QMessageBox::Yes | QMessageBox::Cancel,
+            this);
+        confirmation.setObjectName(
+            QStringLiteral("finepaper.deleteEndpointConfirmation"));
+        confirmation.setTextFormat(Qt::RichText);
+        confirmation.setDefaultButton(QMessageBox::Cancel);
+        confirmation.setEscapeButton(QMessageBox::Cancel);
+        if (QPushButton* deleteButton = qobject_cast<QPushButton*>(
+                confirmation.button(QMessageBox::Yes))) {
+            deleteButton->setText(QStringLiteral("Delete Endpoint"));
+            deleteButton->setProperty(
+                "finepaperRole", QStringLiteral("danger"));
+        }
+        if (confirmation.exec() != QMessageBox::Yes) {
+            return false;
+        }
+    }
     if (!confirmDiscardPendingDomainChanges(
             QStringLiteral("Removing an Endpoint"))) {
         return false;
@@ -2862,7 +3307,7 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
             m_operationBusy);
     }
     if (m_endpointConfigurationPanel) {
-        std::optional<QString> endpointId;
+        std::optional<QString> endpointId = std::nullopt;
         if (selection.items.size() == 1
             && selection.items.front().kind
                 == NocEditorSelection::Kind::Endpoint) {
@@ -2876,6 +3321,16 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
             m_operationBusy);
     }
     m_selectedRouter.reset();
+    if (selection.items.size() == 1
+        && selection.items.front().kind
+            == NocEditorSelection::Kind::Router) {
+        m_selectedRouter = selection.items.front().router;
+        if (!m_selectedRouter) {
+            m_selectedRouter = routerPositionFromId(
+                selection.items.front().id);
+        }
+    }
+    updateEndpointQuickAddState();
 
     if (selection.items.isEmpty()) {
         m_selectionSummary->setText(QStringLiteral(
@@ -2926,13 +3381,7 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
 
     const NocEditorSelection& item = selection.items.front();
     if (item.kind == NocEditorSelection::Kind::Router) {
-        std::optional<RouterPosition> position = item.router;
-        if (!position) {
-            position = routerPositionFromId(item.id);
-        }
-        if (position) {
-            m_selectedRouter = position;
-        }
+        const std::optional<RouterPosition> position = m_selectedRouter;
         m_selectionSummary->setText(
             QStringLiteral("<b>Router %1</b><br>Column x: %2<br>Row y: %3<br>"
                            "Router identity and every Router-to-Router Link are derived from "

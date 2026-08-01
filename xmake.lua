@@ -44,6 +44,8 @@ target("finepaper-gui")
     add_files("src/features/domain/*.cpp")
     add_files("src/features/topology/*.cpp")
     add_files("src/ui/common/*.cpp")
+    add_files("src/ui/components/*.cpp")
+    add_files("src/ui/theme/*.cpp")
     add_includedirs("src")
 
 target("finepaper-tests")
@@ -400,9 +402,43 @@ target("finepaper-gui-smoke")
     add_files("src/features/topology/topology_workspace_store.cpp")
     add_files("src/gui/package_parameter_form.cpp")
     add_files("src/ui/common/schema_value_editor.cpp")
+    add_files("src/ui/components/*.cpp")
+    add_files("src/ui/theme/*.cpp")
     add_files("src/gui/workbench_view_registry.cpp")
     add_includedirs("src")
     add_defines('FINEPAPER_SOURCE_DIR="' .. path.unix(os.projectdir()) .. '"')
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+    add_tests("compact-light", {
+        trim_output = true,
+        runenvs = {
+            QT_QPA_PLATFORM = "offscreen",
+            FINEPAPER_GUI_SMOKE_SIZE = "1280x720",
+            FINEPAPER_GUI_SMOKE_THEME = "light"
+        }
+    })
+    add_tests("compact-dark-scaled", {
+        trim_output = true,
+        runenvs = {
+            QT_QPA_PLATFORM = "offscreen",
+            QT_SCALE_FACTOR = "1.5",
+            FINEPAPER_GUI_SMOKE_SIZE = "1280x720",
+            FINEPAPER_GUI_SMOKE_THEME = "dark"
+        }
+    })
+
+target("finepaper-workbench-theme-tests")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_files("tests/workbench_theme_tests.cpp")
+    add_files("src/ui/components/empty_state.cpp")
+    add_files("src/ui/theme/ui_tokens.cpp")
+    add_files("src/ui/theme/workbench_style.cpp")
+    add_includedirs("src")
     add_tests("default", {
         trim_output = true,
         runenvs = {QT_QPA_PLATFORM = "offscreen"}

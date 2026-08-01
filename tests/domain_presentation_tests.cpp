@@ -226,6 +226,12 @@ int main(int argc, char** argv) {
               && zoneAColor == domainPresentationColor(
                   activeType, QStringLiteral("zone-a")),
           QStringLiteral("Domain colors are valid and stable across calls"));
+    check(domainPresentationPattern(QStringLiteral("zone-a"))
+                  == domainPresentationPattern(QStringLiteral("zone-a"))
+              && !domainPresentationPatternLabel(
+                      QStringLiteral("zone-a")).isEmpty(),
+          QStringLiteral(
+              "Domain markers expose a stable named non-color pattern"));
 
     const DomainElementPresentation* routerA = snapshot.element(
         ElementRef{ElementKind::Router, QStringLiteral("r-0-0")});

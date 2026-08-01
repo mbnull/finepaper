@@ -18,7 +18,8 @@ bool WorkbenchViewRegistry::addView(WorkbenchViewDefinition definition, QWidget*
         }
     }
     widget->setProperty("finepaper.viewId", definition.id);
-    m_tabs->addTab(widget, definition.title);
+    const int tabIndex = m_tabs->addTab(widget, definition.title);
+    m_tabs->setTabToolTip(tabIndex, definition.title);
     m_views.append(std::move(definition));
     return true;
 }

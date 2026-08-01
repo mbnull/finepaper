@@ -4,6 +4,12 @@
 
 namespace finepaper::workbench {
 
+inline constexpr int defaultWindowWidth = 1480;
+inline constexpr int defaultWindowHeight = 920;
+inline constexpr int defaultPackageDockWidth = 300;
+inline constexpr int defaultInspectorDockWidth = 360;
+inline constexpr int defaultResultsDockHeight = 190;
+
 inline const QString endpointTypeMime = QStringLiteral("application/x-finepaper-noc-endpoint-type");
 
 inline const QString packageRootsSetting = QStringLiteral("runtime/installedPackageRoots");
@@ -13,13 +19,25 @@ inline const QString centerViewSetting = QStringLiteral("workbench/centerView");
 inline const QString resultTabSetting = QStringLiteral("workbench/resultTab");
 inline const QString domainLayerSelectionsSetting =
     QStringLiteral("workbench/domainLayerSelections");
+inline const QString reducedMotionSetting =
+    QStringLiteral("accessibility/reducedMotion");
 
 inline const QString packageDockName = QStringLiteral("finepaper.packageDock");
 inline const QString inspectorDockName = QStringLiteral("finepaper.inspectorDock");
 inline const QString domainManagerDockName =
     QStringLiteral("finepaper.domainManagerDock");
 inline const QString resultsDockName = QStringLiteral("finepaper.resultsDock");
-inline const QString activityBarName = QStringLiteral("finepaper.activityBar");
+inline const QString mainToolbarName = QStringLiteral("finepaper.mainToolbar");
+inline const QString panelNavigationButtonName =
+    QStringLiteral("finepaper.panelNavigationButton");
+inline const QString packageNavigationActionName =
+    QStringLiteral("finepaper.activity.packages");
+inline const QString inspectorNavigationActionName =
+    QStringLiteral("finepaper.activity.inspector");
+inline const QString domainNavigationActionName =
+    QStringLiteral("finepaper.activity.domains");
+inline const QString resultsNavigationActionName =
+    QStringLiteral("finepaper.activity.results");
 inline const QString selectionInspectorName = QStringLiteral("finepaper.selectionInspector");
 inline const QString endpointContextMenuName = QStringLiteral("finepaper.endpointContextMenu");
 inline const QString deleteEndpointActionName = QStringLiteral("finepaper.deleteEndpointAction");
@@ -42,6 +60,10 @@ inline const QString selectCanvasActionName =
     QStringLiteral("finepaper.selectCanvasMode");
 inline const QString panCanvasActionName =
     QStringLiteral("finepaper.panCanvasMode");
+inline const QString reducedMotionActionName =
+    QStringLiteral("finepaper.reduceMotion");
+inline const QString resetWorkbenchLayoutActionName =
+    QStringLiteral("finepaper.resetWorkbenchLayout");
 inline const QString domainLayerSelectorName =
     QStringLiteral("finepaper.domainLayerSelector");
 

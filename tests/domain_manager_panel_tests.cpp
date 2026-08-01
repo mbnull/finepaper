@@ -310,12 +310,43 @@ int main(int argc, char** argv) {
               QStringLiteral("Legend rows show names and resolved member counts"));
         check(instances->item(zoneARow, 0)
                       ->data(domainManagerColorRole).value<QColor>().isValid()
+                  && instances->item(zoneARow, 0)->background().style()
+                         == domainPresentationPattern(QStringLiteral("zone-a"))
+                  && !instances->item(zoneARow, 0)
+                          ->data(Qt::AccessibleTextRole).toString().isEmpty()
                   && instances->item(zoneBRow, 4)
                          ->data(domainManagerCrossingCountRole).toLongLong() > 0
                   && instances->item(zoneCRow, 4)
                          ->data(domainManagerCrossingCountRole).toLongLong() > 0,
-              QStringLiteral("Legend rows expose deterministic colors and crossing counts"));
+              QStringLiteral(
+                  "Legend rows expose deterministic color/pattern markers and crossing counts"));
     }
+
+    NocDesign markupDesign = design;
+    auto markupDomain = std::find_if(
+        markupDesign.domains.begin(), markupDesign.domains.end(),
+        [](const DomainDefinition& domain) {
+            return domain.id == QStringLiteral("zone-a");
+        });
+    if (markupDomain != markupDesign.domains.end()) {
+        markupDomain->name = QStringLiteral("<b>Trusted</b>");
+    }
+    const ResolvedDesign markupResolved = resolveDesign(markupDesign);
+    panel.setContext(
+        &markupDesign, &markupResolved, &package,
+        QStringLiteral("security-zone"));
+    QApplication::processEvents();
+    const int markupRow = instanceRow(instances, QStringLiteral("zone-a"));
+    const QString markupTooltip = markupRow >= 0
+        ? instances->item(markupRow, 0)->toolTip() : QString{};
+    check(markupRow >= 0
+              && markupTooltip.contains(QStringLiteral("&lt;b&gt;Trusted&lt;/b&gt;"))
+              && !markupTooltip.contains(QStringLiteral("<b>Trusted</b>")),
+          QStringLiteral(
+              "Domain marker tooltips preserve configurable text without interpreting it as markup"));
+    panel.setContext(&design, &resolved, &package,
+                     QStringLiteral("security-zone"));
+    QApplication::processEvents();
 
     QVector<QVector<ElementRef>> requestedSelections;
     panel.selectElementsRequested = [&requestedSelections](
@@ -361,7 +392,7 @@ int main(int argc, char** argv) {
                      QStringLiteral("security-zone"));
     QApplication::processEvents();
 
-    std::optional<DomainDefinition> addedDomain;
+    std::optional<DomainDefinition> addedDomain = std::nullopt;
     panel.addDomainRequested = [&addedDomain](DomainDefinition domain) {
         addedDomain = std::move(domain);
     };

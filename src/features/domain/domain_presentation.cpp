@@ -3,6 +3,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <utility>
 
@@ -38,16 +39,39 @@ std::uint64_t stableDomainHash(const QString& domainType,
     };
     const auto mixString = [&](const QString& value) {
         mixLength(value.size());
-        for (const QChar character : value) {
-            const char16_t codeUnit = character.unicode();
-            mixByte(static_cast<std::uint8_t>(codeUnit & 0xffU));
-            mixByte(static_cast<std::uint8_t>((codeUnit >> 8) & 0xffU));
+        const ushort* codeUnits = value.utf16();
+        for (qsizetype index = 0; index < value.size(); ++index) {
+            const std::uint16_t unicode = codeUnits[index];
+            mixByte(static_cast<std::uint8_t>(unicode & 0xffU));
+            mixByte(static_cast<std::uint8_t>((unicode >> 8) & 0xffU));
         }
     };
 
     mixString(domainType);
     mixString(domainId);
     return hash;
+}
+
+struct DomainPatternDefinition {
+    Qt::BrushStyle style;
+    const char* label;
+};
+
+constexpr std::array<DomainPatternDefinition, 7> domainPatternDefinitions{{
+    {Qt::BDiagPattern, "backward diagonal"},
+    {Qt::FDiagPattern, "forward diagonal"},
+    {Qt::DiagCrossPattern, "diagonal cross"},
+    {Qt::HorPattern, "horizontal lines"},
+    {Qt::VerPattern, "vertical lines"},
+    {Qt::CrossPattern, "crosshatch"},
+    {Qt::Dense6Pattern, "dense dots"},
+}};
+
+const DomainPatternDefinition& domainPatternDefinition(
+    const QString& domainId) {
+    const std::uint64_t hash = stableDomainHash(
+        QStringLiteral("marker"), domainId);
+    return domainPatternDefinitions.at(hash % domainPatternDefinitions.size());
 }
 
 DomainAssignmentDisplayState displayState(
@@ -98,6 +122,14 @@ QColor domainPresentationColor(const QString& domainType,
     const int saturation = 166 + static_cast<int>((hash >> 12) % 35U);
     const int lightness = 112 + static_cast<int>((hash >> 24) % 27U);
     return QColor::fromHsl(hue, saturation, lightness);
+}
+
+Qt::BrushStyle domainPresentationPattern(const QString& domainId) {
+    return domainPatternDefinition(domainId).style;
+}
+
+QString domainPresentationPatternLabel(const QString& domainId) {
+    return QString::fromLatin1(domainPatternDefinition(domainId).label);
 }
 
 DomainPresentationSnapshot buildDomainPresentationSnapshot(

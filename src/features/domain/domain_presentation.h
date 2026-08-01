@@ -56,9 +56,9 @@ struct DomainCrossingPresentation {
     QStringList accentDomainIds;
     QVector<QColor> accentColors;
     QColor primaryAccent;
-    std::optional<QString> defaultPolicy;
+    std::optional<QString> defaultPolicy = std::nullopt;
     QJsonObject defaultProperties;
-    std::optional<QString> overridePolicy;
+    std::optional<QString> overridePolicy = std::nullopt;
     QJsonObject overrideProperties;
 
     bool operator==(const DomainCrossingPresentation&) const = default;
@@ -87,6 +87,12 @@ struct DomainPresentationSnapshot {
 // The same (type, id) pair therefore receives the same color across sessions.
 [[nodiscard]] QColor domainPresentationColor(
     const QString& domainType,
+    const QString& domainId);
+
+// Stable non-color cue shared by the canvas and every Domain legend.
+[[nodiscard]] Qt::BrushStyle domainPresentationPattern(
+    const QString& domainId);
+[[nodiscard]] QString domainPresentationPatternLabel(
     const QString& domainId);
 
 [[nodiscard]] DomainPresentationSnapshot buildDomainPresentationSnapshot(

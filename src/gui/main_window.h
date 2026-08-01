@@ -21,9 +21,11 @@ class QGroupBox;
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QListWidgetItem;
 class QPlainTextEdit;
 class QProgressBar;
 class QPushButton;
+class QStackedLayout;
 class QTabWidget;
 class QTableWidget;
 class QWidget;
@@ -37,6 +39,9 @@ class DesignExtensionsWorkspace;
 class ElementConfigurationPanel;
 class EndpointConfigurationPanel;
 class PackageParameterForm;
+namespace ui {
+class EmptyState;
+}
 
 class FinepaperMainWindow final : public QMainWindow {
 public:
@@ -53,12 +58,12 @@ private:
     enum class DesignRefreshScope {
         FullProjection,
         DomainsOnly,
-        InspectorOnly
+        InspectorOnly,
     };
 
     struct AttachmentSlotChoice {
         bool accepted = false;
-        std::optional<QString> slot;
+        std::optional<QString> slot = std::nullopt;
     };
 
     void createUi();
@@ -68,11 +73,16 @@ private:
     void createInspectorDock();
     void createDomainDock();
     void createResultsDock();
+    void resetWorkbenchLayout();
     void restoreWorkbenchState();
     void loadInstalledPackageRoots();
     void reloadPackages();
     void installPackage();
     void updatePackageControls();
+    void updateEditorEmptyState();
+    void updateEndpointQuickAddState();
+    void filterEndpointPalette(const QString& text);
+    void addEndpointFromPalette(QListWidgetItem* item = nullptr);
     void updateDomainLayerControls();
     void applyDomainLayer(const QString& domainType);
     void updateDomainManager();
@@ -140,8 +150,8 @@ private:
 
     FinepaperApplication m_application;
     RuntimeLocations m_locations;
-    std::optional<NocDesign> m_design;
-    std::optional<ResolvedDesign> m_resolvedDesign;
+    std::optional<NocDesign> m_design = std::nullopt;
+    std::optional<ResolvedDesign> m_resolvedDesign = std::nullopt;
     QString m_designPath;
     QString m_workspaceStatusMessage;
     bool m_dirty = false;
@@ -149,7 +159,7 @@ private:
     quint64 m_designSessionSerial = 0;
     QString m_designSessionIdentity;
     QSet<QString> m_runtimeAvailablePackageKeys;
-    std::optional<RouterPosition> m_selectedRouter;
+    std::optional<RouterPosition> m_selectedRouter = std::nullopt;
     NocEditorSelectionSet m_editorSelection;
 
     QAction* m_newAction = nullptr;
@@ -163,6 +173,8 @@ private:
     QAction* m_fitAction = nullptr;
     QAction* m_selectCanvasAction = nullptr;
     QAction* m_panCanvasAction = nullptr;
+    QAction* m_reduceMotionAction = nullptr;
+    QAction* m_resetWorkbenchLayoutAction = nullptr;
     QAction* m_installAction = nullptr;
     QAction* m_reloadAction = nullptr;
     QComboBox* m_domainLayerSelector = nullptr;
@@ -171,8 +183,15 @@ private:
     QFutureWatcher<GenerationResult>* m_generationWatcher = nullptr;
 
     QTabWidget* m_centerViews = nullptr;
-    std::optional<WorkbenchViewRegistry> m_viewRegistry;
+    std::optional<WorkbenchViewRegistry> m_viewRegistry = std::nullopt;
     NocNodeEditor* m_nodeEditor = nullptr;
+    QWidget* m_editorPage = nullptr;
+    QStackedLayout* m_editorStack = nullptr;
+    QWidget* m_editorEmptyStateOverlay = nullptr;
+    ui::EmptyState* m_editorEmptyState = nullptr;
+    QPushButton* m_emptyCreateButton = nullptr;
+    QPushButton* m_emptyOpenButton = nullptr;
+    QPushButton* m_emptyInstallButton = nullptr;
     DomainConfigurationWorkspace* m_domainConfigurationWorkspace = nullptr;
     DesignExtensionsWorkspace* m_designExtensionsWorkspace = nullptr;
     QLabel* m_performanceSummary = nullptr;
@@ -184,11 +203,16 @@ private:
     QPushButton* m_createDesignButton = nullptr;
     QPushButton* m_installPackageButton = nullptr;
     QPushButton* m_reloadPackagesButton = nullptr;
+    QLineEdit* m_endpointFilter = nullptr;
+    QLabel* m_endpointPaletteHint = nullptr;
+    QPushButton* m_addEndpointButton = nullptr;
     EndpointPaletteList* m_endpointPalette = nullptr;
 
     QDockWidget* m_inspectorDock = nullptr;
     QLabel* m_designOverview = nullptr;
+    QGroupBox* m_topologyGroup = nullptr;
     QPushButton* m_resizeMeshButton = nullptr;
+    QGroupBox* m_selectionGroup = nullptr;
     QLabel* m_selectionSummary = nullptr;
     QGroupBox* m_endpointConfigurationGroup = nullptr;
     EndpointConfigurationPanel* m_endpointConfigurationPanel = nullptr;

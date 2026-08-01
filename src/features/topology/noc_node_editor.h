@@ -28,6 +28,7 @@ using NodeId = unsigned int;
 }
 
 class QEvent;
+class QGraphicsItem;
 class QGraphicsPathItem;
 
 namespace finepaper {
@@ -48,6 +49,12 @@ enum class TopologyWorkspaceDiagnosticKind : quint8 {
     RepairSucceeded,
 };
 
+enum class TopologyWorkspaceRegularizeResult : quint8 {
+    Saved,
+    Repaired,
+    SaveFailed,
+};
+
 struct TopologyWorkspaceDiagnostic {
     TopologyWorkspaceDiagnosticKind kind =
         TopologyWorkspaceDiagnosticKind::LoadFailed;
@@ -62,12 +69,12 @@ struct NocEditorSelection {
         Endpoint,
         RouterLink,
         EndpointAttachment,
-        PendingEndpoint
+        PendingEndpoint,
     };
 
     Kind kind = Kind::None;
     QString id;
-    std::optional<RouterPosition> router;
+    std::optional<RouterPosition> router = std::nullopt;
 
     [[nodiscard]] std::optional<ElementRef> element() const {
         switch (kind) {
@@ -135,13 +142,17 @@ public:
     NocCanvasInteractionMode canvasInteractionMode() const {
         return m_canvasInteractionMode;
     }
+    void setReducedMotion(bool reduced);
+    bool reducedMotion() const;
+    [[nodiscard]] attachment::SlotResolution endpointAttachmentAvailability(
+        RouterPosition router) const;
     void selectElements(const QVector<ElementRef>& elements);
     bool setRouterVisualPosition(const QString& routerId, QPointF position);
     std::optional<QPointF> routerVisualPosition(const QString& routerId) const;
     std::optional<QPointF> endpointVisualPosition(const QString& endpointId) const;
     bool setRouterCollapsed(const QString& routerId, bool collapsed);
     bool routerCollapsed(const QString& routerId) const;
-    void regularizeLayout();
+    [[nodiscard]] TopologyWorkspaceRegularizeResult regularizeLayout();
     void zoomToFit();
     void setDomainPresentation(DomainPresentationSnapshot presentation);
     [[nodiscard]] const DomainPresentationSnapshot& domainPresentation() const;
@@ -171,12 +182,13 @@ public:
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void changeEvent(QEvent* event) override;
 
 private:
     struct NodeMetadata {
         NocEditorSelection::Kind kind = NocEditorSelection::Kind::None;
         QString id;
-        std::optional<RouterPosition> router;
+        std::optional<RouterPosition> router = std::nullopt;
         QPointF projectedPosition;
         QString endpointType;
     };
@@ -192,7 +204,7 @@ private:
         QString id;
         QString type;
         QPointF scenePosition;
-        std::optional<NocDetachedEndpointSnapshot> detached;
+        std::optional<NocDetachedEndpointSnapshot> detached = std::nullopt;
     };
 
     struct RouterEndpointDraft {
@@ -239,6 +251,15 @@ private:
     bool attachNodeToRouter(QtNodes::NodeId nodeId, NocAttachmentTarget target);
     bool detachEndpoint(QtNodes::NodeId nodeId,
                         bool restoreProjectionOnFailure = false);
+    bool deleteEndpointNode(QtNodes::NodeId nodeId);
+    bool deleteSelectedSemanticItem();
+    bool selectAdjacentCanvasItem(bool backwards);
+    bool showSelectedContextMenuFromKeyboard();
+    std::optional<QtNodes::NodeId> nodeIdForSelection(
+        const SelectionIdentity& selection) const;
+    QGraphicsItem* graphicsItemForSelection(
+        const SelectionIdentity& selection);
+    void ensureSelectionVisible(const SelectionIdentity& selection);
     void showContextMenu(const QPoint& viewportPosition, const QPoint& globalPosition);
     void showConnectionContextMenu(QtNodes::ConnectionId connectionId,
                                    const QPoint& globalPosition);
@@ -285,11 +306,14 @@ private:
     void emitSelectionChanged();
     void applyNodeStacking();
     void applyDomainPresentation();
+    void updateCanvasAccessibleDescription();
     void restoreSelection();
     void highlightNeighborhood(QtNodes::NodeId nodeId);
+    void setNodeRelatedHighlight(QtNodes::NodeId nodeId);
+    void setConnectionRelatedHighlight(QtNodes::ConnectionId connectionId);
     void clearNeighborhoodHighlight();
 
-    std::optional<NocDesign> m_design;
+    std::optional<NocDesign> m_design = std::nullopt;
     std::shared_ptr<QtNodes::NodeDelegateModelRegistry> m_registry;
     std::unique_ptr<QtNodes::DataFlowGraphModel> m_graphModel;
     QtNodes::DataFlowGraphicsScene* m_scene = nullptr;
@@ -298,6 +322,9 @@ private:
     QHash<QString, QtNodes::NodeId> m_routerNodes;
     QHash<ElementRef, QtNodes::NodeId> m_elementNodes;
     QHash<ElementRef, QtNodes::ConnectionId> m_elementConnections;
+    QSet<QtNodes::NodeId> m_stackingNodeIds;
+    QSet<QtNodes::NodeId> m_highlightedNodeIds;
+    QVector<QtNodes::ConnectionId> m_highlightedConnectionIds;
     TopologyWorkspaceState m_workspaceState;
     TopologyWorkspaceStore m_workspaceStore;
     QVector<NocEndpointTypeItem> m_endpointTypes;
@@ -305,8 +332,8 @@ private:
         attachment::policyFromPackage(AttachmentDefinition{});
     attachment::DesignIndex m_attachmentIndex;
     QHash<QString, PendingEndpoint> m_pendingEndpoints;
-    std::optional<RouterEndpointDraft> m_routerEndpointDraft;
-    std::optional<EndpointAttachmentDraft> m_endpointAttachmentDraft;
+    std::optional<RouterEndpointDraft> m_routerEndpointDraft = std::nullopt;
+    std::optional<EndpointAttachmentDraft> m_endpointAttachmentDraft = std::nullopt;
     QSet<QString> m_pendingConnectionDetachments;
     int m_nextPendingEndpoint = 0;
     QVector<SelectionIdentity> m_selectedItems;

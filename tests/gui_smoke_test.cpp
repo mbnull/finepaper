@@ -6,11 +6,13 @@
 #include "features/topology/noc_node_editor.h"
 #include "features/topology/topology_workspace_store.h"
 #include "ui/common/schema_value_editor.h"
+#include "ui/theme/workbench_style.h"
 #include "ui/workbench/workbench_config.h"
 
 #include <QAction>
 #include <QAbstractButton>
 #include <QApplication>
+#include <QColor>
 #include <QComboBox>
 #include <QContextMenuEvent>
 #include <QDir>
@@ -19,12 +21,13 @@
 #include <QDockWidget>
 #include <QDragEnterEvent>
 #include <QDropEvent>
-#include <QElapsedTimer>
+#include <QDeadlineTimer>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QGraphicsView>
 #include <QGraphicsPathItem>
+#include <QGuiApplication>
 #include <QGroupBox>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -38,11 +41,15 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPlainTextEdit>
+#include <QPalette>
+#include <QPixmap>
+#include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSettings>
 #include <QSet>
+#include <QSize>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTabWidget>
@@ -51,7 +58,9 @@
 #include <QTextStream>
 #include <QThread>
 #include <QToolBar>
+#include <QToolButton>
 #include <QTimer>
+#include <QVariantAnimation>
 
 #include <QtNodes/AbstractGraphModel>
 #include <QtNodes/BasicGraphicsScene>
@@ -59,6 +68,7 @@
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 
 #include <optional>
+#include <chrono>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -67,6 +77,7 @@
 namespace {
 
 int failures = 0;
+constexpr int kMaximumSmokeDimension = 4096;
 
 void check(bool condition, const QString& message) {
     if (!condition) {
@@ -75,10 +86,166 @@ void check(bool condition, const QString& message) {
     }
 }
 
-bool waitUntil(const std::function<bool()>& predicate, int timeoutMilliseconds = 20000) {
-    QElapsedTimer timer;
-    timer.start();
-    while (!predicate() && timer.elapsed() < timeoutMilliseconds) {
+QSize requestedSmokeSize() {
+    QString text = qEnvironmentVariable("FINEPAPER_GUI_SMOKE_SIZE")
+                       .trimmed()
+                       .toLower();
+    if (text.isEmpty()) {
+        return {};
+    }
+    const QStringList parts = text.split(QLatin1Char('x'));
+    if (parts.size() != 2) {
+        check(false, QStringLiteral(
+            "FINEPAPER_GUI_SMOKE_SIZE must use WIDTHxHEIGHT."));
+        return {};
+    }
+    bool widthOk = false;
+    bool heightOk = false;
+    const int width = parts.at(0).toInt(&widthOk);
+    const int height = parts.at(1).toInt(&heightOk);
+    const bool valid = widthOk && heightOk
+        && width >= 640 && height >= 480
+        && width <= kMaximumSmokeDimension
+        && height <= kMaximumSmokeDimension;
+    check(valid,
+          QStringLiteral(
+              "FINEPAPER_GUI_SMOKE_SIZE must be between 640x480 and %1x%1.")
+              .arg(kMaximumSmokeDimension));
+    return valid ? QSize(width, height) : QSize{};
+}
+
+void applyRequestedSmokePalette(QApplication& application,
+                                const QString& theme) {
+    if (theme.isEmpty()) {
+        return;
+    }
+    if (theme != QStringLiteral("light")
+        && theme != QStringLiteral("dark")) {
+        check(false, QStringLiteral(
+            "FINEPAPER_GUI_SMOKE_THEME must be light or dark."));
+        return;
+    }
+
+    const bool dark = theme == QStringLiteral("dark");
+    const QColor window = dark ? QColor(QStringLiteral("#202124"))
+                               : QColor(QStringLiteral("#f5f6f8"));
+    const QColor base = dark ? QColor(QStringLiteral("#17181a"))
+                             : QColor(QStringLiteral("#ffffff"));
+    const QColor raised = dark ? QColor(QStringLiteral("#292b2f"))
+                               : QColor(QStringLiteral("#ffffff"));
+    const QColor text = dark ? QColor(QStringLiteral("#f1f3f4"))
+                             : QColor(QStringLiteral("#202124"));
+    const QColor muted = dark ? QColor(QStringLiteral("#aeb4bc"))
+                              : QColor(QStringLiteral("#5f6368"));
+    const QColor accent = dark ? QColor(QStringLiteral("#8ab4f8"))
+                               : QColor(QStringLiteral("#1967d2"));
+
+    QPalette palette;
+    palette.setColor(QPalette::Window, window);
+    palette.setColor(QPalette::WindowText, text);
+    palette.setColor(QPalette::Base, base);
+    palette.setColor(QPalette::AlternateBase, raised);
+    palette.setColor(QPalette::ToolTipBase, raised);
+    palette.setColor(QPalette::ToolTipText, text);
+    palette.setColor(QPalette::Text, text);
+    palette.setColor(QPalette::Button, raised);
+    palette.setColor(QPalette::ButtonText, text);
+    palette.setColor(QPalette::BrightText, Qt::white);
+    palette.setColor(QPalette::Highlight, accent);
+    palette.setColor(QPalette::HighlightedText,
+                     dark ? QColor(QStringLiteral("#101216")) : Qt::white);
+    palette.setColor(QPalette::Link, accent);
+    palette.setColor(QPalette::LinkVisited, accent);
+    palette.setColor(QPalette::PlaceholderText, muted);
+    palette.setColor(QPalette::Disabled, QPalette::WindowText, muted);
+    palette.setColor(QPalette::Disabled, QPalette::Text, muted);
+    palette.setColor(QPalette::Disabled, QPalette::ButtonText, muted);
+    application.setPalette(palette);
+}
+
+QString smokeVariantName(const QString& requestedTheme,
+                         const QSize& windowSize) {
+    const QString theme = requestedTheme == QStringLiteral("light")
+            || requestedTheme == QStringLiteral("dark")
+        ? requestedTheme : QStringLiteral("system");
+    return QStringLiteral("%1_%2x%3")
+        .arg(theme)
+        .arg(windowSize.width())
+        .arg(windowSize.height());
+}
+
+void captureSmokeScreenshot(QWidget& window,
+                            const QString& phase,
+                            const QString& requestedTheme) {
+    const QString screenshotRoot =
+        qEnvironmentVariable("FINEPAPER_GUI_SMOKE_SCREENSHOT_DIR").trimmed();
+    if (screenshotRoot.isEmpty()) {
+        return;
+    }
+    if (!QDir(screenshotRoot).exists()) {
+        check(false, QStringLiteral(
+            "FINEPAPER_GUI_SMOKE_SCREENSHOT_DIR does not exist: %1")
+            .arg(screenshotRoot));
+        return;
+    }
+    if (phase != QStringLiteral("no-design")) {
+        auto* editor = dynamic_cast<finepaper::NocNodeEditor*>(
+            window.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor")));
+        if (editor) {
+            editor->zoomToFit();
+        }
+    }
+    QApplication::processEvents(QEventLoop::AllEvents, 50);
+    const QString fileName = QStringLiteral("finepaper_%1_%2.png")
+        .arg(phase, smokeVariantName(requestedTheme, window.size()));
+    const QString path = QDir(screenshotRoot).filePath(fileName);
+    check(window.grab().save(path, "PNG"),
+          QStringLiteral("%1 screenshot is saved to %2").arg(phase, path));
+}
+
+bool focusIsWithin(QWidget* target) {
+    QWidget* focus = QApplication::focusWidget();
+    return target && focus
+        && (focus == target || target->isAncestorOf(focus));
+}
+
+bool visibleSiblingLabelsDoNotOverlap(QWidget* root,
+                                      QString* collision = nullptr) {
+    if (!root) {
+        return false;
+    }
+    const QList<QLabel*> labels = root->findChildren<QLabel*>();
+    for (qsizetype firstIndex = 0; firstIndex < labels.size(); ++firstIndex) {
+        QLabel* first = labels.at(firstIndex);
+        if (!first->isVisibleTo(root) || first->text().trimmed().isEmpty()) {
+            continue;
+        }
+        for (qsizetype secondIndex = firstIndex + 1;
+             secondIndex < labels.size(); ++secondIndex) {
+            QLabel* second = labels.at(secondIndex);
+            if (first->parentWidget() != second->parentWidget()
+                || !second->isVisibleTo(root)
+                || second->text().trimmed().isEmpty()) {
+                continue;
+            }
+            const QRect overlap = first->geometry().intersected(second->geometry());
+            if (overlap.width() > 1 && overlap.height() > 1) {
+                if (collision) {
+                    *collision = QStringLiteral("\"%1\" overlaps \"%2\"")
+                        .arg(first->text().left(40), second->text().left(40));
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool waitUntil(
+    const std::function<bool()>& predicate,
+    std::chrono::milliseconds timeout = std::chrono::seconds(20)) {
+    const QDeadlineTimer deadline(timeout);
+    while (!predicate() && !deadline.hasExpired()) {
         QApplication::processEvents(QEventLoop::AllEvents, 50);
         QThread::msleep(1);
     }
@@ -151,6 +318,24 @@ std::optional<QtNodes::NodeId> nodeIdWithCaptionPrefix(
         }
     }
     return std::nullopt;
+}
+
+QtNodes::NodeGraphicsObject* nodeGraphicsWithCaptionPrefix(
+    QtNodes::BasicGraphicsScene* scene,
+    const QString& prefix) {
+    if (!scene) {
+        return nullptr;
+    }
+    for (QGraphicsItem* item : scene->items()) {
+        auto* node = qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item);
+        if (node && node->graphModel().nodeData(
+                        node->nodeId(), QtNodes::NodeRole::Caption)
+                        .toString()
+                        .startsWith(prefix)) {
+            return node;
+        }
+    }
+    return nullptr;
 }
 
 std::unordered_set<QtNodes::ConnectionId> sceneConnectionIds(
@@ -1059,6 +1244,11 @@ bool writeMissingPackageDesign(const QString& path) {
 int main(int argc, char** argv) {
     const bool maximizeWindow =
         qEnvironmentVariableIsSet("FINEPAPER_GUI_SMOKE_MAXIMIZED");
+    const QSize requestedWindowSize = requestedSmokeSize();
+    const QString requestedTheme =
+        qEnvironmentVariable("FINEPAPER_GUI_SMOKE_THEME")
+            .trimmed()
+            .toLower();
     QTemporaryDir configRoot(QStringLiteral("/tmp/finepaper-gui-config-XXXXXX"));
     QTemporaryDir outputRoot(QStringLiteral("/tmp/finepaper-gui-output-XXXXXX"));
     check(configRoot.isValid(), QStringLiteral("temporary GUI settings root is available"));
@@ -1071,6 +1261,14 @@ int main(int argc, char** argv) {
     application.installEventFilter(&endpointCreationAutoAccepter);
     QCoreApplication::setOrganizationName(QStringLiteral("FinepaperTest"));
     QCoreApplication::setApplicationName(QStringLiteral("finepaper-gui-smoke"));
+    applyRequestedSmokePalette(application, requestedTheme);
+    finepaper::ui::applyWorkbenchStyle(application);
+    const QString requiredPlatform =
+        qEnvironmentVariable("FINEPAPER_GUI_SMOKE_REQUIRE_PLATFORM")
+            .trimmed();
+    check(requiredPlatform.isEmpty()
+              || QGuiApplication::platformName() == requiredPlatform,
+          QStringLiteral("GUI smoke uses the requested native platform plugin"));
 
     check(finepaper::workbench::designWorkspaceKey(
               QStringLiteral("a"), QStringLiteral("b:c"), QStringLiteral("d"))
@@ -1090,20 +1288,61 @@ int main(int argc, char** argv) {
             QDir(configRoot.path()).filePath(QStringLiteral("missing-installed-package"))});
     finepaper::FinepaperMainWindow window(locations);
     pollutedSettings.remove(finepaper::workbench::packageRootsSetting);
+    if (requestedWindowSize.isValid()) {
+        window.resize(requestedWindowSize);
+    }
     if (maximizeWindow) {
         window.showMaximized();
     } else {
         window.show();
     }
     application.processEvents();
+    const auto restoreRequestedClientSize = [&] {
+        if (!maximizeWindow && requestedWindowSize.isValid()
+            && window.size() != requestedWindowSize) {
+            window.resize(requestedWindowSize);
+            application.processEvents();
+        }
+    };
+    // The offscreen platform can polish a top-level window to its initial
+    // sizeHint on first show. Reapply the requested client size after polish,
+    // matching a compositor configure or a user resize.
+    restoreRequestedClientSize();
     check(!maximizeWindow || window.isMaximized(),
           QStringLiteral(
               "the native-compositor regression run enters maximized state"));
+    check(maximizeWindow || !requestedWindowSize.isValid()
+              || window.size() == requestedWindowSize,
+          QStringLiteral("requested smoke-test window size is honored (%1x%2)")
+              .arg(window.width())
+              .arg(window.height()));
+    if (requestedTheme == QStringLiteral("light")
+        || requestedTheme == QStringLiteral("dark")) {
+        const int surfaceLightness = application.palette()
+                                         .color(QPalette::Window)
+                                         .lightness();
+        const int textLightness = application.palette()
+                                      .color(QPalette::WindowText)
+                                      .lightness();
+        check(!application.styleSheet().isEmpty()
+                  && ((requestedTheme == QStringLiteral("dark")
+                       && surfaceLightness < textLightness)
+                      || (requestedTheme == QStringLiteral("light")
+                          && surfaceLightness > textLightness)),
+              QStringLiteral(
+                  "requested %1 palette is applied before the workbench stylesheet")
+                  .arg(requestedTheme));
+    }
 
     auto* centerViews = qobject_cast<QTabWidget*>(window.centralWidget());
     check(centerViews && centerViews->count() == 5,
           QStringLiteral("central workbench exposes five switchable views"));
     if (centerViews) {
+        check(centerViews->objectName()
+                      == QStringLiteral("finepaper.centerViews")
+                  && !centerViews->accessibleName().trimmed().isEmpty(),
+              QStringLiteral(
+                  "central workbench tabs expose a stable automation id and accessible name"));
         check(centerViews->tabText(0) == QStringLiteral("NoC Editor"),
               QStringLiteral("NoC Editor is the default central view"));
         check(centerViews->tabText(1) == QStringLiteral("Domain Configuration")
@@ -1121,6 +1360,15 @@ int main(int argc, char** argv) {
               QStringLiteral("performance analysis is a central view"));
         check(centerViews->tabText(4) == QStringLiteral("Problem Report"),
               QStringLiteral("problem report is a central view"));
+        bool completeTabToolTips = true;
+        for (int index = 0; index < centerViews->count(); ++index) {
+            completeTabToolTips = completeTabToolTips
+                && centerViews->tabToolTip(index)
+                    == centerViews->tabText(index);
+        }
+        check(completeTabToolTips,
+              QStringLiteral(
+                  "elided central tabs expose their complete title as a tooltip"));
     }
     QAction* designExtensionsViewAction = actionWithText(
         window, QStringLiteral("Design Extensions"));
@@ -1140,6 +1388,8 @@ int main(int argc, char** argv) {
 
     auto* packageDock = window.findChild<QDockWidget*>(finepaper::workbench::packageDockName);
     auto* inspectorDock = window.findChild<QDockWidget*>(finepaper::workbench::inspectorDockName);
+    auto* domainDock = window.findChild<QDockWidget*>(
+        finepaper::workbench::domainManagerDockName);
     auto* resultsDock = window.findChild<QDockWidget*>(finepaper::workbench::resultsDockName);
     auto* inspectorScroll = window.findChild<QScrollArea*>(
         QStringLiteral("finepaper.inspectorScroll"));
@@ -1161,15 +1411,30 @@ int main(int argc, char** argv) {
           QStringLiteral(
               "the complete Inspector scrolls inside its dock instead of resizing the top-level window"));
 
-    auto* activityBar = window.findChild<QToolBar*>(finepaper::workbench::activityBarName);
+    auto* mainToolbar = window.findChild<QToolBar*>(
+        finepaper::workbench::mainToolbarName);
+    auto* panelNavigationButton = window.findChild<QToolButton*>(
+        finepaper::workbench::panelNavigationButtonName);
     QAction* packagePanelAction = window.findChild<QAction*>(
         finepaper::workbench::packageToggleActionName);
     QAction* inspectorPanelAction = window.findChild<QAction*>(
         finepaper::workbench::inspectorToggleActionName);
     QAction* resultsPanelAction = window.findChild<QAction*>(
         finepaper::workbench::resultsToggleActionName);
-    check(activityBar && activityBar->orientation() == Qt::Vertical,
-          QStringLiteral("a persistent vertical Activity Bar controls workbench panels"));
+    const bool toolbarActionsUseText = mainToolbar
+        && std::all_of(
+            mainToolbar->actions().cbegin(), mainToolbar->actions().cend(),
+            [](const QAction* action) {
+                return action->isSeparator() || action->icon().isNull();
+            });
+    check(mainToolbar
+              && mainToolbar->toolButtonStyle() == Qt::ToolButtonTextOnly
+              && toolbarActionsUseText
+              && panelNavigationButton
+              && panelNavigationButton->text() == QStringLiteral("Panels")
+              && panelNavigationButton->menu(),
+          QStringLiteral(
+              "the main toolbar and Panels menu use visible text instead of icon-only navigation"));
     check(packagePanelAction && packagePanelAction->shortcut() == QKeySequence(QStringLiteral("Ctrl+B")),
           QStringLiteral("left Package panel has the VS Code style Ctrl+B shortcut"));
     check(inspectorPanelAction
@@ -1180,35 +1445,123 @@ int main(int argc, char** argv) {
           QStringLiteral("bottom results panel has the VS Code style Ctrl+J shortcut"));
 
     if (packagePanelAction && packageDock) {
+        packageDock->show();
+        application.processEvents();
         packagePanelAction->trigger();
         application.processEvents();
         check(!packageDock->isVisible() && !packagePanelAction->isChecked(),
-              QStringLiteral("Activity Bar collapses the left Package panel"));
+              QStringLiteral("View menu toggle hides the left Package panel"));
         packagePanelAction->trigger();
         application.processEvents();
         check(packageDock->isVisible() && packagePanelAction->isChecked(),
-              QStringLiteral("Activity Bar restores the left Package panel"));
+              QStringLiteral("View menu toggle restores the left Package panel"));
     }
     if (inspectorPanelAction && inspectorDock) {
+        inspectorDock->show();
+        inspectorDock->raise();
+        application.processEvents();
         inspectorPanelAction->trigger();
         application.processEvents();
         check(!inspectorDock->isVisible(),
-              QStringLiteral("Activity Bar collapses the right Inspector panel"));
+              QStringLiteral("View menu toggle hides the right Inspector panel"));
         inspectorPanelAction->trigger();
         application.processEvents();
         check(inspectorDock->isVisible(),
-              QStringLiteral("Activity Bar restores the right Inspector panel"));
+              QStringLiteral("View menu toggle restores the right Inspector panel"));
     }
     if (resultsPanelAction && resultsDock) {
+        resultsDock->show();
+        application.processEvents();
         resultsPanelAction->trigger();
         application.processEvents();
         check(!resultsDock->isVisible(),
-              QStringLiteral("Activity Bar collapses the bottom diagnostics panel"));
+              QStringLiteral("View menu toggle hides the bottom diagnostics panel"));
         resultsPanelAction->trigger();
         application.processEvents();
         check(resultsDock->isVisible(),
-              QStringLiteral("Activity Bar restores the bottom diagnostics panel"));
+              QStringLiteral("View menu toggle restores the bottom diagnostics panel"));
     }
+
+    QAction* packageNavigation = window.findChild<QAction*>(
+        finepaper::workbench::packageNavigationActionName);
+    QAction* inspectorNavigation = window.findChild<QAction*>(
+        finepaper::workbench::inspectorNavigationActionName);
+    QAction* domainNavigation = window.findChild<QAction*>(
+        finepaper::workbench::domainNavigationActionName);
+    QAction* resultsNavigation = window.findChild<QAction*>(
+        finepaper::workbench::resultsNavigationActionName);
+    auto* endpointFilter = window.findChild<QLineEdit*>(
+        QStringLiteral("finepaper.endpointPaletteFilter"));
+    auto* domainFocusTarget = window.findChild<QWidget*>(
+        QStringLiteral("finepaper.domainManager"));
+    auto* resultTabsForNavigation = window.findChild<QTabWidget*>(
+        QStringLiteral("finepaper.resultTabs"));
+    check(packageNavigation && inspectorNavigation && domainNavigation
+              && resultsNavigation,
+          QStringLiteral(
+              "the Panels menu exposes dedicated text actions for every workbench panel"));
+    if (packageNavigation && packageDock) {
+        packageDock->hide();
+        packageNavigation->trigger();
+        application.processEvents();
+        check(packageDock->isVisible() && focusIsWithin(endpointFilter),
+              QStringLiteral(
+                  "Package navigation shows the dock and focuses its filter"));
+    }
+    if (inspectorNavigation && inspectorDock) {
+        inspectorDock->hide();
+        inspectorNavigation->trigger();
+        application.processEvents();
+        check(inspectorDock->isVisible() && focusIsWithin(inspectorScroll),
+              QStringLiteral(
+                  "Inspector navigation shows, raises, and focuses the Inspector"));
+    }
+    if (domainNavigation && domainDock) {
+        domainDock->hide();
+        domainNavigation->trigger();
+        application.processEvents();
+        check(domainDock->isVisible() && focusIsWithin(domainFocusTarget),
+              QStringLiteral(
+                  "Domain navigation shows, raises, and focuses the Domain Manager"));
+    }
+    if (resultsNavigation && resultsDock) {
+        resultsDock->hide();
+        resultsNavigation->trigger();
+        application.processEvents();
+        check(resultsDock->isVisible()
+                  && focusIsWithin(resultTabsForNavigation),
+              QStringLiteral(
+                  "Results navigation shows, raises, and focuses diagnostics"));
+    }
+
+    QAction* resetWorkbenchLayoutAction = window.findChild<QAction*>(
+        finepaper::workbench::resetWorkbenchLayoutActionName);
+    if (centerViews) {
+        centerViews->setCurrentIndex(2);
+    }
+    if (packageDock) {
+        packageDock->hide();
+    }
+    if (inspectorDock) {
+        inspectorDock->hide();
+    }
+    if (resultsDock) {
+        resultsDock->show();
+    }
+    if (resetWorkbenchLayoutAction) {
+        resetWorkbenchLayoutAction->trigger();
+        application.processEvents();
+    }
+    check(resetWorkbenchLayoutAction && packageDock && packageDock->isVisible()
+              && inspectorDock && inspectorDock->isVisible()
+              && resultsDock && !resultsDock->isVisible()
+              && window.dockWidgetArea(packageDock) == Qt::LeftDockWidgetArea
+              && window.dockWidgetArea(inspectorDock) == Qt::RightDockWidgetArea
+              && window.dockWidgetArea(resultsDock) == Qt::BottomDockWidgetArea
+              && centerViews && centerViews->currentIndex() == 0,
+          QStringLiteral(
+              "Reset Workbench Layout restores primary docks, the editor, and a hidden Results panel"));
+    restoreRequestedClientSize();
 
     auto* resultTabs = resultsDock ? qobject_cast<QTabWidget*>(resultsDock->widget()) : nullptr;
     check(resultTabs && resultTabs->count() == 3,
@@ -1250,6 +1603,12 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.applyParameters"));
     auto* resizeMeshButton = window.findChild<QPushButton*>(
         QStringLiteral("finepaper.resizeMesh"));
+    auto* meshTopologyGroup = window.findChild<QGroupBox*>(
+        QStringLiteral("finepaper.meshTopologyGroup"));
+    auto* parameterGroup = window.findChild<QGroupBox*>(
+        QStringLiteral("finepaper.parameterGroup"));
+    auto* initialSelectionGroup = window.findChild<QGroupBox*>(
+        finepaper::workbench::selectionInspectorName);
     QAction* resizeMeshAction = window.findChild<QAction*>(
         QStringLiteral("finepaper.resizeMeshAction"));
     check(endpointPalette && !endpointPalette->isEnabled(),
@@ -1265,13 +1624,40 @@ int main(int argc, char** argv) {
     check(resizeMeshButton && !resizeMeshButton->isEnabled()
               && resizeMeshAction && !resizeMeshAction->isEnabled(),
           QStringLiteral("Mesh resize entry points are disabled without a design"));
+    check(meshTopologyGroup && !meshTopologyGroup->isVisible()
+              && parameterGroup && !parameterGroup->isVisible()
+              && initialSelectionGroup
+              && !initialSelectionGroup->isVisible(),
+          QStringLiteral(
+              "the no-design Inspector hides topology, selection, and parameter editors"));
 
     auto* createButton = window.findChild<QPushButton*>(QStringLiteral("finepaper.createDesign"));
     check(createButton && createButton->isEnabled(),
           QStringLiteral("stale or overlapping installed roots do not block NoC IP selection"));
+    auto* canvasEmptyState = window.findChild<QWidget*>(
+        QStringLiteral("finepaper.canvasEmptyState"));
+    auto* emptyStateCreate = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.emptyStateCreate"));
+    auto* emptyStateOpen = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.emptyStateOpen"));
+    auto* emptyStateInstall = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.emptyStateInstall"));
+    check(canvasEmptyState && canvasEmptyState->isVisible()
+              && emptyStateCreate && emptyStateCreate->isVisible()
+              && emptyStateCreate->isEnabled()
+              && emptyStateOpen && emptyStateOpen->isVisible()
+              && emptyStateOpen->isEnabled()
+              && emptyStateInstall && !emptyStateInstall->isVisible(),
+          QStringLiteral(
+              "the no-design canvas offers Create and Open CTAs when a runnable NoC IP is installed"));
+    restoreRequestedClientSize();
+    captureSmokeScreenshot(window, QStringLiteral("no-design"), requestedTheme);
     createDesignThroughDialog(window, QStringLiteral("finepaper.noc@1.0.0"));
+    restoreRequestedClientSize();
     check(window.isWindowModified(),
           QStringLiteral("creating a design marks the workbench dirty"));
+    check(canvasEmptyState && !canvasEmptyState->isVisible(),
+          QStringLiteral("the no-design empty state leaves the canvas after creation"));
     check(activePackage
               && activePackage->text().contains(QStringLiteral("finepaper.noc@1.0.0"))
               && endpointPalette && endpointPalette->count() == 2
@@ -1283,6 +1669,12 @@ int main(int argc, char** argv) {
           QStringLiteral("active NoC IP, design actions and Endpoint Palette stay aligned"));
     check(applyParameters && !applyParameters->isEnabled(),
           QStringLiteral("Package defaults are editable but do not enable a no-op Apply"));
+    check(meshTopologyGroup && meshTopologyGroup->isVisible()
+              && parameterGroup && parameterGroup->isVisible()
+              && initialSelectionGroup
+              && initialSelectionGroup->isVisible(),
+          QStringLiteral(
+              "design-owned topology and parameter editors appear after creation"));
     check(resizeMeshButton && resizeMeshButton->isEnabled()
               && resizeMeshAction && resizeMeshAction->isEnabled(),
           QStringLiteral("Mesh resize entry points follow active Package metadata"));
@@ -1314,10 +1706,33 @@ int main(int argc, char** argv) {
         : nullptr;
     check(graphicsView && graphicsView->scene() && !graphicsView->scene()->items().isEmpty(),
           QStringLiteral("created Mesh is projected into the QtNodes editor"));
+    check(graphicsView
+              && graphicsView->objectName()
+                     == QStringLiteral("finepaper.canvasView")
+              && !graphicsView->accessibleName().trimmed().isEmpty(),
+          QStringLiteral(
+              "the topology canvas exposes a stable automation id and accessible name"));
+    if (requestedWindowSize == QSize(1280, 720)) {
+        check(graphicsView && graphicsView->viewport()
+                  && graphicsView->viewport()->width() >= 320
+                  && graphicsView->viewport()->height() >= 360,
+              QStringLiteral(
+                  "at 1280x720 the central canvas retains a practical editing area (%1x%2)")
+                  .arg(graphicsView && graphicsView->viewport()
+                           ? graphicsView->viewport()->width() : 0)
+                  .arg(graphicsView && graphicsView->viewport()
+                           ? graphicsView->viewport()->height() : 0));
+        check(inspectorScroll
+                  && inspectorScroll->horizontalScrollBar()->maximum() == 0,
+              QStringLiteral(
+                  "at 1280x720 the Inspector does not require horizontal scrolling"));
+    }
     QAction* selectCanvasAction = window.findChild<QAction*>(
         finepaper::workbench::selectCanvasActionName);
     QAction* panCanvasAction = window.findChild<QAction*>(
         finepaper::workbench::panCanvasActionName);
+    QAction* reduceMotionAction = window.findChild<QAction*>(
+        finepaper::workbench::reducedMotionActionName);
     check(selectCanvasAction && panCanvasAction && panCanvasAction->isChecked()
               && nodeEditor
               && nodeEditor->canvasInteractionMode()
@@ -1325,6 +1740,54 @@ int main(int argc, char** argv) {
               && graphicsView
               && graphicsView->dragMode() == QGraphicsView::ScrollHandDrag,
           QStringLiteral("canvas opens in the directly draggable Pan mode"));
+    if (reduceMotionAction) {
+        const bool originalReducedMotion = reduceMotionAction->isChecked();
+        reduceMotionAction->setChecked(!originalReducedMotion);
+        application.processEvents();
+        check(nodeEditor
+                  && nodeEditor->reducedMotion() == !originalReducedMotion
+                  && animatedView
+                  && animatedView->reducedMotion() == !originalReducedMotion
+                  && window.dockOptions().testFlag(
+                         QMainWindow::AnimatedDocks)
+                         == originalReducedMotion,
+              QStringLiteral(
+                  "Reduce Motion propagates to canvas feedback and workbench docks"));
+        reduceMotionAction->setChecked(originalReducedMotion);
+        application.processEvents();
+    } else {
+        check(false,
+              QStringLiteral("View menu exposes the Reduce Motion preference"));
+    }
+    if (graphicsScene) {
+        finepaper::AnimatedGraphicsView overlayRegressionView(graphicsScene);
+        overlayRegressionView.resize(96, 96);
+        overlayRegressionView.show();
+        overlayRegressionView.beginEndpointDrag(
+            QPoint(4, 4),
+            QString(4096, QLatin1Char('W')),
+            finepaper::EndpointDragTarget::Canvas);
+        application.processEvents();
+        auto* dragPulse = overlayRegressionView.findChild<QVariantAnimation*>(
+            QStringLiteral("finepaper.endpointDragPulse"));
+        const bool pulseInitiallyRunning = dragPulse
+            && dragPulse->state() == QAbstractAnimation::Running;
+        overlayRegressionView.setReducedMotion(true);
+        const bool pulseStopped = dragPulse
+            && dragPulse->state() == QAbstractAnimation::Stopped;
+        overlayRegressionView.setReducedMotion(false);
+        const bool pulseResumed = dragPulse
+            && dragPulse->state() == QAbstractAnimation::Running;
+        overlayRegressionView.resize(48, 48);
+        application.processEvents();
+        const QPixmap tinyOverlay = overlayRegressionView.grab();
+        check(pulseInitiallyRunning && pulseStopped && pulseResumed
+                  && !tinyOverlay.isNull(),
+              QStringLiteral(
+                  "drag feedback resumes after Reduce Motion and safely degrades in a transiently narrow canvas"));
+        overlayRegressionView.endEndpointDrag();
+        overlayRegressionView.close();
+    }
     if (graphicsView && graphicsView->viewport()) {
         const QPoint panStart = blankViewportPosition(graphicsView);
         const QPoint panEnd(
@@ -1411,6 +1874,20 @@ int main(int argc, char** argv) {
     const auto router11 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-1-1"));
     check(router00 && router10 && router01 && router11,
           QStringLiteral("Mesh Router identities are present in the editor projection"));
+    if (graphicsView && graphicsScene) {
+        graphicsScene->clearSelection();
+        graphicsView->setFocus(Qt::TabFocusReason);
+        QKeyEvent tabPress(
+            QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+        QApplication::sendEvent(graphicsView, &tabPress);
+        application.processEvents();
+        check(graphicsScene->selectedItems().size() == 1,
+              QStringLiteral(
+                  "Tab keyboard navigation selects one semantic canvas item (%1 selected)")
+                  .arg(graphicsScene->selectedItems().size()));
+        graphicsScene->clearSelection();
+        application.processEvents();
+    }
     if (graphicsView && graphicsScene && router00 && router10
         && router01 && router11) {
         const QRectF topRowScene = graphicsScene->nodeGraphicsObject(*router00)
@@ -1487,6 +1964,14 @@ int main(int argc, char** argv) {
                   && diagonalRouterObject,
               QStringLiteral(
                   "all Mesh Router graphics objects exist before selection tests"));
+        check(selectedRouter && eastRouterObject && southRouterObject
+                  && diagonalRouterObject
+                  && selectedRouter->zValue() > 0.0
+                  && eastRouterObject->zValue() == selectedRouter->zValue()
+                  && southRouterObject->zValue() == selectedRouter->zValue()
+                  && diagonalRouterObject->zValue() == selectedRouter->zValue(),
+              QStringLiteral(
+                  "every projected Router receives its semantic base stacking level"));
         if (selectedRouter) {
             selectedRouter->setSelected(true);
             graphicsScene->nodeSelected(*router00);
@@ -1497,6 +1982,10 @@ int main(int argc, char** argv) {
                   && elementConfigurationGroup->isVisible(),
               QStringLiteral(
                   "Router selection progressively discloses only its element properties"));
+        check(elementConfigurationGroup && meshTopologyGroup
+                  && elementConfigurationGroup->y() < meshTopologyGroup->y(),
+              QStringLiteral(
+                  "Router properties precede global Mesh operations in the Inspector"));
         check((maximizeWindow || windowHeightBeforeRouterSelection <= 920)
                   && window.height() == windowHeightBeforeRouterSelection
                   && window.minimumSizeHint().height() <= window.height(),
@@ -1504,6 +1993,18 @@ int main(int argc, char** argv) {
                   "revealing Router properties does not grow the top-level window (height %1, minimum hint %2)")
                   .arg(window.height())
                   .arg(window.minimumSizeHint().height()));
+        QString routerInspectorCollision;
+        check(inspectorScroll
+                  && visibleSiblingLabelsDoNotOverlap(
+                      inspectorScroll->widget(), &routerInspectorCollision),
+              QStringLiteral(
+                  "Router Inspector labels occupy distinct layout rows%1")
+                  .arg(routerInspectorCollision.isEmpty()
+                           ? QString()
+                           : QStringLiteral(": ") + routerInspectorCollision));
+        restoreRequestedClientSize();
+        captureSmokeScreenshot(
+            window, QStringLiteral("router-selected"), requestedTheme);
         check(eastRouterObject && southRouterObject
                   && eastRouterObject
                          ->data(finepaper::relatedHighlightDataRole).toBool()
@@ -1553,6 +2054,33 @@ int main(int argc, char** argv) {
         graphicsScene->clearSelection();
     }
 
+    bool routerSpaceShortcutWorks = false;
+    if (nodeEditor && graphicsView) {
+        nodeEditor->selectElements(
+            {{finepaper::ElementKind::Router, QStringLiteral("r-0-0")}});
+        const bool collapsedBeforeSpace =
+            nodeEditor->routerCollapsed(QStringLiteral("r-0-0"));
+        QKeyEvent spacePress(
+            QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier,
+            QStringLiteral(" "));
+        QApplication::sendEvent(graphicsView, &spacePress);
+        application.processEvents();
+        routerSpaceShortcutWorks = spacePress.isAccepted()
+            && nodeEditor->routerCollapsed(QStringLiteral("r-0-0"))
+                != collapsedBeforeSpace;
+        QKeyEvent restoreSpacePress(
+            QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier,
+            QStringLiteral(" "));
+        QApplication::sendEvent(graphicsView, &restoreSpacePress);
+        application.processEvents();
+        routerSpaceShortcutWorks = routerSpaceShortcutWorks
+            && nodeEditor->routerCollapsed(QStringLiteral("r-0-0"))
+                == collapsedBeforeSpace;
+    }
+    check(routerSpaceShortcutWorks,
+          QStringLiteral(
+              "Space toggles and restores the keyboard-selected Router"));
+
     check(nodeEditor
               && nodeEditor->routerCollapsed(QStringLiteral("r-0-0"))
               && nodeEditor->routerCollapsed(QStringLiteral("r-1-0"))
@@ -1564,6 +2092,29 @@ int main(int argc, char** argv) {
         nodeEditor->setRouterCollapsed(QStringLiteral("r-1-0"), false);
         nodeEditor->setRouterCollapsed(QStringLiteral("r-0-1"), false);
         nodeEditor->setRouterCollapsed(QStringLiteral("r-1-1"), false);
+    }
+    const auto expandedSpacingRouter = nodeIdWithCaption(
+        graphicsScene, QStringLiteral("r-0-0"));
+    if (graphicsScene && expandedSpacingRouter) {
+        qreal minimumEndpointPortSpacing =
+            (std::numeric_limits<qreal>::max)();
+        std::optional<QPointF> previousEndpointPort = std::nullopt;
+        for (unsigned int index = 0; index < 4U; ++index) {
+            const QPointF port = graphicsScene->nodeGeometry().portPosition(
+                *expandedSpacingRouter,
+                QtNodes::PortType::In,
+                finepaper::portIndex(finepaper::RouterInputPort::Endpoint)
+                    + index);
+            if (previousEndpointPort) {
+                minimumEndpointPortSpacing = (std::min)(
+                    minimumEndpointPortSpacing,
+                    QLineF(*previousEndpointPort, port).length());
+            }
+            previousEndpointPort = port;
+        }
+        check(minimumEndpointPortSpacing >= 27.5,
+              QStringLiteral(
+                  "expanded Router Endpoint ports keep non-overlapping labels and hit targets"));
     }
 
     QtNodes::NodeGraphicsObject* routerNode = nullptr;
@@ -1703,6 +2254,24 @@ int main(int argc, char** argv) {
                    *currentRouter00,
                   finepaper::portIndex(finepaper::RouterInputPort::Endpoint)}),
           QStringLiteral("Endpoint uses the Router's dedicated EP attachment port"));
+    auto* newlyCreatedEndpoint = attachedEndpoint && graphicsScene
+        ? graphicsScene->nodeGraphicsObject(*attachedEndpoint) : nullptr;
+    auto* currentRouterObject = currentRouter00 && graphicsScene
+        ? graphicsScene->nodeGraphicsObject(*currentRouter00) : nullptr;
+    const QRect newlyCreatedEndpointViewport = newlyCreatedEndpoint && graphicsView
+        ? graphicsView->mapFromScene(
+              newlyCreatedEndpoint->sceneBoundingRect()).boundingRect()
+        : QRect{};
+    check(newlyCreatedEndpoint && newlyCreatedEndpoint->isSelected()
+              && graphicsView && graphicsView->viewport()->rect().intersects(
+                     newlyCreatedEndpointViewport),
+          QStringLiteral(
+              "a directly created Endpoint becomes selected and visible on the canvas"));
+    check(newlyCreatedEndpoint && currentRouterObject
+              && newlyCreatedEndpoint->zValue()
+                  > currentRouterObject->zValue(),
+          QStringLiteral(
+              "every projected Endpoint remains above Routers before hit testing"));
     if (attachedEndpoint && graphicsScene) {
         const int windowHeightBeforeEndpointSelection = window.height();
         graphicsScene->clearSelection();
@@ -1721,6 +2290,10 @@ int main(int argc, char** argv) {
                   && !elementConfigurationGroup->isVisible(),
               QStringLiteral(
                   "Endpoint selection progressively discloses only Endpoint-owned properties"));
+        check(endpointConfigurationGroup && meshTopologyGroup
+                  && endpointConfigurationGroup->y() < meshTopologyGroup->y(),
+              QStringLiteral(
+                  "Endpoint properties precede global Mesh operations in the Inspector"));
         const bool inspectorContentFits = inspectorScroll
             && inspectorScroll->widget()
             && inspectorScroll->widget()->height()
@@ -1734,14 +2307,38 @@ int main(int argc, char** argv) {
                   "Endpoint properties stay reachable by Inspector scrolling without growing the window (height %1, minimum hint %2)")
                   .arg(window.height())
                   .arg(window.minimumSizeHint().height()));
+        QString endpointInspectorCollision;
+        check(inspectorScroll
+                  && visibleSiblingLabelsDoNotOverlap(
+                      inspectorScroll->widget(), &endpointInspectorCollision),
+              QStringLiteral(
+                  "Endpoint Inspector labels occupy distinct layout rows%1")
+                  .arg(endpointInspectorCollision.isEmpty()
+                           ? QString()
+                           : QStringLiteral(": ")
+                               + endpointInspectorCollision));
+        check(!requestedWindowSize.isValid()
+                  || requestedWindowSize != QSize(1280, 720)
+                  || (inspectorScroll
+                      && inspectorScroll->horizontalScrollBar()->maximum() == 0),
+              QStringLiteral(
+                  "at 1280x720 Endpoint properties remain within the Inspector width"));
+        restoreRequestedClientSize();
+        captureSmokeScreenshot(
+            window, QStringLiteral("endpoint-selected"), requestedTheme);
     }
     const auto firstAttachmentPort = attachedEndpoint
         ? attachmentPortForEndpoint(graphicsScene, *attachedEndpoint) : std::nullopt;
 
-    if (graphicsView && graphicsScene && currentRouter00 && endpointMime) {
+    const auto routerForSecondDrop = nodeIdWithCaption(
+        graphicsScene, QStringLiteral("r-0-0"));
+    auto* routerForSecondDropGraphics = graphicsScene && routerForSecondDrop
+        ? graphicsScene->nodeGraphicsObject(*routerForSecondDrop) : nullptr;
+    check(routerForSecondDropGraphics,
+          QStringLiteral("target Router is projected before the second Endpoint drop"));
+    if (graphicsView && routerForSecondDropGraphics && endpointMime) {
         const QPoint dropPosition = graphicsView->mapFromScene(
-            graphicsScene->nodeGraphicsObject(*currentRouter00)
-                ->sceneBoundingRect().center());
+            routerForSecondDropGraphics->sceneBoundingRect().center());
         QDragEnterEvent dragEnter(dropPosition,
                                   Qt::CopyAction,
                                   endpointMime.get(),
@@ -1756,8 +2353,12 @@ int main(int argc, char** argv) {
         QApplication::sendEvent(graphicsView->viewport(), &drop);
         application.processEvents();
     }
-    const auto secondAttachedEndpoint = nodeIdWithCaptionPrefix(
+    auto* secondAttachedGraphics = nodeGraphicsWithCaptionPrefix(
         graphicsScene, QStringLiteral("master_1"));
+    const std::optional<QtNodes::NodeId> secondAttachedEndpoint =
+        secondAttachedGraphics
+        ? std::optional<QtNodes::NodeId>(secondAttachedGraphics->nodeId())
+        : std::nullopt;
     const auto secondAttachmentPort = secondAttachedEndpoint
         ? attachmentPortForEndpoint(graphicsScene, *secondAttachedEndpoint) : std::nullopt;
     check(firstAttachmentPort && secondAttachmentPort
@@ -1775,10 +2376,11 @@ int main(int argc, char** argv) {
                 ? originalEndpointDeletionRequested(endpointId) : false;
         };
     }
-    if (graphicsView && graphicsScene && secondAttachedEndpoint) {
+    check(secondAttachedGraphics,
+          QStringLiteral("second attached Endpoint has a projected graphics object"));
+    if (graphicsView && secondAttachedGraphics) {
         const QPoint endpointPosition = graphicsView->mapFromScene(
-            graphicsScene->nodeGraphicsObject(*secondAttachedEndpoint)
-                ->sceneBoundingRect().center());
+            secondAttachedGraphics->sceneBoundingRect().center());
         sendContextMenu(graphicsView, endpointPosition);
         application.processEvents();
     }
@@ -1787,9 +2389,11 @@ int main(int argc, char** argv) {
     QAction* deleteSecondEndpoint = secondEndpointMenu ? secondEndpointMenu->findChild<QAction*>(
         finepaper::workbench::deleteEndpointActionName) : nullptr;
     if (deleteSecondEndpoint) {
+        QPointer<QMenu> menuGuard(secondEndpointMenu);
+        chooseMessageBoxButton(QMessageBox::Yes);
         deleteSecondEndpoint->trigger();
-        if (secondEndpointMenu) {
-            secondEndpointMenu->close();
+        if (menuGuard) {
+            menuGuard->close();
         }
         application.processEvents();
     }
@@ -1801,10 +2405,15 @@ int main(int argc, char** argv) {
 
     const auto currentRouter00AfterSecond = nodeIdWithCaption(
         graphicsScene, QStringLiteral("r-0-0"));
-    if (graphicsView && graphicsScene && currentRouter00AfterSecond) {
+    auto* currentRouter00AfterSecondGraphics =
+        graphicsScene && currentRouter00AfterSecond
+        ? graphicsScene->nodeGraphicsObject(*currentRouter00AfterSecond)
+        : nullptr;
+    check(currentRouter00AfterSecondGraphics,
+          QStringLiteral("Router remains projected after deleting an Endpoint"));
+    if (graphicsView && currentRouter00AfterSecondGraphics) {
         const QPoint routerPosition = graphicsView->mapFromScene(
-            graphicsScene->nodeGraphicsObject(*currentRouter00AfterSecond)
-                ->sceneBoundingRect().center());
+            currentRouter00AfterSecondGraphics->sceneBoundingRect().center());
         sendContextMenu(graphicsView, routerPosition);
         application.processEvents();
     }
@@ -1821,10 +2430,15 @@ int main(int argc, char** argv) {
 
     const auto attachedEndpointForMenu = nodeIdWithCaptionPrefix(
         graphicsScene, QStringLiteral("master_0"));
-    if (graphicsView && graphicsScene && attachedEndpointForMenu) {
+    auto* attachedEndpointForMenuGraphics =
+        graphicsScene && attachedEndpointForMenu
+        ? graphicsScene->nodeGraphicsObject(*attachedEndpointForMenu)
+        : nullptr;
+    check(attachedEndpointForMenuGraphics,
+          QStringLiteral("remaining Endpoint stays projected for its context menu"));
+    if (graphicsView && attachedEndpointForMenuGraphics) {
         const QPoint endpointPosition = graphicsView->mapFromScene(
-            graphicsScene->nodeGraphicsObject(*attachedEndpointForMenu)
-                ->sceneBoundingRect().center());
+            attachedEndpointForMenuGraphics->sceneBoundingRect().center());
         sendContextMenu(graphicsView, endpointPosition);
         application.processEvents();
     }
@@ -1839,9 +2453,11 @@ int main(int argc, char** argv) {
               && deleteEndpoint,
           QStringLiteral("Endpoint right-click menu exposes connect and delete actions"));
     if (deleteEndpoint) {
+        QPointer<QMenu> menuGuard(endpointMenu);
+        chooseMessageBoxButton(QMessageBox::Yes);
         deleteEndpoint->trigger();
-        if (endpointMenu) {
-            endpointMenu->close();
+        if (menuGuard) {
+            menuGuard->close();
         }
         application.processEvents();
     }
@@ -1976,7 +2592,7 @@ int main(int argc, char** argv) {
         graphicsScene->graphModel().addConnection(pendingAttachment);
         staleConnectionWasQueued = graphicsScene->graphModel().connectionExists(
             pendingAttachment);
-        nodeEditor->regularizeLayout();
+        static_cast<void>(nodeEditor->regularizeLayout());
         application.processEvents();
         application.processEvents();
     }
@@ -2169,8 +2785,9 @@ int main(int argc, char** argv) {
     QAction* regularizeAction = window.findChild<QAction*>(
         finepaper::workbench::regularizeActionName);
     check(regularizeAction != nullptr,
-          QStringLiteral("toolbar exposes a topology regularization action"));
+          QStringLiteral("Design menu exposes a topology regularization action"));
     if (regularizeAction) {
+        chooseMessageBoxButton(QMessageBox::Yes);
         regularizeAction->trigger();
         application.processEvents();
     }
@@ -2214,6 +2831,13 @@ int main(int argc, char** argv) {
               && !graphicsScene->nodeGraphicsObject(*regularizedEndpoint)->isSelected(),
           QStringLiteral("selection changes only when another node or the canvas is clicked"));
 
+    // The interaction sequence above deliberately moves and stacks several
+    // nodes. Re-establish visible blank canvas before testing the blank-area
+    // context menu, especially at the compact 1280x720 matrix size.
+    if (nodeEditor) {
+        nodeEditor->zoomToFit();
+        application.processEvents();
+    }
     const QPoint canvasMenuPosition = blankViewportPosition(graphicsView);
     if (graphicsView) {
         sendContextMenu(graphicsView, canvasMenuPosition);
@@ -2321,7 +2945,7 @@ int main(int argc, char** argv) {
               QtNodes::NodeRole::Caption).toString().section(
                   QLatin1Char('\n'), 0, 0)
         : QString();
-    std::optional<QPoint> attachmentLinePoint;
+    std::optional<QPoint> attachmentLinePoint = std::nullopt;
     if (graphicsView && graphicsScene && bodyAttachmentConnection) {
         auto* connection = graphicsScene->connectionGraphicsObject(
             *bodyAttachmentConnection);
@@ -2497,9 +3121,11 @@ int main(int argc, char** argv) {
     QAction* deleteDetachedEndpoint = detachedEndpointMenu ? detachedEndpointMenu->findChild<QAction*>(
         finepaper::workbench::deleteEndpointActionName) : nullptr;
     if (deleteDetachedEndpoint) {
+        QPointer<QMenu> menuGuard(detachedEndpointMenu);
+        chooseMessageBoxButton(QMessageBox::Yes);
         deleteDetachedEndpoint->trigger();
-        if (detachedEndpointMenu) {
-            detachedEndpointMenu->close();
+        if (menuGuard) {
+            menuGuard->close();
         }
         application.processEvents();
     }
@@ -2525,11 +3151,12 @@ int main(int argc, char** argv) {
         application.processEvents();
     }
     if (endpointPalette && endpointPalette->count() > 0) {
-        endpointPalette->itemDoubleClicked(endpointPalette->item(0));
+        endpointPalette->itemActivated(endpointPalette->item(0));
         application.processEvents();
     }
     check(nodeIdWithCaptionPrefix(graphicsScene, QStringLiteral("master")).has_value(),
-          QStringLiteral("selected-Router double-click remains available as an attach shortcut"));
+          QStringLiteral(
+              "selected-Router keyboard/item activation remains available as an attach shortcut"));
     check(endpointAttachedToRouter(graphicsScene, QStringLiteral("r-0-0")).has_value(),
           QStringLiteral("selected-Router shortcut attaches specifically to that Router"));
 
@@ -2610,8 +3237,8 @@ int main(int argc, char** argv) {
               && observedSemanticSelection.elements().size() == 2,
           QStringLiteral("Router and Endpoint multi-selection is reported as stable semantic references"));
 
-    std::optional<QtNodes::ConnectionId> semanticRouterLink;
-    std::optional<QtNodes::ConnectionId> semanticAttachment;
+    std::optional<QtNodes::ConnectionId> semanticRouterLink = std::nullopt;
+    std::optional<QtNodes::ConnectionId> semanticAttachment = std::nullopt;
     if (graphicsScene) {
         for (const QtNodes::ConnectionId& connection
              : sceneConnectionIds(graphicsScene)) {
@@ -2671,6 +3298,9 @@ int main(int argc, char** argv) {
     finepaper::FinepaperMainWindow restoredWindow(locations);
     restoredWindow.show();
     application.processEvents();
+    check(!maximizeWindow || restoredWindow.isMaximized(),
+          QStringLiteral(
+              "maximized state survives saveGeometry/restoreGeometry across workbench sessions"));
     auto* restoredPackageDock = restoredWindow.findChild<QDockWidget*>(
         finepaper::workbench::packageDockName);
     check(restoredPackageDock && !restoredPackageDock->isVisible(),
@@ -2731,14 +3361,16 @@ int main(int argc, char** argv) {
     QAction* repairWorkspaceAction = positionWindow.findChild<QAction*>(
         finepaper::workbench::regularizeActionName);
     if (repairWorkspaceAction) {
+        chooseMessageBoxButton(QMessageBox::Yes);
         repairWorkspaceAction->trigger();
         application.processEvents();
     }
     const finepaper::TopologyWorkspaceLoadResult repairedWorkspace =
         topologyWorkspaceWriter.load(topologyWorkspaceIdentity);
+    const QString repairStatus = positionWindow.statusBar()->currentMessage();
     check(repairWorkspaceAction && repairedWorkspace.ok()
               && repairedWorkspace.state
-              && positionWindow.statusBar()->currentMessage().contains(
+              && repairStatus.contains(
                   QStringLiteral("repaired"), Qt::CaseInsensitive),
           QStringLiteral(
               "Regularize Layout explicitly repairs damaged workspace storage"));
@@ -2813,6 +3445,16 @@ int main(int argc, char** argv) {
                   QStringLiteral("could not be saved"), Qt::CaseInsensitive),
           QStringLiteral(
               "repeated Workspace save failures produce one persistent UI diagnostic"));
+    if (settingsBlocked && repairWorkspaceAction) {
+        chooseMessageBoxButton(QMessageBox::Yes);
+        repairWorkspaceAction->trigger();
+        application.processEvents();
+    }
+    check(settingsBlocked
+              && positionWindow.statusBar()->currentMessage().contains(
+                  QStringLiteral("could not be saved"), Qt::CaseInsensitive),
+          QStringLiteral(
+              "Regularize Layout preserves the persistent save failure instead of reporting success"));
     const bool settingsBlockRemoved = settingsBlocked
         && QDir().rmdir(settingsFile);
     const bool settingsRestored = settingsBlockRemoved
@@ -2956,7 +3598,7 @@ int main(int argc, char** argv) {
     };
     const bool staleDeletionWasQueued = sessionScene && sessionAttachment
         && sessionScene->graphModel().deleteConnection(*sessionAttachment);
-    sessionEditor.regularizeLayout();
+    static_cast<void>(sessionEditor.regularizeLayout());
     const auto sessionEndpointAfterProjectionRebuild = nodeIdWithCaptionPrefix(
         sessionScene, QStringLiteral("session_endpoint"));
     const auto sessionAttachmentAfterProjectionRebuild =
@@ -3111,6 +3753,70 @@ int main(int argc, char** argv) {
               "QtNodes preflight enforces Package capacity and policy invariants"));
     capacityProjectionEditor.close();
 
+    finepaper::NocDesign largePortDesign;
+    largePortDesign.id = QStringLiteral("large-port-projection");
+    largePortDesign.topology = {QStringLiteral("mesh"), 1, 1};
+    finepaper::AttachmentDefinition largePortAttachment;
+    largePortAttachment.maxPerRouter =
+        finepaper::kMaximumEndpointAttachmentsPerRouter;
+    largePortAttachment.slotMode = finepaper::AttachmentSlotMode::Automatic;
+    finepaper::NocNodeEditor largePortEditor;
+    largePortEditor.beginDocumentSession(
+        QStringLiteral("large-port-projection-session"));
+    largePortEditor.setDesign(
+        &largePortDesign,
+        finepaper::attachment::policyFromPackage(largePortAttachment));
+    largePortEditor.show();
+    largePortEditor.setRouterCollapsed(QStringLiteral("r-0-0"), false);
+    application.processEvents();
+    auto* largePortView = largePortEditor.findChild<QGraphicsView*>();
+    auto* largePortScene = largePortView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(largePortView->scene())
+        : nullptr;
+    const auto largePortRouter = nodeIdWithCaption(
+        largePortScene, QStringLiteral("r-0-0"));
+    const QSize largeRouterSize = largePortScene && largePortRouter
+        ? largePortScene->nodeGeometry().size(*largePortRouter) : QSize{};
+    const unsigned int logicalInputPortCount =
+        largePortScene && largePortRouter
+        ? largePortScene->graphModel().nodeData<unsigned int>(
+              *largePortRouter, QtNodes::NodeRole::InPortCount)
+        : 0U;
+    const QPointF firstOverflowPosition = largePortScene && largePortRouter
+        ? largePortScene->nodeGeometry().portPosition(
+              *largePortRouter,
+              QtNodes::PortType::In,
+              finepaper::portIndex(finepaper::RouterInputPort::Endpoint) + 7U)
+        : QPointF{};
+    const QPointF lastLogicalPortPosition = largePortScene && largePortRouter
+        ? largePortScene->nodeGeometry().portPosition(
+              *largePortRouter,
+              QtNodes::PortType::In,
+              finepaper::portIndex(finepaper::RouterInputPort::Endpoint)
+                  + static_cast<unsigned int>(
+                      finepaper::kMaximumEndpointAttachmentsPerRouter - 1))
+        : QPointF{};
+    const finepaper::attachment::SlotResolution largePortAvailability =
+        largePortEditor.endpointAttachmentAvailability(
+            finepaper::RouterPosition{0, 0});
+    const QPixmap largePortRendering = largePortEditor.grab();
+    check(largePortRouter
+              && logicalInputPortCount
+                  == static_cast<unsigned int>(
+                         finepaper::kMaximumEndpointAttachmentsPerRouter)
+                      + finepaper::portIndex(
+                          finepaper::RouterInputPort::Endpoint)
+              && largeRouterSize.width() <= 400
+              && largeRouterSize.height() <= 400
+              && QLineF(firstOverflowPosition, lastLogicalPortPosition).length()
+                  < 0.1
+              && largePortAvailability.kind
+                  != finepaper::attachment::SlotResolutionKind::Rejected
+              && !largePortRendering.isNull(),
+          QStringLiteral(
+              "large legal attachment policies retain all logical slots while bounding Router geometry and aggregating overflow ports"));
+    largePortEditor.close();
+
     finepaper::NocDesign readOnlyRaceDesign;
     readOnlyRaceDesign.id = QStringLiteral("disconnect-read-only-race");
     readOnlyRaceDesign.topology = {QStringLiteral("mesh"), 1, 1};
@@ -3207,7 +3913,7 @@ int main(int argc, char** argv) {
     }
     chooseAttachmentSlot(1);
     if (explicitPalette && explicitPalette->count() > 0) {
-        explicitPalette->itemDoubleClicked(explicitPalette->item(0));
+        explicitPalette->itemActivated(explicitPalette->item(0));
         application.processEvents();
     }
     const auto explicitEndpoint = nodeIdWithCaptionPrefix(
@@ -3960,9 +4666,15 @@ int main(int argc, char** argv) {
                   == finepaper::DomainAssignmentDisplayState::Assigned
               && domainRouterGraphics->data(
                      finepaper::domainColorsDataRole).toList().size() == 1
+              && domainRouterGraphics->data(
+                     finepaper::domainPatternBrushesDataRole).toList().size()
+                  == 1
               && domainLinkGraphics
               && domainLinkGraphics->data(
-                     finepaper::domainCrossingDataRole).toBool(),
+                     finepaper::domainCrossingDataRole).toBool()
+              && domainLinkGraphics->data(
+                     finepaper::domainCrossingPaintColorDataRole)
+                     .value<QColor>().isValid(),
           QStringLiteral("nodes and derived Mesh crossings receive generic Domain presentation roles"));
 
     if (domainScene && domainLinkGraphics) {
@@ -4126,7 +4838,7 @@ int main(int argc, char** argv) {
         domainCompleteConfiguration->click();
         waitUntil([&submittedCompleteConfiguration] {
             return submittedCompleteConfiguration;
-        }, 4000);
+        }, std::chrono::seconds(4));
         application.processEvents();
     }
 
@@ -4314,7 +5026,7 @@ int main(int argc, char** argv) {
         endpointCreationAutoAccepter.setEnabled(false);
         chooseMessageBoxButton(QMessageBox::Discard);
         rejectEndpointCreationDialog();
-        domainEndpointPalette->itemDoubleClicked(
+        domainEndpointPalette->itemActivated(
             domainEndpointPalette->item(0));
         application.processEvents();
         endpointCreationAutoAccepter.setEnabled(true);
@@ -4722,6 +5434,121 @@ int main(int argc, char** argv) {
               QStringLiteral("Read-only design:")),
           QStringLiteral("missing-Package design reports a clear read-only status"));
     closeDiscarding(missingWindow);
+
+    // Keep quick-add's deliberate create/delete projection rebuilds isolated
+    // from the long-lived canvas interaction fixture above. QtNodes NodeIds are
+    // transient across those rebuilds by design.
+    finepaper::FinepaperMainWindow quickAddWindow(locations);
+    quickAddWindow.show();
+    application.processEvents();
+    createDesignThroughDialog(
+        quickAddWindow,
+        QStringLiteral("finepaper.noc@1.0.0"),
+        QStringLiteral("quick_add_regression"));
+    auto* quickPalette = quickAddWindow.findChild<QListWidget*>(
+        QStringLiteral("finepaper.endpointPalette"));
+    auto* quickFilter = quickAddWindow.findChild<QLineEdit*>(
+        QStringLiteral("finepaper.endpointPaletteFilter"));
+    auto* quickAddButton = quickAddWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.addEndpointToRouter"));
+    auto* quickEditor = dynamic_cast<finepaper::NocNodeEditor*>(
+        quickAddWindow.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor")));
+    auto* quickView = quickEditor
+        ? quickEditor->findChild<QGraphicsView*>() : nullptr;
+    auto* quickAnimatedView = dynamic_cast<finepaper::AnimatedGraphicsView*>(
+        quickView);
+    auto* quickScene = quickView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(quickView->scene()) : nullptr;
+    if (quickEditor) {
+        quickEditor->setRouterCollapsed(QStringLiteral("r-0-0"), false);
+    }
+    const auto quickRouter = nodeIdWithCaption(
+        quickScene, QStringLiteral("r-0-0"));
+    if (quickScene && quickRouter) {
+        quickScene->clearSelection();
+        quickScene->nodeGraphicsObject(*quickRouter)->setSelected(true);
+        quickScene->nodeSelected(*quickRouter);
+        application.processEvents();
+    }
+    if (quickFilter) {
+        quickFilter->setText(QStringLiteral("slave"));
+        application.processEvents();
+    }
+    check(quickFilter && quickPalette && quickPalette->count() == 2
+              && quickPalette->item(0)->isHidden()
+              && !quickPalette->item(1)->isHidden(),
+          QStringLiteral(
+              "Endpoint filtering matches runtime labels without rebuilding the Palette"));
+    if (quickFilter) {
+        quickFilter->clear();
+    }
+    if (quickPalette && quickPalette->count() > 0) {
+        quickPalette->setCurrentRow(0);
+    }
+    application.processEvents();
+    const std::size_t nodesBeforeQuickAdd = quickScene
+        ? quickScene->graphModel().allNodeIds().size() : 0;
+    check(quickAddButton && quickAddButton->isEnabled(),
+          QStringLiteral(
+              "selecting a Router and Endpoint type enables keyboard-friendly quick-add"));
+    QAction* quickValidate = actionWithText(
+        quickAddWindow, QStringLiteral("Validate / DRC"));
+    bool quickBusyObserved = false;
+    if (quickValidate && quickAddButton && quickAddButton->isEnabled()) {
+        quickValidate->trigger();
+        quickBusyObserved = quickAddWindow.operationBusy();
+        waitUntil([&quickAddWindow] {
+            return !quickAddWindow.operationBusy();
+        });
+        application.processEvents();
+    }
+    check(quickValidate && quickBusyObserved
+              && quickAddButton && quickAddButton->isEnabled(),
+          QStringLiteral(
+              "quick-add returns to its enabled state after an asynchronous operation"));
+    if (quickAddButton) {
+        quickAddButton->click();
+        application.processEvents();
+    }
+    waitUntil([quickScene] {
+        auto* graphics = nodeGraphicsWithCaptionPrefix(
+            quickScene, QStringLiteral("master_0"));
+        return graphics && graphics->isSelected()
+            && endpointAttachedToRouter(
+                   quickScene, QStringLiteral("r-0-0"))
+                   == std::optional<QtNodes::NodeId>(graphics->nodeId());
+    }, std::chrono::seconds(2));
+    auto* quickAddedGraphics = nodeGraphicsWithCaptionPrefix(
+        quickScene, QStringLiteral("master_0"));
+    const std::optional<QtNodes::NodeId> quickAddedEndpoint =
+        quickAddedGraphics
+        ? std::optional<QtNodes::NodeId>(quickAddedGraphics->nodeId())
+        : std::nullopt;
+    check(quickAddedEndpoint && quickScene
+              && quickScene->graphModel().allNodeIds().size()
+                     == nodesBeforeQuickAdd + 1
+              && endpointAttachedToRouter(
+                     quickScene, QStringLiteral("r-0-0"))
+                     == quickAddedEndpoint
+              && quickAddedGraphics && quickAddedGraphics->isSelected(),
+          QStringLiteral(
+              "Add to selected Router creates, attaches, and selects the Palette choice"));
+    if (quickAnimatedView && quickAddedGraphics
+        && quickAddedGraphics->isSelected()) {
+        chooseMessageBoxButton(QMessageBox::Yes);
+        quickAnimatedView->deleteSelectionAction()->trigger();
+        application.processEvents();
+    }
+    const std::size_t nodesAfterQuickDelete = quickScene
+        ? quickScene->graphModel().allNodeIds().size() : 0;
+    check(quickAnimatedView && quickScene && quickEditor
+              && nodesAfterQuickDelete == nodesBeforeQuickAdd
+              && !nodeGraphicsWithCaptionPrefix(
+                  quickScene, QStringLiteral("master_0"))
+              && quickEditor->detachedEndpointDraftIds().isEmpty(),
+          QStringLiteral(
+              "the canvas Delete shortcut permanently removes the selected Endpoint instead of detaching it"));
+    closeDiscarding(quickAddWindow);
 
     QTextStream(stdout) << (failures == 0 ? "finepaper-gui-smoke passed"
                                           : "finepaper-gui-smoke failed")

@@ -1,10 +1,13 @@
 #include "features/domain/domain_manager_panel.h"
 
 #include "features/domain/domain_instance_dialog.h"
+#include "ui/theme/ui_tokens.h"
 
 #include <QAbstractItemView>
+#include <QBrush>
 #include <QComboBox>
 #include <QDialog>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -61,9 +64,13 @@ QString domainDisplayName(const DomainDefinition& domain) {
 DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     : QWidget(parent) {
     setObjectName(QStringLiteral("finepaper.domainManager"));
+    setAccessibleName(QStringLiteral("Domain Manager"));
+    setFocusPolicy(Qt::StrongFocus);
 
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
+    root->setContentsMargins(
+        ui::UiMetrics::spacing8, ui::UiMetrics::spacing8,
+        ui::UiMetrics::spacing8, ui::UiMetrics::spacing8);
 
     m_status = new QLabel(QStringLiteral("Open a Package V2 design to edit Domains."));
     m_status->setObjectName(QStringLiteral("finepaper.domainManager.status"));
@@ -74,18 +81,26 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
         QStringLiteral("Open Domain Configuration workspace"));
     m_completeConfiguration->setObjectName(
         QStringLiteral("finepaper.domainManager.completeConfiguration"));
+    m_completeConfiguration->setProperty(
+        "finepaperRole", QStringLiteral("quiet"));
     root->addWidget(m_completeConfiguration);
 
-    auto* typeRow = new QHBoxLayout;
-    typeRow->addWidget(new QLabel(QStringLiteral("Domain type")));
+    auto* typeRow = new QGridLayout;
+    auto* typeLabel = new QLabel(QStringLiteral("Domain type"));
+    typeRow->addWidget(typeLabel, 0, 0);
     m_typeSelector = new QComboBox;
     m_typeSelector->setObjectName(
         QStringLiteral("finepaper.domainManager.typeSelector"));
-    typeRow->addWidget(m_typeSelector, 1);
+    m_typeSelector->setAccessibleName(QStringLiteral("Domain type"));
+    typeLabel->setBuddy(m_typeSelector);
+    typeRow->addWidget(m_typeSelector, 0, 1);
     m_showOnCanvas = new QPushButton(QStringLiteral("Show on canvas"));
     m_showOnCanvas->setObjectName(
         QStringLiteral("finepaper.domainManager.showOnCanvas"));
-    typeRow->addWidget(m_showOnCanvas);
+    m_showOnCanvas->setProperty(
+        "finepaperRole", QStringLiteral("primary"));
+    typeRow->addWidget(m_showOnCanvas, 1, 0, 1, 2);
+    typeRow->setColumnStretch(1, 1);
     root->addLayout(typeRow);
 
     m_tabs = new QTabWidget;
@@ -93,13 +108,15 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
 
     auto* instancesPage = new QWidget;
     auto* instancesLayout = new QVBoxLayout(instancesPage);
-    instancesLayout->setContentsMargins(0, 6, 0, 0);
+    instancesLayout->setContentsMargins(
+        0, ui::UiMetrics::spacing8, 0, 0);
     m_instances = new QTableWidget;
     m_instances->setObjectName(
         QStringLiteral("finepaper.domainManager.instanceView"));
+    m_instances->setAccessibleName(QStringLiteral("Domain instances and legend"));
     m_instances->setColumnCount(5);
     m_instances->setHorizontalHeaderLabels({
-        QStringLiteral("Color"), QStringLiteral("Name"), QStringLiteral("ID"),
+        QStringLiteral("Marker"), QStringLiteral("Name"), QStringLiteral("ID"),
         QStringLiteral("Members"), QStringLiteral("Crossings")});
     m_instances->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_instances->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -108,7 +125,7 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     m_instances->verticalHeader()->hide();
     m_instances->horizontalHeader()->setStretchLastSection(true);
     instancesLayout->addWidget(m_instances, 1);
-    auto* instanceButtons = new QHBoxLayout;
+    auto* instanceButtons = new QGridLayout;
     m_addDomain = new QPushButton(QStringLiteral("Add…"));
     m_addDomain->setObjectName(
         QStringLiteral("finepaper.domainManager.addDomain"));
@@ -118,22 +135,27 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     m_removeDomain = new QPushButton(QStringLiteral("Delete…"));
     m_removeDomain->setObjectName(
         QStringLiteral("finepaper.domainManager.deleteDomain"));
+    m_removeDomain->setProperty(
+        "finepaperRole", QStringLiteral("danger"));
     m_selectDomainMembers = new QPushButton(QStringLiteral("Select members"));
     m_selectDomainMembers->setObjectName(
         QStringLiteral("finepaper.domainManager.selectMembers"));
     m_selectDomainMembers->setToolTip(
         QStringLiteral("Select every Router or Endpoint assigned to this Domain instance."));
-    instanceButtons->addWidget(m_addDomain);
-    instanceButtons->addWidget(m_editDomain);
-    instanceButtons->addWidget(m_removeDomain);
-    instanceButtons->addStretch();
-    instanceButtons->addWidget(m_selectDomainMembers);
+    instanceButtons->addWidget(m_addDomain, 0, 0);
+    instanceButtons->addWidget(m_editDomain, 0, 1);
+    instanceButtons->addWidget(m_removeDomain, 0, 2);
+    instanceButtons->addWidget(m_selectDomainMembers, 1, 0, 1, 3);
+    instanceButtons->setColumnStretch(0, 1);
+    instanceButtons->setColumnStretch(1, 1);
+    instanceButtons->setColumnStretch(2, 1);
     instancesLayout->addLayout(instanceButtons);
     m_tabs->addTab(instancesPage, QStringLiteral("Instances / Legend"));
 
     auto* assignmentPage = new QWidget;
     auto* assignmentLayout = new QVBoxLayout(assignmentPage);
-    assignmentLayout->setContentsMargins(0, 6, 0, 0);
+    assignmentLayout->setContentsMargins(
+        0, ui::UiMetrics::spacing8, 0, 0);
     auto* selectionButtons = new QHBoxLayout;
     m_selectAllEligible = new QPushButton(QStringLiteral("Select all eligible"));
     m_selectAllEligible->setObjectName(
@@ -161,22 +183,28 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     m_multipleAssignment = new QListWidget;
     m_multipleAssignment->setObjectName(
         QStringLiteral("finepaper.domainManager.assignmentEditor.multiple"));
+    m_multipleAssignment->setAccessibleName(
+        QStringLiteral("Domain assignments for the current selection"));
     m_multipleAssignment->setAlternatingRowColors(true);
     assignmentLayout->addWidget(m_multipleAssignment, 1);
-    auto* assignmentButtons = new QHBoxLayout;
+    auto* assignmentButtons = new QGridLayout;
     m_applyAssignment = new QPushButton(QStringLiteral("Apply changes"));
     m_applyAssignment->setObjectName(
         QStringLiteral("finepaper.domainManager.applyAssignment"));
+    m_applyAssignment->setProperty(
+        "finepaperRole", QStringLiteral("primary"));
     m_clearAssignment = new QPushButton(QStringLiteral("Clear assignment"));
     m_clearAssignment->setObjectName(
         QStringLiteral("finepaper.domainManager.clearAssignment"));
     m_discardAssignment = new QPushButton(QStringLiteral("Discard changes"));
     m_discardAssignment->setObjectName(
         QStringLiteral("finepaper.domainManager.discardAssignment"));
-    assignmentButtons->addWidget(m_applyAssignment);
-    assignmentButtons->addWidget(m_clearAssignment);
-    assignmentButtons->addWidget(m_discardAssignment);
-    assignmentButtons->addStretch();
+    m_discardAssignment->setProperty(
+        "finepaperRole", QStringLiteral("quiet"));
+    assignmentButtons->addWidget(m_applyAssignment, 0, 0, 1, 2);
+    assignmentButtons->addWidget(m_clearAssignment, 1, 0);
+    assignmentButtons->addWidget(m_discardAssignment, 1, 1);
+    assignmentButtons->setColumnStretch(1, 1);
     assignmentLayout->addLayout(assignmentButtons);
     m_tabs->addTab(assignmentPage, QStringLiteral("Assign selection"));
 
@@ -415,9 +443,22 @@ void DomainManagerPanel::refreshInstances() {
                 domainPresentationColor(domain.type, domain.id),
                 0,
                 0});
-        auto* colorItem = new QTableWidgetItem(QStringLiteral(" "));
-        colorItem->setBackground(legend.color);
+        auto* colorItem = new QTableWidgetItem;
+        colorItem->setBackground(QBrush(
+            legend.color, domainPresentationPattern(domain.id)));
         colorItem->setData(domainManagerColorRole, legend.color);
+        colorItem->setData(
+            Qt::AccessibleTextRole,
+            QStringLiteral("%1 marker for Domain %2")
+                .arg(domainPresentationPatternLabel(domain.id),
+                     domainDisplayName(domain)));
+        const QString markerTooltip =
+            QStringLiteral("%1 marker for %2 (%3)")
+                .arg(domainPresentationPatternLabel(domain.id),
+                     domainDisplayName(domain), domain.id);
+        colorItem->setToolTip(
+            QStringLiteral("<qt>%1</qt>")
+                .arg(markerTooltip.toHtmlEscaped()));
         auto* nameItem = new QTableWidgetItem(domainDisplayName(domain));
         auto* idItem = new QTableWidgetItem(domain.id);
         auto* membersItem = new QTableWidgetItem(QString::number(legend.memberCount));
@@ -690,7 +731,15 @@ void DomainManagerPanel::removeDomain() {
         this);
     confirmation.setObjectName(
         QStringLiteral("finepaper.domainManager.deleteConfirmation"));
+    confirmation.setTextFormat(Qt::PlainText);
     confirmation.setDefaultButton(QMessageBox::Cancel);
+    confirmation.setEscapeButton(QMessageBox::Cancel);
+    if (QPushButton* deleteButton = qobject_cast<QPushButton*>(
+            confirmation.button(QMessageBox::Yes))) {
+        deleteButton->setText(QStringLiteral("Delete Domain"));
+        deleteButton->setProperty(
+            "finepaperRole", QStringLiteral("danger"));
+    }
     if (confirmation.exec() == QMessageBox::Yes) {
         removeDomainRequested(domain->id);
     }
