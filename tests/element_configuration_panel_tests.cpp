@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMetaObject>
+#include <QPointer>
 #include <QPushButton>
 #include <QTextStream>
 
@@ -129,6 +130,17 @@ QLineEdit* pipelineEditor(ElementConfigurationPanel& panel) {
         QStringLiteral("finepaper.schemaValue.pipeline.scalar.text"));
 }
 
+ElementConfigurationContextStamp contextStamp(
+    const QString& designIdentity = {},
+    quint64 designRevision = 1,
+    quint64 packageCatalogRevision = 1) {
+    return {
+        .designIdentity = designIdentity,
+        .designRevision = designRevision,
+        .packageCatalogRevision = packageCatalogRevision,
+    };
+}
+
 void editPipeline(ElementConfigurationPanel& panel, const QString& text) {
     QLineEdit* editor = pipelineEditor(panel);
     check(editor != nullptr,
@@ -159,7 +171,7 @@ void draftsSurviveContextChangesAndFailClosedOnConflicts() {
     ElementConfigurationPanel panel;
     panel.resize(520, 520);
     panel.show();
-    panel.setContext(&design, &package, router, false, sessionA);
+    panel.setContext(&design, &package, router, contextStamp(sessionA));
     QApplication::processEvents();
 
     editPipeline(panel, QStringLiteral("6"));
@@ -171,13 +183,13 @@ void draftsSurviveContextChangesAndFailClosedOnConflicts() {
           QStringLiteral(
               "a valid Element edit creates a session-scoped Router draft"));
 
-    panel.setContext(&design, &package, link, false, sessionA);
+    panel.setContext(&design, &package, link, contextStamp(sessionA));
     QApplication::processEvents();
     check(pipelineEditor(panel)
               && pipelineEditor(panel)->text() == QStringLiteral("2"),
           QStringLiteral(
               "switching selection shows the selected Link's authoritative value"));
-    panel.setContext(&design, &package, router, false, sessionA);
+    panel.setContext(&design, &package, router, contextStamp(sessionA));
     QApplication::processEvents();
     apply = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.elementConfiguration.apply"));
@@ -194,8 +206,8 @@ void draftsSurviveContextChangesAndFailClosedOnConflicts() {
               && panel.hasUnappliedDraft(sessionA, router),
           QStringLiteral(
               "an invalid numeric token remains an explicit non-applicable draft"));
-    panel.setContext(&design, &package, link, false, sessionA);
-    panel.setContext(&design, &package, router, false, sessionA);
+    panel.setContext(&design, &package, link, contextStamp(sessionA));
+    panel.setContext(&design, &package, router, contextStamp(sessionA));
     QApplication::processEvents();
     auto* draftStatus = panel.findChild<QLabel*>(
         QStringLiteral("finepaper.elementConfiguration.draftStatus"));
@@ -207,7 +219,7 @@ void draftsSurviveContextChangesAndFailClosedOnConflicts() {
           QStringLiteral(
               "selection changes restore an invalid Element token verbatim"));
 
-    panel.setContext(&design, &package, router, false, sessionB);
+    panel.setContext(&design, &package, router, contextStamp(sessionB));
     QApplication::processEvents();
     check(pipelineEditor(panel)
               && pipelineEditor(panel)->text() == QStringLiteral("4")
@@ -215,7 +227,7 @@ void draftsSurviveContextChangesAndFailClosedOnConflicts() {
               && panel.hasUnappliedDraft(sessionA, router),
           QStringLiteral(
               "a different document session cannot observe the previous session's Element draft"));
-    panel.setContext(&design, &package, router, false, sessionA);
+    panel.setContext(&design, &package, router, contextStamp(sessionA));
     QApplication::processEvents();
     check(pipelineEditor(panel)
               && pipelineEditor(panel)->text() == QStringLiteral("1e"),
@@ -225,7 +237,8 @@ void draftsSurviveContextChangesAndFailClosedOnConflicts() {
     NocDesign changedDesign = design;
     changedDesign.elementConfigurations.front().properties.insert(
         QStringLiteral("pipeline"), 5);
-    panel.setContext(&changedDesign, &package, router, false, sessionA);
+    panel.setContext(
+        &changedDesign, &package, router, contextStamp(sessionA));
     QApplication::processEvents();
     apply = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.elementConfiguration.apply"));
@@ -269,7 +282,7 @@ void draftsSurviveContextChangesAndFailClosedOnConflicts() {
     PackageDefinition changedPackage = package;
     changedPackage.elementPropertySets.front().properties.front().maximum = 5;
     panel.setContext(
-        &changedDesign, &changedPackage, router, false, sessionA);
+        &changedDesign, &changedPackage, router, contextStamp(sessionA));
     QApplication::processEvents();
     apply = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.elementConfiguration.apply"));
@@ -295,6 +308,134 @@ void draftsSurviveContextChangesAndFailClosedOnConflicts() {
               && pipelineEditor(panel)->text() == QStringLiteral("5"),
           QStringLiteral(
               "discarding a schema-conflicted Element draft accepts the new schema and durable value"));
+}
+
+void identicalContextPreservesEditorAndRevisionsForceRefresh() {
+    const PackageDefinition package = packageFixture();
+    const NocDesign design = designFixture();
+    const ElementRef router{
+        ElementKind::Router, QStringLiteral("r-0-0")};
+    const QString session = QStringLiteral("element-stable-context");
+
+    ElementConfigurationPanel panel;
+    panel.resize(520, 520);
+    panel.show();
+    for (int iteration = 0; iteration < 100; ++iteration) {
+        panel.setContext(
+            &design, &package, router, contextStamp(session, 11, 7));
+    }
+    QApplication::processEvents();
+
+    QLineEdit* initialEditor = pipelineEditor(panel);
+    check(initialEditor != nullptr,
+          QStringLiteral("revision fixture exposes the pipeline editor"));
+    if (!initialEditor) {
+        return;
+    }
+    panel.activateWindow();
+    QApplication::processEvents();
+    initialEditor->setFocus(Qt::OtherFocusReason);
+    editPipeline(panel, QStringLiteral("1e"));
+    initialEditor->setCursorPosition(1);
+    QApplication::processEvents();
+    check(initialEditor->hasFocus(),
+          QStringLiteral("revision fixture can focus the active editor"));
+
+    panel.setContext(
+        &design, &package, router, contextStamp(session, 11, 7));
+    QApplication::processEvents();
+    check(pipelineEditor(panel) == initialEditor
+              && initialEditor->text() == QStringLiteral("1e")
+              && initialEditor->cursorPosition() == 1
+              && initialEditor->hasFocus(),
+          QStringLiteral(
+              "an identical borrowed context preserves editor identity, focus, cursor and raw draft"));
+
+    QPointer<QLineEdit> designRevisionEditor(initialEditor);
+    panel.setContext(
+        &design, &package, router, contextStamp(session, 12, 7));
+    QApplication::processEvents();
+    QLineEdit* refreshedEditor = pipelineEditor(panel);
+    check(designRevisionEditor.isNull()
+              && refreshedEditor
+              && refreshedEditor->text() == QStringLiteral("1e"),
+          QStringLiteral(
+              "a design revision rebuilds the editor while restoring its protected draft"));
+
+    QPointer<QLineEdit> catalogRevisionEditor(refreshedEditor);
+    panel.setContext(
+        &design, &package, router, contextStamp(session, 12, 8));
+    QApplication::processEvents();
+    check(catalogRevisionEditor.isNull()
+              && pipelineEditor(panel)
+              && pipelineEditor(panel)->text() == QStringLiteral("1e"),
+          QStringLiteral(
+              "a Package catalog revision also forces a schema refresh without losing the draft"));
+
+    const ElementRef link{
+        ElementKind::RouterLink, QStringLiteral("r-0-0--r-1-0")};
+    for (int iteration = 0; iteration < 100; ++iteration) {
+        panel.setContext(
+            &design, &package, link, contextStamp(session, 12, 8));
+        panel.setContext(
+            &design, &package, router, contextStamp(session, 12, 8));
+    }
+    QApplication::processEvents();
+    check(pipelineEditor(panel)
+              && pipelineEditor(panel)->text() == QStringLiteral("1e")
+              && panel.findChildren<QLineEdit*>().size() == 1,
+          QStringLiteral(
+              "repeated Router and Link selection rebuilds keep one editor and restore the raw draft"));
+}
+
+void resolutionErrorsSurviveBusyTransitions() {
+    const PackageDefinition package = packageFixture();
+    NocDesign design = designFixture();
+    design.elementConfigurations.front().properties.insert(
+        QStringLiteral("unknown-property"), 1);
+    const ElementRef router{
+        ElementKind::Router, QStringLiteral("r-0-0")};
+
+    ElementConfigurationPanel panel;
+    panel.resize(520, 520);
+    panel.show();
+    panel.setContext(
+        &design,
+        &package,
+        router,
+        contextStamp(QStringLiteral("element-resolution-failure")));
+    QApplication::processEvents();
+
+    auto* status = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.elementConfiguration.status"));
+    auto* form = panel.findChild<QWidget*>(
+        QStringLiteral("finepaper.elementConfiguration.form"));
+    auto* apply = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    auto* reset = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.reset"));
+    check(status && status->isVisible()
+              && status->text().contains(
+                  QStringLiteral("could not be resolved"))
+              && form && !form->isEnabled()
+              && !pipelineEditor(panel)
+              && apply && !apply->isEnabled()
+              && reset && !reset->isEnabled(),
+          QStringLiteral(
+              "an invalid stored Element configuration fails closed with an explicit diagnostic"));
+
+    panel.setBusy(true);
+    panel.setBusy(false);
+    QApplication::processEvents();
+    check(status && status->isVisible()
+              && status->text().contains(
+                  QStringLiteral("could not be resolved"))
+              && form && !form->isEnabled()
+              && !pipelineEditor(panel)
+              && apply && !apply->isEnabled()
+              && reset && !reset->isEnabled(),
+          QStringLiteral(
+              "the resolution diagnostic and read-only editor survive a busy-to-idle transition"));
 }
 
 } // namespace
@@ -359,7 +500,7 @@ int main(int argc, char** argv) {
     ElementConfigurationPanel panel;
     panel.resize(520, 520);
     panel.show();
-    panel.setContext(&design, &package, router);
+    panel.setContext(&design, &package, router, contextStamp());
     QApplication::processEvents();
 
     auto* selector = panel.findChild<QComboBox*>(
@@ -384,8 +525,13 @@ int main(int argc, char** argv) {
               && selector->currentData().toString()
                   == QStringLiteral("vendor.router-implementation")
               && pipeline->text() == QStringLiteral("4")
-              && overrideState->text().contains(QStringLiteral("1 overridden")),
+              && overrideState->text().contains(
+                  QStringLiteral("1 property overridden")),
           QStringLiteral("Inspector displays Package defaults plus the current sparse override"));
+    check(!panel.findChild<QWidget*>(
+              QStringLiteral("finepaper.elementConfiguration.scroll")),
+          QStringLiteral(
+              "Element Configuration delegates scrolling to its Inspector host"));
     check(status->text().contains(QStringLiteral("fixed Mesh"))
               && !apply->isEnabled() && reset->isEnabled(),
           QStringLiteral("Router Inspector keeps the Mesh boundary visible and avoids no-op apply"));
@@ -434,7 +580,8 @@ int main(int argc, char** argv) {
     panel.setContext(
         &design,
         &package,
-        ElementRef{ElementKind::Endpoint, QStringLiteral("ep-client")});
+        ElementRef{ElementKind::Endpoint, QStringLiteral("ep-client")},
+        contextStamp());
     QApplication::processEvents();
     check(status->text().contains(QStringLiteral("Endpoint instance parameters")),
           QStringLiteral("Endpoint selection points users to its separate parameter path"));
@@ -442,6 +589,8 @@ int main(int argc, char** argv) {
           QStringLiteral(
               "rebuilding the Package-driven form never probes an invalid QFormLayout row"));
     draftsSurviveContextChangesAndFailClosedOnConflicts();
+    identicalContextPreservesEditorAndRevisionsForceRefresh();
+    resolutionErrorsSurviveBusyTransitions();
     qInstallMessageHandler(previousMessageHandler);
     messageHandlerToForward.store(nullptr, std::memory_order_release);
 

@@ -602,7 +602,7 @@ void inspectorEditsEndpointOnlyAndPreviewsTypeImpact() {
     auto* attachmentNote = panel.findChild<QLabel*>(
         QStringLiteral("finepaper.endpointConfiguration.attachmentNote"));
     check(attachmentNote
-              && attachmentNote->text().contains(QStringLiteral("attachment line")),
+              && attachmentNote->text().contains(QStringLiteral("connection")),
           QStringLiteral("Inspector keeps Endpoint parameters separate from Attachment configuration"));
     if (width) {
         width->setValue(QJsonValue(96));
@@ -734,6 +734,8 @@ void inspectorEditsEndpointOnlyAndPreviewsTypeImpact() {
         QStringLiteral("finepaper.endpointConfiguration.typeChangeSummary"));
     auto* summaryScroll = panel.findChild<QScrollArea*>(
         QStringLiteral("finepaper.endpointConfiguration.typeChangeSummaryScroll"));
+    auto* parameterScroll = panel.findChild<QScrollArea*>(
+        QStringLiteral("finepaper.endpointConfiguration.parameterScroll"));
     check(migration && migration->isVisible()
               && migrationLabel && migrationLabel->isVisible()
               && summary
@@ -744,8 +746,9 @@ void inspectorEditsEndpointOnlyAndPreviewsTypeImpact() {
               && summary->text().contains(QStringLiteral("Change/reset"))
               && summary->text().contains(QStringLiteral("protocol"))
               && !summary->text().contains(QStringLiteral("<b>Preserve</b>"))
-              && summaryScroll && summaryScroll->maximumHeight() <= 180,
-          QStringLiteral("type change exposes bounded per-key drop/add/reset details without listing every preserved value"));
+              && !summaryScroll && !parameterScroll,
+          QStringLiteral(
+              "type change exposes per-key drop/add/reset details and delegates scrolling to the Inspector host"));
     panel.resize(320, 720);
     QApplication::processEvents();
     check(migration && migrationLabel

@@ -3,15 +3,13 @@
 #include "application/element_configuration.h"
 #include "package/parameter_schema_identity.h"
 #include "ui/common/schema_value_editor.h"
+#include "ui/theme/ui_tokens.h"
 
 #include <QComboBox>
 #include <QCollator>
 #include <QFormLayout>
-#include <QFrame>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
 
@@ -125,7 +123,11 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
     setObjectName(QStringLiteral("finepaper.elementConfiguration"));
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(6);
+    layout->setSpacing(ui::UiMetrics::spacing8);
+
+    m_heading = new QLabel(QStringLiteral("Element properties"), this);
+    m_heading->setProperty("finepaperRole", QStringLiteral("subtitle"));
+    layout->addWidget(m_heading);
 
     m_status = new QLabel(this);
     m_status->setObjectName(
@@ -134,19 +136,19 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
     m_status->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(m_status);
 
-    m_target = new QLabel(this);
-    m_target->setObjectName(
-        QStringLiteral("finepaper.elementConfiguration.target"));
-    m_target->setWordWrap(true);
-    m_target->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    layout->addWidget(m_target);
-
     m_propertySetSelector = new QComboBox(this);
     m_propertySetSelector->setObjectName(
         QStringLiteral("finepaper.elementConfiguration.propertySet"));
     m_propertySetSelector->setSizeAdjustPolicy(
         QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    layout->addWidget(m_propertySetSelector);
+    auto* propertySetForm = new QFormLayout;
+    propertySetForm->setContentsMargins(0, 0, 0, 0);
+    propertySetForm->setFieldGrowthPolicy(
+        QFormLayout::AllNonFixedFieldsGrow);
+    propertySetForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
+    propertySetForm->addRow(
+        QStringLiteral("Property set"), m_propertySetSelector);
+    layout->addLayout(propertySetForm);
 
     m_overrideState = new QLabel(this);
     m_overrideState->setObjectName(
@@ -171,17 +173,10 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
     m_form = new QFormLayout(m_formContent);
     m_form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     m_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
-    m_scroll = new QScrollArea(this);
-    m_scroll->setObjectName(
-        QStringLiteral("finepaper.elementConfiguration.scroll"));
-    m_scroll->setFrameShape(QFrame::NoFrame);
-    m_scroll->setWidgetResizable(true);
-    m_scroll->setMinimumHeight(100);
-    m_scroll->setMaximumHeight(280);
-    m_scroll->setWidget(m_formContent);
-    layout->addWidget(m_scroll);
+    layout->addWidget(m_formContent);
 
-    auto* buttons = new QHBoxLayout;
+    auto* buttons = new QVBoxLayout;
+    buttons->setSpacing(ui::UiMetrics::spacing8);
     m_apply = new QPushButton(QStringLiteral("Apply"), this);
     m_apply->setObjectName(
         QStringLiteral("finepaper.elementConfiguration.apply"));
@@ -226,24 +221,33 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
             return;
         }
         discardDraft(
-            m_designIdentity, *m_projection.element, m_currentPropertySetId);
+            m_contextStamp.designIdentity,
+            *m_projection.element,
+            m_currentPropertySetId);
     });
 
-    setContext(nullptr, nullptr, std::nullopt);
+    setContext(nullptr, nullptr, std::nullopt, {});
 }
 
 void ElementConfigurationPanel::setContext(
     const NocDesign* design,
     const PackageDefinition* package,
     std::optional<ElementRef> selection,
-    bool busy,
-    QString designIdentity) {
+    ElementConfigurationContextStamp stamp,
+    bool busy) {
+    if (m_hasContext && m_design == design && m_package == package
+        && m_contextStamp == stamp && m_projection.element == selection) {
+        setBusy(busy);
+        return;
+    }
+
     captureCurrentDraft();
     const QString preferredPropertySet =
         m_propertySetSelector->currentData().toString();
     m_design = design;
     m_package = package;
-    m_designIdentity = std::move(designIdentity);
+    m_contextStamp = std::move(stamp);
+    m_hasContext = true;
     m_busy = busy;
     m_projection = projectElementConfigurationPanel(
         design, package, std::move(selection));
@@ -333,7 +337,8 @@ void ElementConfigurationPanel::discardDraft(
     if (drafts->isEmpty()) {
         m_drafts.erase(drafts);
     }
-    if (m_designIdentity == designIdentity && m_projection.element
+    if (m_contextStamp.designIdentity == designIdentity
+        && m_projection.element
         && *m_projection.element == element
         && m_currentPropertySetId == propertySetId) {
         rebuildForm();
@@ -358,7 +363,8 @@ void ElementConfigurationPanel::discardDraftsForElement(
     if (drafts->isEmpty()) {
         m_drafts.erase(drafts);
     }
-    if (m_designIdentity == designIdentity && m_projection.element
+    if (m_contextStamp.designIdentity == designIdentity
+        && m_projection.element
         && *m_projection.element == element) {
         rebuildForm();
     }
@@ -370,7 +376,7 @@ void ElementConfigurationPanel::clearDraftsForDesign(
     if (m_drafts.remove(designIdentity) == 0) {
         return;
     }
-    if (m_designIdentity == designIdentity) {
+    if (m_contextStamp.designIdentity == designIdentity) {
         rebuildForm();
     }
     notifyDraftStateChanged();
@@ -412,6 +418,13 @@ void ElementConfigurationPanel::rebuildPropertySetSelector(
 
 void ElementConfigurationPanel::rebuildForm() {
     clearForm();
+    m_resolutionFailureStatus.clear();
+    if (m_projection.ready()) {
+        // A previous property set may have exposed a resolution error. Reset
+        // the status before resolving the newly selected set so stale errors
+        // do not remain visible after a successful rebuild.
+        showProjectionMessage();
+    }
     m_resolved = false;
     m_draftConflict = false;
     m_currentPropertySetId.clear();
@@ -430,10 +443,11 @@ void ElementConfigurationPanel::rebuildForm() {
     const ResolvedElementConfiguration resolved = resolveElementConfiguration(
         *m_design, *m_package, *m_projection.element, propertySet->id);
     if (!resolved.success()) {
-        m_status->setText(
-            QStringLiteral("<b>Read-only:</b> this stored configuration could "
-                           "not be resolved. %1")
-                .arg(diagnosticSummary(resolved.diagnostics).toHtmlEscaped()));
+        m_resolutionFailureStatus = QStringLiteral(
+            "<b>Read-only:</b> this stored configuration could not be "
+            "resolved. %1")
+            .arg(diagnosticSummary(resolved.diagnostics).toHtmlEscaped());
+        showProjectionMessage();
         updateButtons();
         return;
     }
@@ -473,11 +487,9 @@ void ElementConfigurationPanel::rebuildForm() {
 
     m_overrideState->setText(
         m_overrideValues.isEmpty()
-            ? QStringLiteral(
-                  "Showing Package defaults. No sparse override is stored for this set.")
+            ? QStringLiteral("Using Package defaults.")
             : QStringLiteral(
-                  "Showing Package defaults plus %1 overridden %2. Reset removes the "
-                  "entire sparse override for this set.")
+                  "%1 %2 overridden. Reset removes this property-set override.")
                   .arg(m_overrideValues.size())
                   .arg(m_overrideValues.size() == 1
                            ? QStringLiteral("property")
@@ -507,7 +519,7 @@ void ElementConfigurationPanel::updateButtons() {
     const bool changed = editable
         && editorState != m_initialEditorState;
     m_propertySetSelector->setEnabled(m_projection.ready() && !m_busy);
-    m_scroll->setEnabled(editable && !m_draftConflict);
+    m_formContent->setEnabled(editable && !m_draftConflict);
     m_apply->setEnabled(
         editable && !m_draftConflict && errors.isEmpty() && changed);
     m_reset->setEnabled(
@@ -549,7 +561,8 @@ void ElementConfigurationPanel::updateButtons() {
 }
 
 void ElementConfigurationPanel::captureCurrentDraft() {
-    if (m_updating || m_draftConflict || m_designIdentity.isEmpty()
+    if (m_updating || m_draftConflict
+        || m_contextStamp.designIdentity.isEmpty()
         || !m_projection.element || m_currentPropertySetId.isEmpty()
         || !m_resolved) {
         return;
@@ -559,14 +572,15 @@ void ElementConfigurationPanel::captureCurrentDraft() {
 
 void ElementConfigurationPanel::captureCurrentDraft(
     const QHash<QString, SchemaValueEditorDraft>& editorState) {
-    if (m_updating || m_draftConflict || m_designIdentity.isEmpty()
+    if (m_updating || m_draftConflict
+        || m_contextStamp.designIdentity.isEmpty()
         || !m_projection.element || m_currentPropertySetId.isEmpty()
         || !m_resolved) {
         return;
     }
 
     QVector<CachedDraft>* designDrafts = nullptr;
-    auto existingDesign = m_drafts.find(m_designIdentity);
+    auto existingDesign = m_drafts.find(m_contextStamp.designIdentity);
     if (existingDesign != m_drafts.end()) {
         designDrafts = &*existingDesign;
     }
@@ -600,7 +614,7 @@ void ElementConfigurationPanel::captureCurrentDraft(
     };
     if (!designDrafts) {
         existingDesign = m_drafts.insert(
-            m_designIdentity, QVector<CachedDraft>{});
+            m_contextStamp.designIdentity, QVector<CachedDraft>{});
         designDrafts = &*existingDesign;
     }
     const auto existing = std::find_if(
@@ -617,11 +631,11 @@ void ElementConfigurationPanel::captureCurrentDraft(
 }
 
 void ElementConfigurationPanel::restoreCachedDraft() {
-    if (m_designIdentity.isEmpty() || !m_projection.element
+    if (m_contextStamp.designIdentity.isEmpty() || !m_projection.element
         || m_currentPropertySetId.isEmpty()) {
         return;
     }
-    auto designDrafts = m_drafts.find(m_designIdentity);
+    auto designDrafts = m_drafts.find(m_contextStamp.designIdentity);
     if (designDrafts == m_drafts.end()) {
         return;
     }
@@ -663,8 +677,8 @@ void ElementConfigurationPanel::restoreCachedDraft() {
 }
 
 void ElementConfigurationPanel::notifyDraftStateChanged() {
-    const bool draftPending = !m_designIdentity.isEmpty()
-        && hasUnappliedDrafts(m_designIdentity);
+    const bool draftPending = !m_contextStamp.designIdentity.isEmpty()
+        && hasUnappliedDrafts(m_contextStamp.designIdentity);
     if (m_reportedDraftPending == draftPending) {
         return;
     }
@@ -725,21 +739,13 @@ ElementConfigurationPanel::currentPropertySet() const {
 }
 
 void ElementConfigurationPanel::showProjectionMessage() {
-    m_target->clear();
-    m_target->setVisible(m_projection.element.has_value());
     const bool hasPropertySetUi = m_projection.ready();
+    m_heading->setVisible(hasPropertySetUi);
     m_propertySetSelector->setVisible(hasPropertySetUi);
     m_overrideState->setVisible(hasPropertySetUi);
-    m_scroll->setVisible(hasPropertySetUi);
+    m_formContent->setVisible(hasPropertySetUi);
     m_apply->setVisible(hasPropertySetUi);
     m_reset->setVisible(hasPropertySetUi);
-    if (m_projection.element) {
-        m_target->setText(
-            QStringLiteral("<b>%1</b><br><code>%2</code>")
-                .arg(elementKindLabel(m_projection.element->kind).toHtmlEscaped(),
-                     m_projection.element->id.toHtmlEscaped()));
-    }
-
     switch (m_projection.state) {
     case ElementConfigurationPanelState::NoDesign:
         m_status->setText(QStringLiteral(
@@ -776,7 +782,9 @@ void ElementConfigurationPanel::showProjectionMessage() {
             "this element kind or Endpoint type."));
         break;
     case ElementConfigurationPanelState::Ready:
-        if (m_busy) {
+        if (!m_resolutionFailureStatus.isEmpty()) {
+            m_status->setText(m_resolutionFailureStatus);
+        } else if (m_busy) {
             m_status->setText(QStringLiteral(
                 "<b>Read-only:</b> element configuration is locked while validation or "
                 "generation is running."));
@@ -797,6 +805,9 @@ void ElementConfigurationPanel::showProjectionMessage() {
         }
         break;
     }
+    m_status->setVisible(
+        !hasPropertySetUi || m_busy
+        || !m_resolutionFailureStatus.isEmpty());
 }
 
 } // namespace finepaper

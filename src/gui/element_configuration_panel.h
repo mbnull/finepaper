@@ -18,7 +18,6 @@ class QComboBox;
 class QFormLayout;
 class QLabel;
 class QPushButton;
-class QScrollArea;
 
 namespace finepaper {
 
@@ -46,6 +45,14 @@ struct ElementConfigurationPanelProjection {
     }
 };
 
+struct ElementConfigurationContextStamp final {
+    QString designIdentity;
+    quint64 designRevision = 0;
+    quint64 packageCatalogRevision = 0;
+
+    bool operator==(const ElementConfigurationContextStamp&) const = default;
+};
+
 ElementConfigurationPanelProjection projectElementConfigurationPanel(
     const NocDesign* design,
     const PackageDefinition* package,
@@ -58,9 +65,12 @@ public:
     void setContext(const NocDesign* design,
                     const PackageDefinition* package,
                     std::optional<ElementRef> selection,
-                    bool busy = false,
-                    QString designIdentity = {});
+                    ElementConfigurationContextStamp stamp,
+                    bool busy = false);
     void setBusy(bool busy);
+    [[nodiscard]] ElementConfigurationPanelState projectionState() const {
+        return m_projection.state;
+    }
 
     [[nodiscard]] bool hasUnappliedDrafts(
         const QString& designIdentity) const;
@@ -118,9 +128,11 @@ private:
     const NocDesign* m_design = nullptr;
     const PackageDefinition* m_package = nullptr;
     ElementConfigurationPanelProjection m_projection;
-    QString m_designIdentity;
+    ElementConfigurationContextStamp m_contextStamp;
     QString m_currentPropertySetId;
     QString m_currentSchemaIdentity;
+    QString m_resolutionFailureStatus;
+    bool m_hasContext = false;
     bool m_busy = false;
     bool m_resolved = false;
     bool m_updating = false;
@@ -132,12 +144,11 @@ private:
     QVector<PropertyRow> m_rows;
     QHash<QString, QVector<CachedDraft>> m_drafts;
 
+    QLabel* m_heading = nullptr;
     QLabel* m_status = nullptr;
-    QLabel* m_target = nullptr;
     QComboBox* m_propertySetSelector = nullptr;
     QLabel* m_overrideState = nullptr;
     QLabel* m_draftStatus = nullptr;
-    QScrollArea* m_scroll = nullptr;
     QWidget* m_formContent = nullptr;
     QFormLayout* m_form = nullptr;
     QPushButton* m_apply = nullptr;

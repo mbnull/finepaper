@@ -117,6 +117,21 @@ QSize requestedSmokeSize() {
     return valid ? QSize(width, height) : QSize{};
 }
 
+double requestedFontScale() {
+    const QString text = qEnvironmentVariable(
+        "FINEPAPER_GUI_SMOKE_FONT_SCALE").trimmed();
+    if (text.isEmpty()) {
+        return 1.0;
+    }
+    bool ok = false;
+    const double scale = text.toDouble(&ok);
+    const bool valid = ok && scale >= 1.0 && scale <= 2.0;
+    check(valid,
+          QStringLiteral(
+              "FINEPAPER_GUI_SMOKE_FONT_SCALE must be between 1.0 and 2.0."));
+    return valid ? scale : 1.0;
+}
+
 void applyRequestedSmokePalette(QApplication& application,
                                 const QString& theme) {
     if (theme.isEmpty()) {
@@ -210,6 +225,15 @@ bool focusIsWithin(QWidget* target) {
     QWidget* focus = QApplication::focusWidget();
     return target && focus
         && (focus == target || target->isAncestorOf(focus));
+}
+
+bool widgetIntersectsScrollViewport(QScrollArea* scroll, QWidget* widget) {
+    if (!scroll || !widget || !widget->isVisibleTo(scroll)) {
+        return false;
+    }
+    const QRect widgetRect(
+        widget->mapTo(scroll->viewport(), QPoint(0, 0)), widget->size());
+    return scroll->viewport()->rect().intersects(widgetRect);
 }
 
 bool visibleSiblingLabelsDoNotOverlap(QWidget* root,
@@ -1258,6 +1282,7 @@ int main(int argc, char** argv) {
     const bool maximizeWindow =
         qEnvironmentVariableIsSet("FINEPAPER_GUI_SMOKE_MAXIMIZED");
     const QSize requestedWindowSize = requestedSmokeSize();
+    const double fontScale = requestedFontScale();
     const QString requestedTheme =
         qEnvironmentVariable("FINEPAPER_GUI_SMOKE_THEME")
             .trimmed()
@@ -1270,6 +1295,17 @@ int main(int argc, char** argv) {
 
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication application(argc, argv);
+    if (fontScale > 1.0) {
+        QFont scaledFont = application.font();
+        if (scaledFont.pointSizeF() > 0.0) {
+            scaledFont.setPointSizeF(
+                scaledFont.pointSizeF() * fontScale);
+        } else if (scaledFont.pixelSize() > 0) {
+            scaledFont.setPixelSize(qRound(
+                static_cast<double>(scaledFont.pixelSize()) * fontScale));
+        }
+        application.setFont(scaledFont);
+    }
     EndpointCreationAutoAccepter endpointCreationAutoAccepter;
     application.installEventFilter(&endpointCreationAutoAccepter);
     QCoreApplication::setOrganizationName(QStringLiteral("FinepaperTest"));
@@ -1415,9 +1451,9 @@ int main(int argc, char** argv) {
     auto* resultsDock = window.findChild<QDockWidget*>(finepaper::workbench::resultsDockName);
     auto* inspectorScroll = window.findChild<QScrollArea*>(
         QStringLiteral("finepaper.inspectorScroll"));
-    auto* endpointConfigurationGroup = window.findChild<QGroupBox*>(
+    auto* endpointConfigurationGroup = window.findChild<QWidget*>(
         QStringLiteral("finepaper.endpointConfigurationGroup"));
-    auto* elementConfigurationGroup = window.findChild<QGroupBox*>(
+    auto* elementConfigurationGroup = window.findChild<QWidget*>(
         QStringLiteral("finepaper.elementConfigurationGroup"));
     check(packageDock && window.dockWidgetArea(packageDock) == Qt::LeftDockWidgetArea,
           QStringLiteral("Package and Endpoint library is docked on the left"));
@@ -1432,6 +1468,12 @@ int main(int argc, char** argv) {
                      == Qt::ScrollBarAlwaysOff,
           QStringLiteral(
               "the complete Inspector scrolls inside its dock instead of resizing the top-level window"));
+    check(inspectorScroll && inspectorScroll->widget()
+              && inspectorScroll->widget()
+                     ->findChildren<QScrollArea*>()
+                     .isEmpty(),
+          QStringLiteral(
+              "the Inspector has one vertical scroll owner and no nested scroll areas"));
 
     auto* mainToolbar = window.findChild<QToolBar*>(
         finepaper::workbench::mainToolbarName);
@@ -1642,12 +1684,20 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.applyParameters"));
     auto* resizeMeshButton = window.findChild<QPushButton*>(
         QStringLiteral("finepaper.resizeMesh"));
-    auto* meshTopologyGroup = window.findChild<QGroupBox*>(
+    auto* meshTopologyGroup = window.findChild<QWidget*>(
         QStringLiteral("finepaper.meshTopologyGroup"));
-    auto* parameterGroup = window.findChild<QGroupBox*>(
+    auto* parameterGroup = window.findChild<QWidget*>(
         QStringLiteral("finepaper.parameterGroup"));
-    auto* initialSelectionGroup = window.findChild<QGroupBox*>(
+    auto* initialSelectionGroup = window.findChild<QWidget*>(
         finepaper::workbench::selectionInspectorName);
+    auto* inspectorDesignSettings = window.findChild<QWidget*>(
+        QStringLiteral("finepaper.inspectorDesignSettings"));
+    auto* inspectorDesignSettingsContent = window.findChild<QWidget*>(
+        QStringLiteral("finepaper.inspectorDesignSettingsContent"));
+    auto* inspectorSelectionDetail = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.inspectorSelectionDetail"));
+    auto* inspectorSelectionMetadata = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.inspectorSelectionMetadata"));
     QAction* resizeMeshAction = window.findChild<QAction*>(
         QStringLiteral("finepaper.resizeMeshAction"));
     check(endpointPalette && !endpointPalette->isEnabled(),
@@ -1672,7 +1722,9 @@ int main(int argc, char** argv) {
     check(meshTopologyGroup && !meshTopologyGroup->isVisible()
               && parameterGroup && !parameterGroup->isVisible()
               && initialSelectionGroup
-              && !initialSelectionGroup->isVisible(),
+              && !initialSelectionGroup->isVisible()
+              && inspectorDesignSettings
+              && !inspectorDesignSettings->isVisible(),
           QStringLiteral(
               "the no-design Inspector hides topology, selection, and parameter editors"));
 
@@ -1729,9 +1781,13 @@ int main(int argc, char** argv) {
     check(meshTopologyGroup && meshTopologyGroup->isVisible()
               && parameterGroup && parameterGroup->isVisible()
               && initialSelectionGroup
-              && initialSelectionGroup->isVisible(),
+              && initialSelectionGroup->isVisible()
+              && inspectorDesignSettings
+              && inspectorDesignSettings->isVisible()
+              && inspectorDesignSettingsContent
+              && inspectorDesignSettingsContent->isVisible(),
           QStringLiteral(
-              "design-owned topology and parameter editors appear after creation"));
+              "design settings are expanded when a design has no active selection"));
     check(resizeMeshButton && resizeMeshButton->isEnabled()
               && resizeMeshAction && resizeMeshAction->isEnabled(),
           QStringLiteral("Mesh resize entry points follow active Package metadata"));
@@ -2051,13 +2107,21 @@ int main(int argc, char** argv) {
         }
         check(endpointConfigurationGroup && elementConfigurationGroup
                   && !endpointConfigurationGroup->isVisible()
-                  && elementConfigurationGroup->isVisible(),
+                  && !elementConfigurationGroup->isVisible()
+                  && inspectorSelectionMetadata
+                  && inspectorSelectionMetadata->text().contains(
+                      QStringLiteral("Column 0 · Row 0"))
+                  && !inspectorSelectionMetadata->text().contains(
+                      QLatin1Char('%'))
+                  && inspectorSelectionDetail
+                  && inspectorSelectionDetail->text().contains(
+                      QStringLiteral("formatVersion 3")),
               QStringLiteral(
-                  "Router selection progressively discloses only its element properties"));
-        check(elementConfigurationGroup && meshTopologyGroup
-                  && elementConfigurationGroup->y() < meshTopologyGroup->y(),
+                  "Router selection summarizes unavailable properties without an empty editor"));
+        check(inspectorDesignSettingsContent
+                  && !inspectorDesignSettingsContent->isVisible(),
               QStringLiteral(
-                  "Router properties precede global Mesh operations in the Inspector"));
+                  "selecting a Router collapses design-wide settings"));
         check((maximizeWindow || windowHeightBeforeRouterSelection <= 920)
                   && window.height() == windowHeightBeforeRouterSelection
                   && window.minimumSizeHint().height() <= window.height(),
@@ -2272,7 +2336,7 @@ int main(int argc, char** argv) {
     }
     check(!window.findChild<QPushButton*>(QStringLiteral("finepaper.attachEndpoint")),
           QStringLiteral("Inspector contains properties rather than Endpoint wiring tools"));
-    auto* selectionInspector = window.findChild<QGroupBox*>(
+    auto* selectionInspector = window.findChild<QWidget*>(
         finepaper::workbench::selectionInspectorName);
     check(selectionInspector && selectionInspector->findChildren<QPushButton*>().isEmpty(),
           QStringLiteral("selection Inspector contains no connect or delete controls"));
@@ -2347,6 +2411,11 @@ int main(int argc, char** argv) {
     if (attachedEndpoint && graphicsScene) {
         const int windowHeightBeforeEndpointSelection = window.height();
         graphicsScene->clearSelection();
+        application.processEvents();
+        if (inspectorScroll) {
+            inspectorScroll->verticalScrollBar()->setValue(
+                inspectorScroll->verticalScrollBar()->maximum());
+        }
         auto* endpointObject =
             graphicsScene->nodeGraphicsObject(*attachedEndpoint);
         check(endpointObject,
@@ -2362,10 +2431,18 @@ int main(int argc, char** argv) {
                   && !elementConfigurationGroup->isVisible(),
               QStringLiteral(
                   "Endpoint selection progressively discloses only Endpoint-owned properties"));
-        check(endpointConfigurationGroup && meshTopologyGroup
-                  && endpointConfigurationGroup->y() < meshTopologyGroup->y(),
+        check(inspectorDesignSettingsContent
+                  && !inspectorDesignSettingsContent->isVisible(),
               QStringLiteral(
-                  "Endpoint properties precede global Mesh operations in the Inspector"));
+                  "Endpoint properties take priority while design settings stay collapsed"));
+        auto* endpointTypeEditor = window.findChild<QComboBox*>(
+            QStringLiteral("finepaper.endpointConfiguration.type"));
+        check(inspectorScroll && endpointTypeEditor
+                  && inspectorScroll->verticalScrollBar()->value() == 0
+                  && widgetIntersectsScrollViewport(
+                      inspectorScroll, endpointTypeEditor),
+              QStringLiteral(
+                  "a new Endpoint selection returns the Inspector to its visible primary editor"));
         const bool inspectorContentFits = inspectorScroll
             && inspectorScroll->widget()
             && inspectorScroll->widget()->height()
@@ -3232,6 +3309,11 @@ int main(int argc, char** argv) {
     check(endpointAttachedToRouter(graphicsScene, QStringLiteral("r-0-0")).has_value(),
           QStringLiteral("selected-Router shortcut attaches specifically to that Router"));
 
+    const auto expandedRouter00 = nodeIdWithCaption(
+        graphicsScene, QStringLiteral("r-0-0"));
+    const QSize expandedRouterSize = graphicsScene && expandedRouter00
+        ? graphicsScene->nodeGeometry().size(*expandedRouter00)
+        : QSize{};
     check(nodeEditor && nodeEditor->setRouterCollapsed(QStringLiteral("r-0-0"), true),
           QStringLiteral("Router can be collapsed from the workspace"));
     const auto collapsedRouter00 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-0-0"));
@@ -3240,9 +3322,15 @@ int main(int argc, char** argv) {
     if (graphicsScene && collapsedRouter00) {
         const QSize collapsedSize = graphicsScene->nodeGeometry().size(*collapsedRouter00);
         check(collapsedSize.width() == collapsedSize.height()
-                  && collapsedSize.width()
-                         < finepaper::nocEditorMetrics().expandedRouterSize.width(),
-              QStringLiteral("collapsed Router remains square and becomes compact"));
+                  && expandedRouterSize.isValid()
+                  && collapsedSize.width() < expandedRouterSize.width(),
+              QStringLiteral(
+                  "collapsed Router remains square and becomes compact "
+                  "(collapsed %1 × %2, expanded %3 × %4)")
+                  .arg(collapsedSize.width())
+                  .arg(collapsedSize.height())
+                  .arg(expandedRouterSize.width())
+                  .arg(expandedRouterSize.height()));
     }
     check(!endpointAttachedToRouter(graphicsScene, QStringLiteral("r-0-0")),
           QStringLiteral("collapsed Router hides its Endpoint projection"));
@@ -3444,10 +3532,12 @@ int main(int argc, char** argv) {
             ->setSelected(true);
         application.processEvents();
     }
-    auto* semanticInspectorGroup = window.findChild<QGroupBox*>(
+    auto* semanticInspectorGroup = window.findChild<QWidget*>(
         finepaper::workbench::selectionInspectorName);
     auto* semanticInspector = semanticInspectorGroup
-        ? semanticInspectorGroup->findChild<QLabel*>() : nullptr;
+        ? semanticInspectorGroup->findChild<QLabel*>(
+              QStringLiteral("finepaper.inspectorSelectionMetadata"))
+        : nullptr;
     check(observedSemanticSelection.size() == 1
               && observedSemanticSelection.items.front().kind
                   == finepaper::NocEditorSelection::Kind::RouterLink
@@ -4954,10 +5044,12 @@ int main(int argc, char** argv) {
                       "A diamond marker indicates an edge override")),
           QStringLiteral(
               "the canvas explains stable Domain identities and non-text connection markers in accessible text"));
-    auto* domainSelectionInspectorGroup = domainWindow.findChild<QGroupBox*>(
+    auto* domainSelectionInspectorGroup = domainWindow.findChild<QWidget*>(
         finepaper::workbench::selectionInspectorName);
     auto* domainSelectionInspector = domainSelectionInspectorGroup
-        ? domainSelectionInspectorGroup->findChild<QLabel*>() : nullptr;
+        ? domainSelectionInspectorGroup->findChild<QLabel*>(
+              QStringLiteral("finepaper.inspectorSelectionDetail"))
+        : nullptr;
     check(domainSelectionInspector
               && domainSelectionInspector->text().contains(
                   QStringLiteral("Active Domain layer"))

@@ -13,6 +13,8 @@
 #include "gui/package_parameter_form.h"
 #include "ui/components/empty_state.h"
 #include "ui/theme/ui_tokens.h"
+#include "ui/workbench/inspector_design_settings.h"
+#include "ui/workbench/inspector_summary_panel.h"
 #include "ui/workbench/workbench_config.h"
 #include "storage/json.h"
 
@@ -49,6 +51,7 @@
 #include <QProgressBar>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QScopedValueRollback>
 #include <QSet>
 #include <QSettings>
@@ -63,6 +66,7 @@
 #include <QTableWidget>
 #include <QToolBar>
 #include <QToolButton>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QVersionNumber>
 #include <QtConcurrentRun>
@@ -88,7 +92,7 @@ QString diagnosticText(const QVector<Diagnostic>& diagnostics) {
                            : lines.join(QLatin1Char('\n'));
 }
 
-QString domainSetHtml(const DomainPresentationSnapshot& snapshot,
+QString domainSetText(const DomainPresentationSnapshot& snapshot,
                       const QStringList& domainIds) {
     if (domainIds.isEmpty()) {
         return QStringLiteral("No Domains");
@@ -101,23 +105,19 @@ QString domainSetHtml(const DomainPresentationSnapshot& snapshot,
             [&](const DomainLegendEntry& candidate) {
                 return candidate.id == domainId;
             });
-        assignments.append(
-            domain_text::domainInstanceDisplayText(
-                domainId,
-                entry == snapshot.legend.cend() ? QString() : entry->name)
-                .toHtmlEscaped());
+        assignments.append(domain_text::domainInstanceDisplayText(
+            domainId,
+            entry == snapshot.legend.cend() ? QString() : entry->name));
     }
     return assignments.join(QStringLiteral(", "));
 }
 
-QString propertiesHtml(const QJsonObject& properties) {
-    return QStringLiteral("<code>%1</code>")
-        .arg(QString::fromUtf8(
-                 QJsonDocument(properties).toJson(QJsonDocument::Compact))
-                 .toHtmlEscaped());
+QString propertiesText(const QJsonObject& properties) {
+    return QString::fromUtf8(
+        QJsonDocument(properties).toJson(QJsonDocument::Compact));
 }
 
-QString domainCrossingInspectorHtml(
+QString domainCrossingInspectorText(
     const DomainPresentationSnapshot& snapshot,
     const ElementRef& edge) {
     const DomainCrossingPresentation* crossing = snapshot.crossing(edge);
@@ -126,54 +126,53 @@ QString domainCrossingInspectorHtml(
     }
 
     const QString layer = domain_text::domainTypeDisplayText(
-        snapshot.activeDomainType, snapshot.domainTypeLabel).toHtmlEscaped();
+        snapshot.activeDomainType, snapshot.domainTypeLabel);
 
     QStringList lines = {
-        QStringLiteral("<b>Color-by Domain crossing — %1</b>").arg(layer),
+        QStringLiteral("Color-by Domain crossing — %1").arg(layer),
         QStringLiteral("From set: %1").arg(
-            domainSetHtml(snapshot, crossing->fromDomainIds)),
+            domainSetText(snapshot, crossing->fromDomainIds)),
         QStringLiteral("To set: %1").arg(
-            domainSetHtml(snapshot, crossing->toDomainIds))
+            domainSetText(snapshot, crossing->toDomainIds))
     };
     if (crossing->defaultPolicy) {
         lines.append(
-            QStringLiteral("Default policy: <code>%1</code>")
-                .arg(crossing->defaultPolicy->toHtmlEscaped()));
+            QStringLiteral("Default policy: %1")
+                .arg(*crossing->defaultPolicy));
         lines.append(
             QStringLiteral("Default properties: %1")
-                .arg(propertiesHtml(crossing->defaultProperties)));
+                .arg(propertiesText(crossing->defaultProperties)));
     } else {
         const bool singleton = crossing->fromDomainIds.size() == 1
             && crossing->toDomainIds.size() == 1;
         lines.append(
             singleton
                 ? QStringLiteral(
-                      "Default policy: <i>none resolved for this exact "
-                      "canonical boundary orientation</i>")
+                      "Default policy: none resolved for this exact "
+                      "canonical boundary orientation")
                 : QStringLiteral(
-                      "Default policy: <i>unavailable for a set-valued "
-                      "crossing</i>"));
+                      "Default policy: unavailable for a set-valued "
+                      "crossing"));
     }
 
     if (crossing->overridePolicy || !crossing->overrideProperties.isEmpty()) {
         lines.append(
             QStringLiteral("Edge override policy: %1")
                 .arg(crossing->overridePolicy
-                         ? QStringLiteral("<code>%1</code>")
-                               .arg(crossing->overridePolicy->toHtmlEscaped())
-                         : QStringLiteral("<i>not specified</i>")));
+                         ? *crossing->overridePolicy
+                         : QStringLiteral("not specified")));
         lines.append(
             QStringLiteral("Override properties: %1")
-                .arg(propertiesHtml(crossing->overrideProperties)));
+                .arg(propertiesText(crossing->overrideProperties)));
     } else {
         lines.append(crossing->defaultPolicy
-            ? QStringLiteral("Edge override: <i>none; the default applies unchanged</i>")
-            : QStringLiteral("Edge override: <i>none</i>"));
+            ? QStringLiteral("Edge override: none; the default applies unchanged")
+            : QStringLiteral("Edge override: none"));
     }
-    return QStringLiteral("<br><br>%1").arg(lines.join(QStringLiteral("<br>")));
+    return lines.join(QLatin1Char('\n'));
 }
 
-QString domainElementInspectorHtml(
+QString domainElementInspectorText(
     const DomainPresentationSnapshot& snapshot,
     const PackageDefinition* package,
     const NocDesign& design,
@@ -201,11 +200,8 @@ QString domainElementInspectorHtml(
               presentation->domainIds);
 
     return QStringLiteral(
-        "<br><br><b>Active Domain layer</b><br>Type: %1<br>"
-        "Constraint: %2<br>Assignment: %3")
-        .arg(typeText.toHtmlEscaped(),
-             constraintText.toHtmlEscaped(),
-             assignmentText.toHtmlEscaped());
+        "Active Domain layer\nType: %1\nConstraint: %2\nAssignment: %3")
+        .arg(typeText, constraintText, assignmentText);
 }
 
 QString normalizedAbsolutePath(const QString& path) {
@@ -1196,129 +1192,97 @@ void FinepaperMainWindow::createInspectorDock() {
     m_inspectorDock->setObjectName(workbench::inspectorDockName);
     m_inspectorDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    auto* inspectorScroll = new QScrollArea(m_inspectorDock);
-    inspectorScroll->setObjectName(
+    m_inspectorScroll = new QScrollArea(m_inspectorDock);
+    m_inspectorScroll->setObjectName(
         QStringLiteral("finepaper.inspectorScroll"));
-    inspectorScroll->setWidgetResizable(true);
-    inspectorScroll->setFrameShape(QFrame::NoFrame);
-    inspectorScroll->setHorizontalScrollBarPolicy(
+    m_inspectorScroll->setWidgetResizable(true);
+    m_inspectorScroll->setFrameShape(QFrame::NoFrame);
+    m_inspectorScroll->setHorizontalScrollBarPolicy(
         Qt::ScrollBarAlwaysOff);
 
-    auto* content = new QWidget(inspectorScroll);
+    auto* content = new QWidget(m_inspectorScroll);
     content->setObjectName(QStringLiteral("finepaper.inspectorContent"));
+    content->setMinimumWidth(0);
     auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(
         ui::UiMetrics::spacing12, ui::UiMetrics::spacing12,
         ui::UiMetrics::spacing12, ui::UiMetrics::spacing12);
-    m_designOverview = new QLabel(QStringLiteral("No design is open."));
-    m_designOverview->setObjectName(
-        QStringLiteral("finepaper.designOverview"));
-    m_designOverview->setTextFormat(Qt::PlainText);
-    m_designOverview->setWordWrap(true);
-    m_designOverview->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_designOverview->setProperty(
-        "finepaperRole", QStringLiteral("subtitle"));
-    m_designOverview->setFont(
-        ui::fontForRole(ui::UiFontRole::Subtitle, m_designOverview->font()));
-    layout->addWidget(m_designOverview);
+    m_inspectorSummaryPanel = new ui::InspectorSummaryPanel(content);
+    m_inspectorSummaryPanel->setDesignSummary({
+        QStringLiteral("No design open"),
+        QStringLiteral("Create or open a design to inspect it."),
+        {}});
+    layout->addWidget(m_inspectorSummaryPanel);
 
-    m_designMetadata = new QLabel(
-        QStringLiteral("Create or open a design to inspect it."), content);
-    m_designMetadata->setObjectName(
-        QStringLiteral("finepaper.designMetadata"));
-    m_designMetadata->setTextFormat(Qt::PlainText);
-    m_designMetadata->setWordWrap(true);
-    m_designMetadata->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_designMetadata->setProperty(
-        "finepaperRole", QStringLiteral("muted"));
-    layout->addWidget(m_designMetadata);
-
-    m_designAvailability = new QLabel(content);
-    m_designAvailability->setObjectName(
-        QStringLiteral("finepaper.designAvailability"));
-    m_designAvailability->setTextFormat(Qt::PlainText);
-    m_designAvailability->setWordWrap(true);
-    m_designAvailability->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_designAvailability->setProperty(
-        "finepaperRole", QStringLiteral("warning"));
-    m_designAvailability->hide();
-    layout->addWidget(m_designAvailability);
-
-    m_topologyGroup = new QGroupBox(QStringLiteral("Mesh Topology"));
-    m_topologyGroup->setObjectName(
-        QStringLiteral("finepaper.meshTopologyGroup"));
-    auto* topologyLayout = new QVBoxLayout(m_topologyGroup);
-    auto* topologyNote = new QLabel(
-        QStringLiteral(
-            "Routers and Router links are generated by the Mesh. Resize the "
-            "topology here; Router creation and deletion are not exposed as "
-            "independent operations."),
-        m_topologyGroup);
-    topologyNote->setWordWrap(true);
-    m_resizeMeshButton = new QPushButton(
-        QStringLiteral("Resize Mesh…"), m_topologyGroup);
-    m_resizeMeshButton->setObjectName(QStringLiteral("finepaper.resizeMesh"));
-    m_resizeMeshButton->setProperty(
-        "finepaperRole", QStringLiteral("quiet"));
-    topologyLayout->addWidget(topologyNote);
-    topologyLayout->addWidget(m_resizeMeshButton);
-
-    m_selectionGroup = new QGroupBox(QStringLiteral("Selection"));
-    m_selectionGroup->setObjectName(workbench::selectionInspectorName);
-    auto* selectionLayout = new QVBoxLayout(m_selectionGroup);
-    m_selectionSummary = new QLabel(QStringLiteral("Nothing selected."));
-    m_selectionSummary->setTextFormat(Qt::RichText);
-    m_selectionSummary->setWordWrap(true);
-    m_selectionSummary->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    selectionLayout->addWidget(m_selectionSummary);
-    layout->addWidget(m_selectionGroup);
-
-    m_endpointConfigurationGroup = new QGroupBox(
-        QStringLiteral("Endpoint Configuration"), content);
+    m_endpointConfigurationGroup = new QWidget(content);
     m_endpointConfigurationGroup->setObjectName(
         QStringLiteral("finepaper.endpointConfigurationGroup"));
+    m_endpointConfigurationGroup->setMinimumWidth(0);
     auto* endpointConfigurationLayout =
         new QVBoxLayout(m_endpointConfigurationGroup);
+    endpointConfigurationLayout->setContentsMargins(0, 0, 0, 0);
     m_endpointConfigurationPanel = new EndpointConfigurationPanel(
         m_endpointConfigurationGroup);
     endpointConfigurationLayout->addWidget(m_endpointConfigurationPanel);
     m_endpointConfigurationGroup->setVisible(false);
     layout->addWidget(m_endpointConfigurationGroup);
 
-    m_elementConfigurationGroup = new QGroupBox(
-        QStringLiteral("Element Configuration"), content);
+    m_elementConfigurationGroup = new QWidget(content);
     m_elementConfigurationGroup->setObjectName(
         QStringLiteral("finepaper.elementConfigurationGroup"));
+    m_elementConfigurationGroup->setMinimumWidth(0);
     auto* elementConfigurationLayout =
         new QVBoxLayout(m_elementConfigurationGroup);
+    elementConfigurationLayout->setContentsMargins(0, 0, 0, 0);
     m_elementConfigurationPanel = new ElementConfigurationPanel(
         m_elementConfigurationGroup);
     elementConfigurationLayout->addWidget(m_elementConfigurationPanel);
     m_elementConfigurationGroup->setVisible(false);
     layout->addWidget(m_elementConfigurationGroup);
 
-    // Keep the active object's properties ahead of global Mesh operations so
-    // the common inspect-and-edit flow remains visible in a compact dock.
-    layout->addWidget(m_topologyGroup);
+    m_inspectorDesignSettings = new ui::InspectorDesignSettings(content);
 
-    m_parameterGroup = new QGroupBox(QStringLiteral("NoC Parameters"));
+    m_topologyGroup = new QWidget(m_inspectorDesignSettings);
+    m_topologyGroup->setObjectName(
+        QStringLiteral("finepaper.meshTopologyGroup"));
+    auto* topologyLayout = new QVBoxLayout(m_topologyGroup);
+    topologyLayout->setContentsMargins(0, 0, 0, 0);
+    topologyLayout->setSpacing(ui::UiMetrics::spacing8);
+    auto* topologyTitle = new QLabel(
+        QStringLiteral("Mesh topology"), m_topologyGroup);
+    topologyTitle->setProperty(
+        "finepaperRole", QStringLiteral("subtitle"));
+    auto* topologyNote = new QLabel(
+        QStringLiteral(
+            "Routers and Router links are Mesh-managed. Resize the complete "
+            "topology here."),
+        m_topologyGroup);
+    topologyNote->setObjectName(
+        QStringLiteral("finepaper.inspectorMeshSummary"));
+    topologyNote->setProperty("finepaperRole", QStringLiteral("muted"));
+    topologyNote->setWordWrap(true);
+    m_resizeMeshButton = new QPushButton(
+        QStringLiteral("Resize Mesh…"), m_topologyGroup);
+    m_resizeMeshButton->setObjectName(QStringLiteral("finepaper.resizeMesh"));
+    m_resizeMeshButton->setProperty(
+        "finepaperRole", QStringLiteral("quiet"));
+    topologyLayout->addWidget(topologyTitle);
+    topologyLayout->addWidget(topologyNote);
+    topologyLayout->addWidget(m_resizeMeshButton);
+    m_inspectorDesignSettings->addSection(m_topologyGroup);
+
+    m_parameterGroup = new QWidget(m_inspectorDesignSettings);
     m_parameterGroup->setObjectName(QStringLiteral("finepaper.parameterGroup"));
     auto* parameterGroupLayout = new QVBoxLayout(m_parameterGroup);
+    parameterGroupLayout->setContentsMargins(0, 0, 0, 0);
+    parameterGroupLayout->setSpacing(ui::UiMetrics::spacing8);
+    auto* parameterTitle = new QLabel(
+        QStringLiteral("NoC parameters"), m_parameterGroup);
+    parameterTitle->setProperty(
+        "finepaperRole", QStringLiteral("subtitle"));
+    parameterGroupLayout->addWidget(parameterTitle);
     m_parameterForm = new PackageParameterForm(
         QStringLiteral("finepaper.parameter"), m_parameterGroup);
-    m_parameterDraftStatus = new QLabel(m_parameterGroup);
-    m_parameterDraftStatus->setObjectName(
-        QStringLiteral("finepaper.parameterDraftStatus"));
-    m_parameterDraftStatus->setWordWrap(true);
-    m_parameterDraftStatus->setTextInteractionFlags(
-        Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-    m_parameterDraftStatus->setProperty(
-        "finepaperRole", QStringLiteral("warning"));
-    m_parameterDraftStatus->hide();
-    auto* parameterScroll = new QScrollArea;
-    parameterScroll->setWidgetResizable(true);
-    parameterScroll->setFrameShape(QFrame::NoFrame);
-    parameterScroll->setWidget(m_parameterForm);
     m_applyParametersButton = new QPushButton(QStringLiteral("Apply Parameters"));
     m_applyParametersButton->setObjectName(QStringLiteral("finepaper.applyParameters"));
     m_applyParametersButton->setProperty(
@@ -1330,16 +1294,19 @@ void FinepaperMainWindow::createInspectorDock() {
     m_discardParametersButton->setProperty(
         "finepaperRole", QStringLiteral("quiet"));
     m_discardParametersButton->hide();
-    auto* parameterButtons = new QHBoxLayout;
+    auto* parameterButtons = new QVBoxLayout;
+    parameterButtons->setSpacing(ui::UiMetrics::spacing8);
     parameterButtons->addWidget(m_applyParametersButton);
     parameterButtons->addWidget(m_discardParametersButton);
-    parameterGroupLayout->addWidget(m_parameterDraftStatus);
-    parameterGroupLayout->addWidget(parameterScroll, 1);
+    parameterGroupLayout->addWidget(m_parameterForm);
     parameterGroupLayout->addLayout(parameterButtons);
-    layout->addWidget(m_parameterGroup, 1);
+    m_inspectorDesignSettings->addSection(m_parameterGroup);
+    m_inspectorDesignSettings->setVisible(false);
+    layout->addWidget(m_inspectorDesignSettings);
+    layout->addStretch(1);
 
-    inspectorScroll->setWidget(content);
-    m_inspectorDock->setWidget(inspectorScroll);
+    m_inspectorScroll->setWidget(content);
+    m_inspectorDock->setWidget(m_inspectorScroll);
     addDockWidget(Qt::RightDockWidgetArea, m_inspectorDock);
 
     connect(m_applyParametersButton, &QPushButton::clicked,
@@ -2557,7 +2524,7 @@ void FinepaperMainWindow::detachPackageBorrowingPanels() {
     }
     if (m_elementConfigurationPanel) {
         m_elementConfigurationPanel->setContext(
-            nullptr, nullptr, std::nullopt, m_operationBusy, {});
+            nullptr, nullptr, std::nullopt, {}, m_operationBusy);
     }
     if (m_endpointConfigurationPanel) {
         m_endpointConfigurationPanel->setContext(
@@ -2888,8 +2855,8 @@ void FinepaperMainWindow::updateUiState() {
     if (m_topologyGroup) {
         m_topologyGroup->setVisible(hasDesign);
     }
-    if (m_selectionGroup) {
-        m_selectionGroup->setVisible(hasDesign);
+    if (m_inspectorDesignSettings) {
+        m_inspectorDesignSettings->setVisible(hasDesign);
     }
     if (m_resizeMeshButton) {
         m_resizeMeshButton->setEnabled(hasDesignMetadata && !m_operationBusy);
@@ -2915,30 +2882,25 @@ void FinepaperMainWindow::updateUiState() {
         m_discardParametersButton->setEnabled(
             hasParameterDraft && !m_operationBusy);
     }
-    if (m_parameterDraftStatus) {
-        m_parameterDraftStatus->setVisible(hasParameterDraft);
-        if (hasParameterDraft) {
-            setStatusLabel(
-                m_parameterDraftStatus,
-                m_parameterDraftConflict
-                    ? QStringLiteral(
-                          "Draft conflict: the durable NoC parameters or "
-                          "Package schema changed after this draft was created. "
-                          "The draft is preserved read-only; discard it before "
-                          "editing the new source values.")
-                    : m_parameterForm && m_parameterForm->locallyValid()
-                    ? QStringLiteral(
-                          "Unapplied NoC parameter changes. Apply them before "
-                          "Save, Validate, or Generate RTL, or explicitly "
-                          "discard the draft when prompted.")
-                    : QStringLiteral(
-                          "The unapplied NoC parameter draft has validation "
-                          "errors. Correct them or discard the draft before "
-                          "continuing."),
-                m_parameterDraftConflict
-                    ? QStringLiteral("error")
-                    : QStringLiteral("warning"));
-        }
+    if (m_inspectorDesignSettings) {
+        const QString draftNotice = !hasParameterDraft
+            ? QString()
+            : m_parameterDraftConflict
+            ? QStringLiteral(
+                  "NoC parameter draft conflict. Discard the preserved draft "
+                  "before editing the current values.")
+            : m_parameterForm && m_parameterForm->locallyValid()
+            ? QStringLiteral(
+                  "Unapplied NoC parameter changes. Apply or discard them "
+                  "before Save, Validate, or Generate RTL.")
+            : QStringLiteral(
+                  "The NoC parameter draft has validation errors. Correct or "
+                  "discard it before continuing.");
+        m_inspectorDesignSettings->setDraftNotice(
+            draftNotice,
+            m_parameterDraftConflict
+                ? QStringLiteral("error")
+                : QStringLiteral("warning"));
     }
     if (m_endpointConfigurationPanel) {
         m_endpointConfigurationPanel->setBusy(m_operationBusy);
@@ -4002,23 +3964,23 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
     const bool singleElementConfigurationTarget =
         selectedElement
         && isElementConfigurationTargetKind(selectedElement->kind);
-    if (m_endpointConfigurationGroup) {
-        m_endpointConfigurationGroup->setVisible(singleEndpoint);
-    }
-    if (m_elementConfigurationGroup) {
-        m_elementConfigurationGroup->setVisible(
-            singleElementConfigurationTarget);
-    }
     if (m_domainManager) {
         m_domainManager->setSelection(selection.elements());
     }
+    ElementConfigurationPanelState elementConfigurationState =
+        ElementConfigurationPanelState::NoSelection;
     if (m_elementConfigurationPanel) {
+        const operations::DesignStamp stamp = currentDesignStamp();
         m_elementConfigurationPanel->setContext(
             m_design ? &*m_design : nullptr,
             packageForDesign(),
             selectedElement,
-            m_operationBusy,
-            m_designSessionIdentity);
+            {.designIdentity = m_designSessionIdentity,
+             .designRevision = stamp.revision,
+             .packageCatalogRevision = stamp.catalogRevision},
+            m_operationBusy);
+        elementConfigurationState =
+            m_elementConfigurationPanel->projectionState();
     }
     if (m_endpointConfigurationPanel) {
         std::optional<QString> endpointId = std::nullopt;
@@ -4035,6 +3997,20 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
             m_operationBusy,
             currentDesignStamp().catalogRevision);
     }
+    const bool selectedElementHasDraft = selectedElement
+        && m_elementConfigurationPanel
+        && m_elementConfigurationPanel->hasUnappliedDraft(
+            m_designSessionIdentity, *selectedElement);
+    if (m_endpointConfigurationGroup) {
+        m_endpointConfigurationGroup->setVisible(singleEndpoint);
+    }
+    if (m_elementConfigurationGroup) {
+        m_elementConfigurationGroup->setVisible(
+            singleElementConfigurationTarget
+            && (elementConfigurationState
+                    == ElementConfigurationPanelState::Ready
+                || selectedElementHasDraft));
+    }
     m_selectedRouter.reset();
     if (selection.items.size() == 1
         && selection.items.front().kind
@@ -4047,11 +4023,91 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
     }
     updateEndpointQuickAddState();
 
+    QStringList selectionKeyParts;
+    selectionKeyParts.reserve(selection.items.size());
+    for (const NocEditorSelection& item : selection.items) {
+        selectionKeyParts.append(
+            QStringLiteral("%1:%2")
+                .arg(QString::number(static_cast<int>(item.kind)), item.id));
+    }
+    const QString selectionKey = !m_design
+        ? QStringLiteral("no-design")
+        : selectionKeyParts.isEmpty()
+        ? QStringLiteral("none")
+        : selectionKeyParts.join(QLatin1Char('|'));
+    const QString previousSelectionKey = m_inspectorSelectionKey;
+    const bool selectionChanged = selectionKey != previousSelectionKey;
+    m_inspectorSelectionKey = selectionKey;
+    if (selectionChanged && m_inspectorDesignSettings) {
+        if (selection.items.isEmpty()) {
+            m_inspectorDesignSettings->setExpanded(true);
+        } else if (previousSelectionKey.isEmpty()
+                   || previousSelectionKey == QStringLiteral("none")
+                   || previousSelectionKey == QStringLiteral("no-design")) {
+            m_inspectorDesignSettings->setExpanded(false);
+        }
+    }
+    if (selectionChanged && m_inspectorScroll) {
+        QTimer::singleShot(0, m_inspectorScroll, [scroll = m_inspectorScroll] {
+            scroll->verticalScrollBar()->setValue(0);
+        });
+    }
+
+    if (!m_inspectorSummaryPanel) {
+        return;
+    }
+    if (!m_design) {
+        m_inspectorSummaryPanel->setSelectionSummary(std::nullopt);
+        return;
+    }
+
+    ui::InspectorSelectionSummary summary;
+    const auto appendDetail = [&summary](const QString& detail) {
+        if (detail.trimmed().isEmpty()) {
+            return;
+        }
+        if (!summary.detail.isEmpty()) {
+            summary.detail += QStringLiteral("\n\n");
+        }
+        summary.detail += detail.trimmed();
+    };
+    const auto appendElementConfigurationState = [&] {
+        if (!singleElementConfigurationTarget
+            || elementConfigurationState
+                == ElementConfigurationPanelState::Ready) {
+            return;
+        }
+        switch (elementConfigurationState) {
+        case ElementConfigurationPanelState::PackageUnavailable:
+            appendDetail(QStringLiteral(
+                "Element properties are unavailable until this design's "
+                "Package is loaded."));
+            break;
+        case ElementConfigurationPanelState::UnsupportedFormat:
+            appendDetail(QStringLiteral(
+                "Element properties require Design and Package formatVersion 3."));
+            break;
+        case ElementConfigurationPanelState::MissingElement:
+            appendDetail(QStringLiteral(
+                "This element is no longer present in the current Mesh."));
+            break;
+        case ElementConfigurationPanelState::NoApplicablePropertySets:
+            appendDetail(QStringLiteral(
+                "The Package declares no properties for this element."));
+            break;
+        case ElementConfigurationPanelState::UnsupportedSelection:
+        case ElementConfigurationPanelState::NoSelection:
+        case ElementConfigurationPanelState::NoDesign:
+        case ElementConfigurationPanelState::Ready:
+            break;
+        }
+    };
+
     if (selection.items.isEmpty()) {
-        m_selectionSummary->setText(QStringLiteral(
-            "Nothing selected.<br><b>Pan</b> is the default: drag the canvas "
-            "to move the viewport. Hold <b>Shift</b> and drag, or press "
-            "<b>V</b>, to box-select."));
+        summary.title = QStringLiteral("Nothing selected");
+        summary.metadata = QStringLiteral(
+            "Drag canvas to pan · Shift-drag to select");
+        m_inspectorSummaryPanel->setSelectionSummary(summary);
         return;
     }
 
@@ -4072,131 +4128,122 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
             }
         }
         QStringList counts;
-        if (routers > 0) counts.append(QStringLiteral("%1 Router(s)").arg(routers));
-        if (endpoints > 0) counts.append(QStringLiteral("%1 Endpoint(s)").arg(endpoints));
-        if (routerLinks > 0) counts.append(QStringLiteral("%1 Router Link(s)").arg(routerLinks));
+        if (routers > 0) counts.append(QStringLiteral("%1 Router").arg(routers));
+        if (endpoints > 0) counts.append(QStringLiteral("%1 Endpoint").arg(endpoints));
+        if (routerLinks > 0) counts.append(QStringLiteral("%1 Router Link").arg(routerLinks));
         if (attachments > 0) {
-            counts.append(QStringLiteral("%1 Endpoint Attachment(s)").arg(attachments));
+            counts.append(QStringLiteral("%1 Attachment").arg(attachments));
         }
         if (pendingEndpoints > 0) {
-            counts.append(QStringLiteral("%1 unattached Endpoint draft(s)").arg(pendingEndpoints));
+            counts.append(QStringLiteral("%1 unattached Endpoint").arg(pendingEndpoints));
         }
-        const QString meshNote = routers > 0 || routerLinks > 0
-            ? QStringLiteral("<br>Routers and Router Links remain fixed semantic projections "
-                             "of the Mesh; selection does not expose topology creation, deletion, "
-                             "or rewiring.")
-            : QString();
-        m_selectionSummary->setText(
-            QStringLiteral("<b>%1 items selected</b><br>%2%3")
-                .arg(QString::number(selection.items.size()),
-                     counts.join(QStringLiteral(" · ")),
-                     meshNote));
+        summary.title = QStringLiteral("%1 items selected")
+            .arg(selection.items.size());
+        summary.metadata = counts.join(QStringLiteral(" · "));
+        if (routers > 0 || routerLinks > 0) {
+            appendDetail(QStringLiteral(
+                "Router topology remains fixed by the Mesh."));
+        }
+        m_inspectorSummaryPanel->setSelectionSummary(summary);
         return;
     }
 
     const NocEditorSelection& item = selection.items.front();
     if (item.kind == NocEditorSelection::Kind::Router) {
         const std::optional<RouterPosition> position = m_selectedRouter;
-        QString summary =
-            QStringLiteral("<b>Router %1</b><br>Column x: %2<br>Row y: %3<br>"
-                           "Router identity and every Router-to-Router Link are derived from "
-                           "the fixed Mesh. Dragging changes only this local Workspace layout; "
-                           "Router creation, deletion, and manual rewiring are not exposed.")
-                .arg(item.id.toHtmlEscaped(),
-                     QString::number(position ? position->x : -1),
-                     QString::number(position ? position->y : -1));
+        summary.title = QStringLiteral("Router %1").arg(item.id);
+        summary.metadata = QStringLiteral("Column %1 · Row %2 · fixed Mesh")
+            .arg(position ? position->x : -1)
+            .arg(position ? position->y : -1);
+        appendDetail(QStringLiteral(
+            "Moving this node changes only its Workspace layout."));
+        appendElementConfigurationState();
         if (m_nodeEditor && m_design) {
-            summary += domainElementInspectorHtml(
+            appendDetail(domainElementInspectorText(
                 m_nodeEditor->domainPresentation(),
                 packageForDesign(),
                 *m_design,
-                ElementRef{ElementKind::Router, item.id});
+                ElementRef{ElementKind::Router, item.id}));
         }
-        m_selectionSummary->setText(summary);
+        m_inspectorSummaryPanel->setSelectionSummary(summary);
         return;
     }
-    const auto endpoint = m_design
-        ? std::find_if(m_design->endpoints.cbegin(), m_design->endpoints.cend(),
-                       [&item](const EndpointInstance& candidate) {
-                           return candidate.id == item.id;
-                       })
-        : QVector<EndpointInstance>::const_iterator{};
-    const bool endpointFound = m_design && endpoint != m_design->endpoints.cend();
+    const auto endpoint = std::find_if(
+        m_design->endpoints.cbegin(), m_design->endpoints.cend(),
+        [&item](const EndpointInstance& candidate) {
+            return candidate.id == item.id;
+        });
+    const bool endpointFound = endpoint != m_design->endpoints.cend();
     if (item.kind == NocEditorSelection::Kind::Endpoint && endpointFound) {
-        QString summary =
-            QStringLiteral("<b>Endpoint %1</b><br>Type: %2<br>Router: (%3, %4)<br>"
-                           "Slot: %5<br>Moving the node changes only its Workspace position; "
-                           "the attachment changes only through an explicit connection action.")
-                .arg(endpoint->id.toHtmlEscaped(),
-                     endpoint->type.toHtmlEscaped(),
-                     QString::number(endpoint->attachment.router.x),
-                     QString::number(endpoint->attachment.router.y),
-                     endpoint->attachment.slot
-                         .value_or(QStringLiteral("automatic"))
-                         .toHtmlEscaped());
+        summary.title = QStringLiteral("Endpoint %1").arg(endpoint->id);
+        summary.metadata = QStringLiteral("%1 · Router %2 · Slot %3")
+            .arg(endpoint->type,
+                 routerId(endpoint->attachment.router),
+                 endpoint->attachment.slot.value_or(
+                     QStringLiteral("automatic")));
+        appendDetail(QStringLiteral(
+            "Move freely on the canvas. Reconnect the EP port to change its "
+            "Router attachment."));
         if (m_nodeEditor && m_design) {
-            summary += domainElementInspectorHtml(
+            appendDetail(domainElementInspectorText(
                 m_nodeEditor->domainPresentation(),
                 packageForDesign(),
                 *m_design,
-                ElementRef{ElementKind::Endpoint, endpoint->id});
+                ElementRef{ElementKind::Endpoint, endpoint->id}));
         }
-        m_selectionSummary->setText(summary);
+        m_inspectorSummaryPanel->setSelectionSummary(summary);
         return;
     }
     if (item.kind == NocEditorSelection::Kind::RouterLink && m_design) {
         const ElementRef edge{ElementKind::RouterLink, item.id};
-        QString endpointsText;
         if (const auto endpoints = edgeEndpoints(*m_design, edge)) {
-            endpointsText = QStringLiteral("<br>From: %1<br>To: %2")
-                                .arg(endpoints->first.id.toHtmlEscaped(),
-                                     endpoints->second.id.toHtmlEscaped());
+            summary.metadata = QStringLiteral("%1 → %2 · fixed Mesh")
+                .arg(endpoints->first.id, endpoints->second.id);
+        } else {
+            summary.metadata = QStringLiteral("fixed Mesh");
         }
-        const QString crossingText = m_nodeEditor
-            ? domainCrossingInspectorHtml(
-                  m_nodeEditor->domainPresentation(), edge)
-            : QString();
-        m_selectionSummary->setText(
-            QStringLiteral("<b>Router Link %1</b>%2<br>This Link is derived from the fixed "
-                           "Mesh and cannot be created, deleted, or rewired manually.%3")
-                .arg(item.id.toHtmlEscaped(), endpointsText, crossingText));
+        summary.title = QStringLiteral("Router Link %1").arg(item.id);
+        appendDetail(QStringLiteral(
+            "Mesh-managed; manual creation, deletion, and rewiring are unavailable."));
+        appendElementConfigurationState();
+        if (m_nodeEditor) {
+            appendDetail(domainCrossingInspectorText(
+                m_nodeEditor->domainPresentation(), edge));
+        }
+        m_inspectorSummaryPanel->setSelectionSummary(summary);
         return;
     }
     if (item.kind == NocEditorSelection::Kind::EndpointAttachment) {
         const ElementRef edge{ElementKind::EndpointAttachment, item.id};
-        const QString crossingText = m_nodeEditor
-            ? domainCrossingInspectorHtml(
-                  m_nodeEditor->domainPresentation(), edge)
-            : QString();
+        summary.title = QStringLiteral("Endpoint Attachment %1").arg(item.id);
         if (endpointFound) {
-            m_selectionSummary->setText(
-                QStringLiteral("<b>Endpoint Attachment %1</b><br>Router: (%2, %3)<br>"
-                               "Slot: %4<br>This semantic attachment may be disconnected or "
-                               "reassigned explicitly. Endpoint canvas placement remains "
-                               "independent Workspace state.%5")
-                    .arg(endpoint->id.toHtmlEscaped(),
-                         QString::number(endpoint->attachment.router.x),
-                         QString::number(endpoint->attachment.router.y),
-                         endpoint->attachment.slot
-                             .value_or(QStringLiteral("automatic"))
-                             .toHtmlEscaped(),
-                         crossingText));
+            summary.metadata = QStringLiteral("Router %1 · Slot %2")
+                .arg(routerId(endpoint->attachment.router),
+                     endpoint->attachment.slot.value_or(
+                         QStringLiteral("automatic")));
         } else {
-            m_selectionSummary->setText(
-                QStringLiteral("<b>Endpoint Attachment %1</b>%2")
-                    .arg(item.id.toHtmlEscaped(), crossingText));
+            summary.metadata = QStringLiteral("Attachment target unavailable");
         }
+        appendDetail(QStringLiteral(
+            "Disconnect or reconnect this line to change the attachment."));
+        appendElementConfigurationState();
+        if (m_nodeEditor) {
+            appendDetail(domainCrossingInspectorText(
+                m_nodeEditor->domainPresentation(), edge));
+        }
+        m_inspectorSummaryPanel->setSelectionSummary(summary);
         return;
     }
     if (item.kind == NocEditorSelection::Kind::PendingEndpoint) {
-        m_selectionSummary->setText(
-            QStringLiteral("<b>Unattached Endpoint</b><br>Type: %1<br>"
-                           "Drag its EP port to a Router EP port or Router body to attach it. "
-                           "Moving the node only changes its canvas position.")
-                .arg(item.id.toHtmlEscaped()));
+        summary.title = QStringLiteral("Unattached Endpoint");
+        summary.metadata = QStringLiteral("Type %1").arg(item.id);
+        appendDetail(QStringLiteral(
+            "Drag its EP port to a Router EP port or Router body to attach it."));
+        m_inspectorSummaryPanel->setSelectionSummary(summary);
         return;
     }
-    m_selectionSummary->setText(QStringLiteral("Nothing selected."));
+    summary.title = QStringLiteral("Nothing selected");
+    m_inspectorSummaryPanel->setSelectionSummary(summary);
 }
 
 void FinepaperMainWindow::adoptDesignResult(
@@ -4266,11 +4313,12 @@ void FinepaperMainWindow::refreshDesignViews() {
         m_resolvedDesign.reset();
         setWindowTitle(QStringLiteral("Finepaper — NoC Workbench[*]"));
         m_nodeEditor->setDesign(nullptr);
-        m_designOverview->setText(QStringLiteral("No design open"));
-        m_designMetadata->setText(
-            QStringLiteral("Create or open a design to inspect it."));
-        m_designAvailability->clear();
-        m_designAvailability->hide();
+        if (m_inspectorSummaryPanel) {
+            m_inspectorSummaryPanel->setDesignSummary({
+                QStringLiteral("No design open"),
+                QStringLiteral("Create or open a design to inspect it."),
+                {}});
+        }
         rebuildParameterEditors();
         updateInspector({});
         updatePackageControls();
@@ -4301,16 +4349,17 @@ void FinepaperMainWindow::refreshDesignViews() {
             "and parameter editing available. Reload or reinstall this exact Package "
             "before validation or generation.");
     }
-    m_designOverview->setText(m_design->name);
-    m_designMetadata->setText(
-        QStringLiteral("%1@%2 · %3 × %4 Mesh · %5 Endpoint(s)")
-            .arg(m_design->package.id,
-                 m_design->package.version,
-                 QString::number(m_design->topology.rows),
-                 QString::number(m_design->topology.columns),
-                 QString::number(m_design->endpoints.size())));
-    m_designAvailability->setText(availabilityNote);
-    m_designAvailability->setVisible(!availabilityNote.isEmpty());
+    if (m_inspectorSummaryPanel) {
+        m_inspectorSummaryPanel->setDesignSummary({
+            m_design->name,
+            QStringLiteral("%1@%2 · %3 × %4 Mesh · %5 Endpoint(s)")
+                .arg(m_design->package.id,
+                     m_design->package.version,
+                     QString::number(m_design->topology.rows),
+                     QString::number(m_design->topology.columns),
+                     QString::number(m_design->endpoints.size())),
+            availabilityNote});
+    }
     m_performanceSummary->setText(
         QStringLiteral("NoC %1 currently contains a %2 × %3 Mesh and %4 Endpoint(s). "
                        "This view is reserved for Package or IP Engine performance results; "

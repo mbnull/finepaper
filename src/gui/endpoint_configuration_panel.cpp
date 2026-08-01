@@ -3,6 +3,7 @@
 #include "features/domain/endpoint_domain_assignment_dialog.h"
 #include "gui/package_parameter_form.h"
 #include "package/parameter_schema_identity.h"
+#include "ui/theme/ui_tokens.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -323,12 +324,14 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     setObjectName(QStringLiteral("finepaper.endpointConfigurationPanel"));
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(ui::UiMetrics::spacing8);
 
     m_status = new QLabel(this);
     m_status->setObjectName(
         QStringLiteral("finepaper.endpointConfiguration.status"));
     m_status->setWordWrap(true);
-    m_status->setTextFormat(Qt::RichText);
+    m_status->setTextFormat(Qt::PlainText);
+    m_status->setTextInteractionFlags(Qt::TextSelectableByMouse);
     root->addWidget(m_status);
 
     m_conflictStatus = new QLabel(this);
@@ -352,16 +355,16 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
         QStringLiteral("finepaper.endpointConfiguration.editor"));
     auto* editorLayout = new QVBoxLayout(m_editor);
     editorLayout->setContentsMargins(0, 0, 0, 0);
+    editorLayout->setSpacing(ui::UiMetrics::spacing8);
 
-    auto* identity = new QGroupBox(QStringLiteral("Endpoint Identity"), m_editor);
+    auto* identity = new QWidget(m_editor);
+    identity->setObjectName(
+        QStringLiteral("finepaper.endpointConfiguration.identity"));
     auto* identityForm = new QFormLayout(identity);
+    identityForm->setContentsMargins(0, 0, 0, 0);
     identityForm->setFieldGrowthPolicy(
         QFormLayout::AllNonFixedFieldsGrow);
     identityForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
-    m_id = new QLabel(identity);
-    m_id->setObjectName(QStringLiteral("finepaper.endpointConfiguration.id"));
-    m_id->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    identityForm->addRow(QStringLiteral("Stable ID / name"), m_id);
     m_type = new QComboBox(identity);
     m_type->setObjectName(QStringLiteral("finepaper.endpointConfiguration.type"));
     m_type->setSizeAdjustPolicy(
@@ -394,39 +397,33 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     m_typeChangeSummary->setObjectName(
         QStringLiteral("finepaper.endpointConfiguration.typeChangeSummary"));
     m_typeChangeSummary->setWordWrap(true);
-    m_typeChangeSummary->setTextFormat(Qt::RichText);
+    m_typeChangeSummary->setTextFormat(Qt::PlainText);
     m_typeChangeSummary->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    auto* summaryScroll = new QScrollArea(m_editor);
-    summaryScroll->setObjectName(
-        QStringLiteral("finepaper.endpointConfiguration.typeChangeSummaryScroll"));
-    summaryScroll->setWidgetResizable(true);
-    summaryScroll->setFrameShape(QFrame::NoFrame);
-    summaryScroll->setMaximumHeight(180);
-    summaryScroll->setWidget(m_typeChangeSummary);
-    editorLayout->addWidget(summaryScroll);
+    m_typeChangeSummary->hide();
+    editorLayout->addWidget(m_typeChangeSummary);
 
-    auto* parameters = new QGroupBox(
-        QStringLiteral("Endpoint Parameters"), m_editor);
+    auto* parameters = new QWidget(m_editor);
+    parameters->setObjectName(
+        QStringLiteral("finepaper.endpointConfiguration.parameters"));
     auto* parameterLayout = new QVBoxLayout(parameters);
+    parameterLayout->setContentsMargins(0, 0, 0, 0);
+    parameterLayout->setSpacing(ui::UiMetrics::spacing8);
+    auto* parameterTitle = new QLabel(
+        QStringLiteral("Endpoint parameters"), parameters);
+    parameterTitle->setProperty(
+        "finepaperRole", QStringLiteral("subtitle"));
+    parameterLayout->addWidget(parameterTitle);
     auto* note = new QLabel(
-        QStringLiteral(
-            "Only Endpoint-instance parameters are edited here. Select the "
-            "Endpoint attachment line to edit Package-defined attachment properties."),
+        QStringLiteral("Select the connection to edit attachment properties."),
         parameters);
     note->setObjectName(
         QStringLiteral("finepaper.endpointConfiguration.attachmentNote"));
+    note->setProperty("finepaperRole", QStringLiteral("muted"));
     note->setWordWrap(true);
     parameterLayout->addWidget(note);
     m_parameters = new PackageParameterForm(
         QStringLiteral("finepaper.endpointParameter"), parameters);
-    auto* parameterScroll = new QScrollArea(parameters);
-    parameterScroll->setObjectName(
-        QStringLiteral("finepaper.endpointConfiguration.parameterScroll"));
-    parameterScroll->setWidgetResizable(true);
-    parameterScroll->setFrameShape(QFrame::NoFrame);
-    parameterScroll->setMinimumHeight(220);
-    parameterScroll->setWidget(m_parameters);
-    parameterLayout->addWidget(parameterScroll, 1);
+    parameterLayout->addWidget(m_parameters);
     editorLayout->addWidget(parameters, 1);
 
     m_diagnostics = new QLabel(m_editor);
@@ -436,7 +433,7 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     m_diagnostics->setWordWrap(true);
     m_diagnostics->setTextInteractionFlags(Qt::TextSelectableByMouse);
     editorLayout->addWidget(m_diagnostics);
-    m_apply = new QPushButton(QStringLiteral("Apply Endpoint Configuration"), m_editor);
+    m_apply = new QPushButton(QStringLiteral("Apply Endpoint Changes"), m_editor);
     m_apply->setObjectName(
         QStringLiteral("finepaper.endpointConfiguration.apply"));
     editorLayout->addWidget(m_apply);
@@ -520,12 +517,14 @@ void EndpointConfigurationPanel::setContext(
     if (!design) {
         m_status->setText(QStringLiteral(
             "Create or open a design to edit Endpoint parameters."));
+        m_status->show();
         m_editor->hide();
         return;
     }
     if (!package) {
         m_status->setText(QStringLiteral(
-            "<b>Read-only</b><br>The design Package is not loaded."));
+            "Read-only — the design Package is not loaded."));
+        m_status->show();
         m_editor->hide();
         return;
     }
@@ -533,12 +532,14 @@ void EndpointConfigurationPanel::setContext(
         m_status->setText(QStringLiteral(
             "Select one Endpoint node to edit its own parameters. "
             "Selecting its connection edits attachment configuration separately."));
+        m_status->show();
         m_editor->hide();
         return;
     }
     if (!m_endpoint) {
         m_status->setText(QStringLiteral(
             "The selected Endpoint is no longer present in the design."));
+        m_status->show();
         m_editor->hide();
         return;
     }
@@ -546,7 +547,6 @@ void EndpointConfigurationPanel::setContext(
     updateStatus();
     m_editor->show();
     m_editor->setEnabled(!busy);
-    m_id->setText(m_endpoint->id);
 
     std::optional<CachedDraft> cachedDraft = std::nullopt;
     QString draftConflictDetails;
@@ -842,12 +842,13 @@ void EndpointConfigurationPanel::updateValidation() {
         m_diagnostics->setText(QStringLiteral(
             "Apply is unavailable while the preserved draft conflicts with "
             "the current Endpoint source or Package schema."));
+        m_diagnostics->show();
+    } else if (!errors.isEmpty()) {
+        m_diagnostics->setText(errors.join(QLatin1Char('\n')));
+        m_diagnostics->show();
     } else {
-        m_diagnostics->setText(
-            errors.isEmpty()
-                ? QStringLiteral(
-                      "Endpoint parameters satisfy the Package schema.")
-                : errors.join(QLatin1Char('\n')));
+        m_diagnostics->clear();
+        m_diagnostics->hide();
     }
     updateTypeChangeSummary(snapshot.values);
     captureCurrentDraft(snapshot);
@@ -859,16 +860,15 @@ void EndpointConfigurationPanel::updateStatus() {
     }
     if (m_conflicted) {
         m_status->setText(QStringLiteral(
-            "<b>Preserved draft conflict — read-only</b><br>"
-            "The Endpoint source or Package schema changed after this draft "
-            "was created for <code>%1</code>.")
-            .arg(m_endpoint->id.toHtmlEscaped()));
+            "Preserved draft conflict — Endpoint settings are read-only."));
+        m_status->show();
     } else if (m_busy) {
         m_status->setText(
             QStringLiteral("Read-only while another operation is running."));
+        m_status->show();
     } else {
-        m_status->setText(QStringLiteral("Editing Endpoint <b>%1</b>.")
-                              .arg(m_endpoint->id.toHtmlEscaped()));
+        m_status->clear();
+        m_status->hide();
     }
 }
 
@@ -907,19 +907,20 @@ void EndpointConfigurationPanel::updateTypeChangeSummary(
     }
     const QString targetType = m_type->currentData().toString();
     if (targetType == m_endpoint->type) {
-        m_typeChangeSummary->setText(QStringLiteral(
-            "The Endpoint ID and attachment stay unchanged. Applying replaces "
-            "the complete Endpoint parameter object atomically."));
+        m_typeChangeSummary->clear();
+        m_typeChangeSummary->hide();
         return;
     }
     if (!selectedType()) {
         m_typeChangeSummary->setText(
             QStringLiteral("The selected type is not declared by the Package."));
+        m_typeChangeSummary->show();
         return;
     }
     if (!m_baseTypeChangePlan) {
         m_typeChangeSummary->setText(
             QStringLiteral("Type-change preview is unavailable."));
+        m_typeChangeSummary->show();
         return;
     }
 
@@ -940,46 +941,39 @@ void EndpointConfigurationPanel::updateTypeChangeSummary(
     for (const QString& key : keys) {
         const bool hadOld = before.contains(key);
         const bool hasNew = after.contains(key);
-        const QString escapedKey = key.toHtmlEscaped();
         if (hadOld && !hasNew) {
             changes.append(
-                QStringLiteral("<li><b>Drop</b> <code>%1</code>: "
-                               "<code>%2</code> → <i>removed</i></li>")
-                    .arg(escapedKey,
-                         compactJsonValue(before.value(key)).toHtmlEscaped()));
+                QStringLiteral("Drop %1: %2 → removed")
+                    .arg(key, compactJsonValue(before.value(key))));
         } else if (!hadOld && hasNew) {
             changes.append(
-                QStringLiteral("<li><b>Add/default</b> <code>%1</code>: "
-                               "<i>absent</i> → <code>%2</code></li>")
-                    .arg(escapedKey,
-                         compactJsonValue(after.value(key)).toHtmlEscaped()));
+                QStringLiteral("Add/default %1: absent → %2")
+                    .arg(key, compactJsonValue(after.value(key))));
         } else if (before.value(key) == after.value(key)) {
             ++preservedCount;
         } else {
             changes.append(
-                QStringLiteral("<li><b>Change/reset</b> <code>%1</code>: "
-                               "<code>%2</code> → <code>%3</code></li>")
-                    .arg(escapedKey,
-                         compactJsonValue(before.value(key)).toHtmlEscaped(),
-                         compactJsonValue(after.value(key)).toHtmlEscaped()));
+                QStringLiteral("Change/reset %1: %2 → %3")
+                    .arg(key,
+                         compactJsonValue(before.value(key)),
+                         compactJsonValue(after.value(key))));
         }
     }
 
     m_typeChangeSummary->setText(
         QStringLiteral(
-            "<b>Type migration: <code>%1</code> → <code>%2</code></b>"
-            "<br>Strategy: %3"
-            "<ul>%4</ul>"
+            "Type migration: %1 → %2\n"
+            "Strategy: %3\n%4\n"
             "%5 unchanged parameter(s); %6 retained Domain membership(s); "
             "%7 incompatible Endpoint "
             "Attachment configuration record(s).")
-            .arg(m_endpoint->type.toHtmlEscaped(),
-                 targetType.toHtmlEscaped(),
+            .arg(m_endpoint->type,
+                 targetType,
                  selectedMigration()
                          == EndpointParameterMigration::PreserveCompatible
                      ? QStringLiteral("preserve compatible values")
                      : QStringLiteral("reset to Package defaults"),
-                 changes.join(QString()),
+                 changes.join(QLatin1Char('\n')),
                  QString::number(
                      preservedCount),
                  QString::number(
@@ -987,6 +981,7 @@ void EndpointConfigurationPanel::updateTypeChangeSummary(
                  QString::number(
                      m_baseTypeChangePlan
                          ->removedAttachmentConfigurations.size())));
+    m_typeChangeSummary->show();
 }
 
 void EndpointConfigurationPanel::captureCurrentDraft() {

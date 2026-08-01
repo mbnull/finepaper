@@ -51,6 +51,7 @@ target("finepaper-gui")
     add_files("src/ui/common/*.cpp")
     add_files("src/ui/components/*.cpp")
     add_files("src/ui/theme/*.cpp")
+    add_files("src/ui/workbench/*.cpp")
     add_includedirs("src")
 
 target("finepaper-tests")
@@ -442,6 +443,7 @@ target("finepaper-gui-smoke")
     add_files("src/ui/common/schema_value_editor.cpp")
     add_files("src/ui/components/*.cpp")
     add_files("src/ui/theme/*.cpp")
+    add_files("src/ui/workbench/*.cpp")
     add_files("src/gui/workbench_view_registry.cpp")
     add_includedirs("src")
     add_defines('FINEPAPER_SOURCE_DIR="' .. path.unix(os.projectdir()) .. '"')
@@ -466,6 +468,15 @@ target("finepaper-gui-smoke")
             FINEPAPER_GUI_SMOKE_THEME = "dark"
         }
     })
+    add_tests("compact-large-font", {
+        trim_output = true,
+        runenvs = {
+            QT_QPA_PLATFORM = "offscreen",
+            FINEPAPER_GUI_SMOKE_SIZE = "1280x720",
+            FINEPAPER_GUI_SMOKE_THEME = "light",
+            FINEPAPER_GUI_SMOKE_FONT_SCALE = "1.5"
+        }
+    })
 
 target("finepaper-workbench-theme-tests")
     add_rules("qt.widgetapp")
@@ -476,6 +487,21 @@ target("finepaper-workbench-theme-tests")
     add_files("src/ui/components/empty_state.cpp")
     add_files("src/ui/theme/ui_tokens.cpp")
     add_files("src/ui/theme/workbench_style.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+
+target("finepaper-inspector-workbench-tests")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_files("tests/inspector_workbench_tests.cpp")
+    add_files("src/ui/workbench/inspector_design_settings.cpp")
+    add_files("src/ui/workbench/inspector_summary_panel.cpp")
+    add_files("src/ui/theme/ui_tokens.cpp")
     add_includedirs("src")
     add_tests("default", {
         trim_output = true,

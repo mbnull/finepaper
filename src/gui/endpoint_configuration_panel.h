@@ -168,7 +168,6 @@ private:
     QLabel* m_conflictStatus = nullptr;
     QPushButton* m_discardConflict = nullptr;
     QWidget* m_editor = nullptr;
-    QLabel* m_id = nullptr;
     QComboBox* m_type = nullptr;
     QLabel* m_migrationLabel = nullptr;
     QComboBox* m_migration = nullptr;

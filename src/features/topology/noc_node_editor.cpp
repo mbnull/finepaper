@@ -29,6 +29,7 @@
 #include <QFontMetrics>
 #include <QGraphicsItem>
 #include <QGraphicsPathItem>
+#include <QHash>
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMessageBox>
@@ -69,6 +70,9 @@ constexpr qreal kRouterAttachmentUpperStart = 38.0;
 constexpr qreal kRouterAttachmentCenterGapTop = 14.0;
 constexpr qreal kRouterAttachmentCenterGapBottom = 26.0;
 constexpr qreal kRouterAttachmentBottomInset = 26.0;
+constexpr int kRouterAttachmentAggregateHorizontalPadding = 28;
+constexpr qsizetype kRouterAttachmentAggregateCacheCapacity = 64;
+constexpr int kExpandedRouterSizeDelta = 32;
 
 constexpr qreal squared(qreal value) {
     return value * value;
@@ -301,11 +305,8 @@ public:
         }
         if (model->isCollapsed()) {
             const QSize base = nocEditorMetrics().collapsedRouterSize;
-            const QFontMetrics metrics(nocEditorFont(
-                NocEditorFontRole::Caption, QApplication::font()));
-            const int requiredEdge = metrics.horizontalAdvance(
-                routerAttachmentAggregateText(
-                    model->attachmentPortCount(), false)) + 28;
+            const int requiredEdge = attachmentAggregateTextEdge(
+                model->attachmentPortCount(), false);
             const int edge = (std::max)(
                 (std::max)(base.width(), base.height()), requiredEdge);
             return QSize(edge, edge);
@@ -321,13 +322,15 @@ public:
         int edge = (std::max)(
             (std::max)(base.width(), base.height()),
             static_cast<int>(std::ceil(requiredEdge)));
+        const int collapsedTextEdge = attachmentAggregateTextEdge(
+            model->attachmentPortCount(), false);
+        edge = (std::max)(
+            edge, collapsedTextEdge + kExpandedRouterSizeDelta);
         if (hasRouterAttachmentPortOverflow(model->attachmentPortCount())) {
-            const QFontMetrics metrics(nocEditorFont(
-                NocEditorFontRole::Caption, QApplication::font()));
             edge = (std::max)(
                 edge,
-                metrics.horizontalAdvance(routerAttachmentAggregateText(
-                    model->attachmentPortCount(), true)) + 28);
+                attachmentAggregateTextEdge(
+                    model->attachmentPortCount(), true));
         }
         return QSize(edge, edge);
     }
@@ -492,10 +495,41 @@ public:
     }
 
 private:
+    int attachmentAggregateTextEdge(unsigned int logicalCount,
+                                    bool overflow) const {
+        const QFont captionFont = nocEditorFont(
+            NocEditorFontRole::Caption, QApplication::font());
+        if (captionFont != m_attachmentAggregateFont) {
+            m_attachmentAggregateFont = captionFont;
+            m_attachmentAggregateTextEdges.clear();
+        }
+
+        const quint64 cacheKey =
+            (static_cast<quint64>(logicalCount) << 1U)
+            | static_cast<quint64>(overflow);
+        const auto cached = m_attachmentAggregateTextEdges.constFind(cacheKey);
+        if (cached != m_attachmentAggregateTextEdges.cend()) {
+            return *cached;
+        }
+
+        const int edge = QFontMetrics(captionFont).horizontalAdvance(
+            routerAttachmentAggregateText(logicalCount, overflow))
+            + kRouterAttachmentAggregateHorizontalPadding;
+        if (m_attachmentAggregateTextEdges.size()
+            >= kRouterAttachmentAggregateCacheCapacity) {
+            m_attachmentAggregateTextEdges.clear();
+        }
+        m_attachmentAggregateTextEdges.insert(cacheKey, edge);
+        return edge;
+    }
+
     const NocNodeModel* modelFor(QtNodes::NodeId nodeId) const {
         auto* graphModel = dynamic_cast<QtNodes::DataFlowGraphModel*>(&_graphModel);
         return graphModel ? graphModel->delegateModel<NocNodeModel>(nodeId) : nullptr;
     }
+
+    mutable QFont m_attachmentAggregateFont;
+    mutable QHash<quint64, int> m_attachmentAggregateTextEdges;
 };
 
 class NocBlockNodePainter final : public QtNodes::AbstractNodePainter {

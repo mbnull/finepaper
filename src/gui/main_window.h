@@ -27,6 +27,7 @@ class QListWidgetItem;
 class QPlainTextEdit;
 class QProgressBar;
 class QPushButton;
+class QScrollArea;
 class QStackedLayout;
 class QTabWidget;
 class QTableWidget;
@@ -43,6 +44,8 @@ class EndpointConfigurationPanel;
 class PackageParameterForm;
 namespace ui {
 class EmptyState;
+class InspectorDesignSettings;
+class InspectorSummaryPanel;
 }
 
 class FinepaperMainWindow final : public QMainWindow {
@@ -262,22 +265,20 @@ private:
     EndpointPaletteList* m_endpointPalette = nullptr;
 
     QDockWidget* m_inspectorDock = nullptr;
-    QLabel* m_designOverview = nullptr;
-    QLabel* m_designMetadata = nullptr;
-    QLabel* m_designAvailability = nullptr;
-    QGroupBox* m_topologyGroup = nullptr;
+    QScrollArea* m_inspectorScroll = nullptr;
+    ui::InspectorSummaryPanel* m_inspectorSummaryPanel = nullptr;
+    ui::InspectorDesignSettings* m_inspectorDesignSettings = nullptr;
+    QWidget* m_topologyGroup = nullptr;
     QPushButton* m_resizeMeshButton = nullptr;
-    QGroupBox* m_selectionGroup = nullptr;
-    QLabel* m_selectionSummary = nullptr;
-    QGroupBox* m_endpointConfigurationGroup = nullptr;
+    QWidget* m_endpointConfigurationGroup = nullptr;
     EndpointConfigurationPanel* m_endpointConfigurationPanel = nullptr;
-    QGroupBox* m_elementConfigurationGroup = nullptr;
-    QGroupBox* m_parameterGroup = nullptr;
+    QWidget* m_elementConfigurationGroup = nullptr;
+    QWidget* m_parameterGroup = nullptr;
     PackageParameterForm* m_parameterForm = nullptr;
-    QLabel* m_parameterDraftStatus = nullptr;
     QPushButton* m_applyParametersButton = nullptr;
     QPushButton* m_discardParametersButton = nullptr;
     ElementConfigurationPanel* m_elementConfigurationPanel = nullptr;
+    QString m_inspectorSelectionKey;
 
     QDockWidget* m_domainDock = nullptr;
     DomainManagerPanel* m_domainManager = nullptr;
