@@ -3,6 +3,7 @@
 #include <QtGlobal>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <optional>
 
@@ -11,6 +12,9 @@ namespace {
 
 constexpr double kMinimumTextContrast = 4.5;
 constexpr double kMinimumControlContrast = 3.0;
+constexpr int kContrastSearchIterations = 24;
+
+using ContrastBackgrounds = std::array<QColor, 2>;
 
 const QColor kBlack(QStringLiteral("#000000"));
 const QColor kWhite(QStringLiteral("#ffffff"));
@@ -67,6 +71,24 @@ QColor contrastPole(const QColor& background) {
         ? kBlack : kWhite;
 }
 
+double weakestContrast(const QColor& foreground,
+                       const ContrastBackgrounds& backgrounds) {
+    return (std::min)(contrastRatio(foreground, backgrounds[0]),
+                      contrastRatio(foreground, backgrounds[1]));
+}
+
+QColor sharedContrastPole(const ContrastBackgrounds& backgrounds) {
+    return weakestContrast(kBlack, backgrounds)
+            >= weakestContrast(kWhite, backgrounds)
+        ? kBlack : kWhite;
+}
+
+bool meetsContrast(const QColor& foreground,
+                   const ContrastBackgrounds& backgrounds,
+                   double minimumRatio) {
+    return weakestContrast(foreground, backgrounds) >= minimumRatio;
+}
+
 QColor moveToContrast(const QColor& candidate,
                       const QColor& background,
                       const QColor& guaranteedColor,
@@ -80,7 +102,9 @@ QColor moveToContrast(const QColor& candidate,
 
     double lower = 0.0;
     double upper = 1.0;
-    for (int iteration = 0; iteration < 24; ++iteration) {
+    for (int iteration = 0;
+         iteration < kContrastSearchIterations;
+         ++iteration) {
         const double middle = (lower + upper) / 2.0;
         if (contrastRatio(blend(candidate, guaranteedColor, middle), background)
             >= minimumRatio) {
@@ -90,6 +114,78 @@ QColor moveToContrast(const QColor& candidate,
         }
     }
     return blend(candidate, guaranteedColor, upper);
+}
+
+QColor surfaceWithSharedOutlineContrast(const QColor& surface,
+                                        const QColor& preferredRaised,
+                                        double minimumRatio) {
+    ContrastBackgrounds backgrounds = {surface, preferredRaised};
+    if (meetsContrast(
+            sharedContrastPole(backgrounds), backgrounds, minimumRatio)) {
+        return preferredRaised;
+    }
+
+    // A single flat outline cannot satisfy the requested ratio when two
+    // backgrounds straddle its dark and light contrast ranges. This can only
+    // happen with a contradictory system palette (for example, a dark Window
+    // paired with even darker WindowText and therefore classified as light).
+    // Preserve the intended raised direction, but reduce its amount to the
+    // closest point where black or white is a common usable boundary color.
+    double compatibleAmount = 0.0;
+    double incompatibleAmount = 1.0;
+    QColor compatibleSurface = surface;
+    for (int iteration = 0;
+         iteration < kContrastSearchIterations;
+         ++iteration) {
+        const double amount = (compatibleAmount + incompatibleAmount) / 2.0;
+        const QColor raised = blend(surface, preferredRaised, amount);
+        backgrounds[1] = raised;
+        if (meetsContrast(
+                sharedContrastPole(backgrounds), backgrounds, minimumRatio)) {
+            compatibleAmount = amount;
+            compatibleSurface = raised;
+        } else {
+            incompatibleAmount = amount;
+        }
+    }
+    return compatibleSurface;
+}
+
+QColor moveToSharedContrast(const QColor& candidate,
+                            const ContrastBackgrounds& backgrounds,
+                            const QColor& preferredTarget,
+                            double minimumRatio) {
+    if (meetsContrast(candidate, backgrounds, minimumRatio)) {
+        return candidate;
+    }
+
+    const QColor target = meetsContrast(
+                              preferredTarget, backgrounds, minimumRatio)
+        ? preferredTarget : sharedContrastPole(backgrounds);
+    if (!meetsContrast(target, backgrounds, minimumRatio)) {
+        // surfaceWithSharedOutlineContrast() establishes this invariant for
+        // semantic surfaces. Keep the best possible pole as a safe fallback
+        // if this helper is reused with unrelated backgrounds in the future.
+        return target;
+    }
+
+    double lower = 0.0;
+    double upper = 1.0;
+    for (int iteration = 0;
+         iteration < kContrastSearchIterations;
+         ++iteration) {
+        const double middle = (lower + upper) / 2.0;
+        if (meetsContrast(
+                blend(candidate, target, middle), backgrounds, minimumRatio)) {
+            upper = middle;
+        } else {
+            lower = middle;
+        }
+    }
+
+    const QColor adjusted = blend(candidate, target, upper);
+    return meetsContrast(adjusted, backgrounds, minimumRatio)
+        ? adjusted : target;
 }
 
 QColor readableColor(const QColor& preferred,
@@ -185,16 +281,18 @@ UiColors colors(const QPalette& palette) {
         dark ? kWhite : kBlack, surface);
     const QColor text = readableColor(preferredText, surface);
 
-    const QColor surfaceRaised = dark
+    const QColor preferredSurfaceRaised = dark
         ? blend(surface, kWhite, 0.055)
         : blend(surface, kWhite, 0.58);
+    const QColor surfaceRaised = surfaceWithSharedOutlineContrast(
+        surface, preferredSurfaceRaised, kMinimumControlContrast);
     const QColor surfaceSunken = dark
         ? blend(surface, kBlack, 0.20)
         : blend(surface, kBlack, 0.045);
     const QColor outline = blend(surface, text, dark ? 0.22 : 0.16);
-    const QColor outlineStrong = moveToContrast(
+    const QColor outlineStrong = moveToSharedContrast(
         blend(surface, text, dark ? 0.36 : 0.30),
-        surface, text, kMinimumControlContrast);
+        {surface, surfaceRaised}, text, kMinimumControlContrast);
 
     const QColor preferredMutedText = paletteColor(
         palette, QPalette::PlaceholderText,

@@ -1600,6 +1600,10 @@ int main(int argc, char** argv) {
         finepaper::workbench::canvasControlsButtonName);
     auto* wideCanvasControls = window.findChild<QWidget*>(
         QStringLiteral("finepaper.wideCanvasControls"));
+    auto* canvasModeControl = window.findChild<QWidget*>(
+        QStringLiteral("finepaper.canvasModeControl"));
+    auto* runControls = window.findChild<QWidget*>(
+        QStringLiteral("finepaper.runControls"));
     auto* panelNavigationButton = window.findChild<QToolButton*>(
         finepaper::workbench::panelNavigationButtonName);
     QAction* packagePanelAction = window.findChild<QAction*>(
@@ -1610,6 +1614,10 @@ int main(int argc, char** argv) {
         finepaper::workbench::resultsToggleActionName);
     QAction* canvasFocusAction = window.findChild<QAction*>(
         finepaper::workbench::canvasFocusActionName);
+    QAction* fitCanvasAction = window.findChild<QAction*>(
+        QStringLiteral("finepaper.fitCanvasAction"));
+    QAction* regularizeCanvasAction = window.findChild<QAction*>(
+        finepaper::workbench::regularizeActionName);
     const bool toolbarActionsUseText = mainToolbar
         && std::all_of(
             mainToolbar->actions().cbegin(), mainToolbar->actions().cend(),
@@ -1672,15 +1680,18 @@ int main(int argc, char** argv) {
               && centerViews
               && centerViews->tabBar()->isVisible() == !compactPresentation
               && workspaceToolbar->isVisible() == compactPresentation
+              && runControls && !runControls->isVisible()
               && canvasControlsButton
-              && canvasControlsButton->isVisible() == compactPresentation
+              && !canvasControlsButton->isVisible()
               && wideCanvasControls
-              && wideCanvasControls->isVisible() == !compactPresentation
-              && (!compactPresentation || compactCanvasMenuComplete)
+              && !wideCanvasControls->isVisible()
+              && canvasModeControl && !canvasModeControl->isVisible()
+              && compactCanvasMenuComplete
               && visibleToolbarWidgetsFit,
           QStringLiteral(
-              "responsive chrome uses complete text navigation without Qt's icon overflow "
-              "(mode=%1, tabs=%2, workspace=%3, canvas=%4, widgetsFit=%5)")
+              "responsive chrome keeps complete text navigation while hiding "
+              "irrelevant design commands (mode=%1, tabs=%2, workspace=%3, "
+              "canvas=%4, widgetsFit=%5)")
               .arg(responsiveMode)
               .arg(centerViews && centerViews->tabBar()->isVisible())
               .arg(workspaceToolbar && workspaceToolbar->isVisible())
@@ -1721,9 +1732,11 @@ int main(int argc, char** argv) {
               && canvasFocusAction->isCheckable()
               && canvasFocusAction->shortcut()
                   == QKeySequence(QStringLiteral("Ctrl+Shift+F"))
-              && canvasFocusAction->text() == QStringLiteral("Focus Canvas"),
+              && canvasFocusAction->text() == QStringLiteral("Focus Canvas")
+              && !canvasFocusAction->isEnabled()
+              && !canvasFocusAction->isVisible(),
           QStringLiteral(
-              "Canvas Focus is a discoverable text command with a stable shortcut"));
+              "Canvas Focus is explicit but suppressed until a canvas context exists"));
 
     if (packagePanelAction && packageDock) {
         packageDock->show();
@@ -1956,51 +1969,6 @@ int main(int argc, char** argv) {
 
     auto* initialCanvasView = window.findChild<QGraphicsView*>(
         QStringLiteral("finepaper.canvasView"));
-    auto* initialCanvasEmptyAction = window.findChild<QPushButton*>(
-        QStringLiteral("finepaper.emptyStateCreate"));
-    if (packageDock) {
-        packageDock->hide();
-    }
-    if (inspectorDock) {
-        inspectorDock->show();
-        inspectorDock->raise();
-    }
-    if (domainDock) {
-        domainDock->show();
-    }
-    if (resultsDock) {
-        resultsDock->show();
-    }
-    application.processEvents();
-    const QList<bool> customPanelVisibility = {
-        packageDock && packageDock->isVisible(),
-        inspectorDock && inspectorDock->isVisible(),
-        domainDock && domainDock->isVisible(),
-        resultsDock && resultsDock->isVisible()};
-    const QList<Qt::DockWidgetArea> customPanelAreas = {
-        packageDock ? window.dockWidgetArea(packageDock)
-                    : Qt::NoDockWidgetArea,
-        inspectorDock ? window.dockWidgetArea(inspectorDock)
-                      : Qt::NoDockWidgetArea,
-        domainDock ? window.dockWidgetArea(domainDock)
-                   : Qt::NoDockWidgetArea,
-        resultsDock ? window.dockWidgetArea(resultsDock)
-                    : Qt::NoDockWidgetArea};
-    const QList<bool> customPanelFloating = {
-        packageDock && packageDock->isFloating(),
-        inspectorDock && inspectorDock->isFloating(),
-        domainDock && domainDock->isFloating(),
-        resultsDock && resultsDock->isFloating()};
-    const bool customInspectorDomainTabified = inspectorDock && domainDock
-        && window.tabifiedDockWidgets(inspectorDock).contains(domainDock);
-    const int canvasWidthBeforeFocus = initialCanvasView
-        && initialCanvasView->viewport()
-        ? initialCanvasView->viewport()->width() : 0;
-    const int centerWidthBeforeFocus = centerViews
-        ? centerViews->width() : 0;
-    if (centerViews) {
-        centerViews->setCurrentIndex(2);
-    }
     if (initialCanvasView && canvasFocusAction) {
         initialCanvasView->setFocus(Qt::ShortcutFocusReason);
         QTest::keyClick(
@@ -2009,146 +1977,191 @@ int main(int argc, char** argv) {
             Qt::ControlModifier | Qt::ShiftModifier);
         application.processEvents();
     }
-    const int focusedCanvasWidth = initialCanvasView
-        && initialCanvasView->viewport()
-        ? initialCanvasView->viewport()->width() : 0;
-    QLabel* focusedEmptyDescription = nullptr;
-    if (initialCanvasEmptyAction) {
-        for (QLabel* label : initialCanvasEmptyAction->parentWidget()
-                                  ->findChildren<QLabel*>()) {
-            if (label->wordWrap()
-                && label->text().startsWith(
-                    QStringLiteral("New designs will start"))) {
-                focusedEmptyDescription = label;
-                break;
-            }
-        }
-    }
-    check(canvasFocusAction && canvasFocusAction->isChecked()
-              && canvasFocusAction->text()
-                  == QStringLiteral("Exit Canvas Focus")
-              && canvasControlsButton
-              && canvasControlsButton->text()
-                  == QStringLiteral("Canvas Focus: Pan")
-              && packageDock && !packageDock->isVisible()
-              && inspectorDock && !inspectorDock->isVisible()
-              && domainDock && !domainDock->isVisible()
-              && resultsDock && !resultsDock->isVisible()
-              && centerViews && centerViews->currentIndex() == 0
-              && (focusIsWithin(initialCanvasView)
-                  || focusIsWithin(initialCanvasEmptyAction))
-              && focusedCanvasWidth > canvasWidthBeforeFocus
-              && focusedCanvasWidth >= qRound(window.width() * 0.75),
-          QStringLiteral(
-              "Ctrl+Shift+F hides secondary panels, focuses the Editor canvas, "
-              "and expands its viewport (%1 to %2 at window width %3)")
-              .arg(canvasWidthBeforeFocus)
-              .arg(focusedCanvasWidth)
-              .arg(window.width()));
-    check(focusedEmptyDescription && initialCanvasEmptyAction
-              && focusedEmptyDescription->height()
-                  >= focusedEmptyDescription->heightForWidth(
-                      focusedEmptyDescription->width())
-              && focusedEmptyDescription->geometry().bottom()
-                  < initialCanvasEmptyAction->geometry().top(),
-          QStringLiteral(
-              "Canvas Focus reflows the Empty State description above its actions "
-              "(description %1/%2; bottom %3; action top %4; card %5x%6/%7)")
-              .arg(focusedEmptyDescription
-                       ? focusedEmptyDescription->height() : -1)
-              .arg(focusedEmptyDescription
-                       ? focusedEmptyDescription->heightForWidth(
-                             focusedEmptyDescription->width()) : -1)
-              .arg(focusedEmptyDescription
-                       ? focusedEmptyDescription->geometry().bottom() : -1)
-              .arg(initialCanvasEmptyAction
-                       ? initialCanvasEmptyAction->geometry().top() : -1)
-              .arg(initialCanvasEmptyAction
-                       ? initialCanvasEmptyAction->parentWidget()->width() : -1)
-              .arg(initialCanvasEmptyAction
-                       ? initialCanvasEmptyAction->parentWidget()->height() : -1)
-              .arg(initialCanvasEmptyAction
-                       ? initialCanvasEmptyAction->parentWidget()
-                             ->heightForWidth(
-                                 initialCanvasEmptyAction->parentWidget()
-                                     ->width()) : -1));
-    captureSmokeScreenshot(
-        window, QStringLiteral("canvas-focus"), requestedTheme);
-    if (initialCanvasView && canvasFocusAction) {
-        QTest::keyClick(
-            initialCanvasView,
-            Qt::Key_F,
-            Qt::ControlModifier | Qt::ShiftModifier);
-        application.processEvents();
-    }
-    const QList<bool> restoredPanelVisibility = {
-        packageDock && packageDock->isVisible(),
-        inspectorDock && inspectorDock->isVisible(),
-        domainDock && domainDock->isVisible(),
-        resultsDock && resultsDock->isVisible()};
-    const QList<Qt::DockWidgetArea> restoredPanelAreas = {
-        packageDock ? window.dockWidgetArea(packageDock)
-                    : Qt::NoDockWidgetArea,
-        inspectorDock ? window.dockWidgetArea(inspectorDock)
-                      : Qt::NoDockWidgetArea,
-        domainDock ? window.dockWidgetArea(domainDock)
-                   : Qt::NoDockWidgetArea,
-        resultsDock ? window.dockWidgetArea(resultsDock)
-                    : Qt::NoDockWidgetArea};
-    const QList<bool> restoredPanelFloating = {
-        packageDock && packageDock->isFloating(),
-        inspectorDock && inspectorDock->isFloating(),
-        domainDock && domainDock->isFloating(),
-        resultsDock && resultsDock->isFloating()};
-    const bool restoredInspectorDomainTabified = inspectorDock && domainDock
-        && window.tabifiedDockWidgets(inspectorDock).contains(domainDock);
     check(canvasFocusAction && !canvasFocusAction->isChecked()
-              && canvasFocusAction->text() == QStringLiteral("Focus Canvas")
-              && restoredPanelVisibility == customPanelVisibility
-              && restoredPanelAreas == customPanelAreas
-              && restoredPanelFloating == customPanelFloating
-              && restoredInspectorDomainTabified
-                  == customInspectorDomainTabified
-              && centerViews && centerViews->currentIndex() == 2
-              && (responsiveMode == QStringLiteral("wide")
-                      ? qAbs(centerViews->width()
-                             - centerWidthBeforeFocus) <= 1
-                      : centerViews->width()
-                            >= centerWidthBeforeFocus),
+              && centerViews && centerViews->currentIndex() == 0,
           QStringLiteral(
-              "leaving Canvas Focus restores customized panel intent and reapplies responsive sizing "
-              "(checked %1; text %2; visibility %3; areas %4; floating %5; "
-              "tabs %6; width %7/%8)")
-              .arg(canvasFocusAction && canvasFocusAction->isChecked())
-              .arg(canvasFocusAction ? canvasFocusAction->text()
-                                     : QStringLiteral("missing"))
-              .arg(customPanelVisibility == restoredPanelVisibility)
-              .arg(customPanelAreas == restoredPanelAreas)
-              .arg(customPanelFloating == restoredPanelFloating)
-              .arg(customInspectorDomainTabified
-                   == restoredInspectorDomainTabified)
-              .arg(centerWidthBeforeFocus)
-              .arg(centerViews ? centerViews->width() : -1));
+              "the hidden no-design Canvas Focus shortcut cannot displace the start task"));
 
-    if (canvasFocusAction) {
+    const auto verifyCanvasFocusRoundTrip = [&] {
+        if (!initialCanvasView || !canvasFocusAction || !centerViews) {
+            check(false, QStringLiteral(
+                "Canvas Focus regression prerequisites are available"));
+            return;
+        }
+        centerViews->setCurrentIndex(0);
+        if (packageDock) {
+            packageDock->hide();
+        }
+        if (inspectorDock) {
+            inspectorDock->show();
+            inspectorDock->raise();
+        }
+        if (domainDock) {
+            domainDock->show();
+        }
+        if (resultsDock) {
+            resultsDock->show();
+        }
+        application.processEvents();
+        const QList<bool> customPanelVisibility = {
+            packageDock && packageDock->isVisible(),
+            inspectorDock && inspectorDock->isVisible(),
+            domainDock && domainDock->isVisible(),
+            resultsDock && resultsDock->isVisible()};
+        const QList<Qt::DockWidgetArea> customPanelAreas = {
+            packageDock ? window.dockWidgetArea(packageDock)
+                        : Qt::NoDockWidgetArea,
+            inspectorDock ? window.dockWidgetArea(inspectorDock)
+                          : Qt::NoDockWidgetArea,
+            domainDock ? window.dockWidgetArea(domainDock)
+                       : Qt::NoDockWidgetArea,
+            resultsDock ? window.dockWidgetArea(resultsDock)
+                        : Qt::NoDockWidgetArea};
+        const QList<bool> customPanelFloating = {
+            packageDock && packageDock->isFloating(),
+            inspectorDock && inspectorDock->isFloating(),
+            domainDock && domainDock->isFloating(),
+            resultsDock && resultsDock->isFloating()};
+        const bool customInspectorDomainTabified = inspectorDock && domainDock
+            && window.tabifiedDockWidgets(inspectorDock).contains(domainDock);
+        const int canvasWidthBeforeFocus = initialCanvasView->viewport()->width();
+        const int centerWidthBeforeFocus = centerViews->width();
+        const QString modeBeforeFocus = window.property(
+            finepaper::workbench::workbenchWidthModeProperty).toString();
+
+        initialCanvasView->setFocus(Qt::ShortcutFocusReason);
         canvasFocusAction->trigger();
         application.processEvents();
-    }
-    if (packageNavigation) {
-        packageNavigation->trigger();
+        const int focusedCanvasWidth = initialCanvasView->viewport()->width();
+        check(canvasFocusAction->isChecked()
+                  && canvasFocusAction->text()
+                      == QStringLiteral("Exit Canvas Focus")
+                  && canvasControlsButton
+                  && canvasControlsButton->text()
+                      == QStringLiteral("Canvas Focus: Pan")
+                  && packageDock && !packageDock->isVisible()
+                  && inspectorDock && !inspectorDock->isVisible()
+                  && domainDock && !domainDock->isVisible()
+                  && resultsDock && !resultsDock->isVisible()
+                  && centerViews->currentIndex() == 0
+                  && focusIsWithin(initialCanvasView)
+                  && focusedCanvasWidth > canvasWidthBeforeFocus
+                  && focusedCanvasWidth >= qRound(window.width() * 0.75),
+              QStringLiteral(
+                  "Canvas Focus hides secondary panels, focuses the Editor "
+                  "canvas, and expands its viewport (%1 to %2 at window width "
+                  "%3; checked=%4; docks=%5/%6/%7/%8; focus=%9; mode=%10)")
+                  .arg(canvasWidthBeforeFocus)
+                  .arg(focusedCanvasWidth)
+                  .arg(window.width())
+                  .arg(canvasFocusAction->isChecked())
+                  .arg(packageDock && packageDock->isVisible())
+                  .arg(inspectorDock && inspectorDock->isVisible())
+                  .arg(domainDock && domainDock->isVisible())
+                  .arg(resultsDock && resultsDock->isVisible())
+                  .arg(focusIsWithin(initialCanvasView))
+                  .arg(window.property(
+                      finepaper::workbench::workbenchWidthModeProperty)
+                           .toString()));
+        captureSmokeScreenshot(
+            window, QStringLiteral("canvas-focus"), requestedTheme);
+
+        canvasFocusAction->trigger();
         application.processEvents();
-    }
-    check(canvasFocusAction && !canvasFocusAction->isChecked()
-              && packageDock && packageDock->isVisible()
-              && centerViews && centerViews->currentIndex() == 2
-              && focusIsWithin(creationPackageSelector),
-          QStringLiteral(
-              "opening a panel from Canvas Focus first restores the workbench, then focuses that panel"));
-    if (resetWorkbenchLayoutAction) {
-        resetWorkbenchLayoutAction->trigger();
+        const QList<bool> restoredPanelVisibility = {
+            packageDock && packageDock->isVisible(),
+            inspectorDock && inspectorDock->isVisible(),
+            domainDock && domainDock->isVisible(),
+            resultsDock && resultsDock->isVisible()};
+        const QList<Qt::DockWidgetArea> restoredPanelAreas = {
+            packageDock ? window.dockWidgetArea(packageDock)
+                        : Qt::NoDockWidgetArea,
+            inspectorDock ? window.dockWidgetArea(inspectorDock)
+                          : Qt::NoDockWidgetArea,
+            domainDock ? window.dockWidgetArea(domainDock)
+                       : Qt::NoDockWidgetArea,
+            resultsDock ? window.dockWidgetArea(resultsDock)
+                        : Qt::NoDockWidgetArea};
+        const QList<bool> restoredPanelFloating = {
+            packageDock && packageDock->isFloating(),
+            inspectorDock && inspectorDock->isFloating(),
+            domainDock && domainDock->isFloating(),
+            resultsDock && resultsDock->isFloating()};
+        const bool restoredInspectorDomainTabified = inspectorDock && domainDock
+            && window.tabifiedDockWidgets(inspectorDock).contains(domainDock);
+        check(!canvasFocusAction->isChecked()
+                  && canvasFocusAction->text() == QStringLiteral("Focus Canvas")
+                  && restoredPanelVisibility == customPanelVisibility
+                  && restoredPanelAreas == customPanelAreas
+                  && restoredPanelFloating == customPanelFloating
+                  && restoredInspectorDomainTabified
+                      == customInspectorDomainTabified
+                  && centerViews->currentIndex() == 0
+                  && (modeBeforeFocus == QStringLiteral("wide")
+                          ? qAbs(centerViews->width()
+                                 - centerWidthBeforeFocus) <= 1
+                          : centerViews->width()
+                                >= centerWidthBeforeFocus),
+              QStringLiteral(
+                  "leaving Canvas Focus restores customized panel intent and "
+                  "responsive sizing"));
+
+        canvasFocusAction->trigger();
         application.processEvents();
-    }
-    restoreRequestedClientSize();
+        centerViews->setCurrentIndex(1);
+        application.processEvents();
+        application.processEvents();
+        const QList<bool> tabSwitchPanelVisibility = {
+            packageDock && packageDock->isVisible(),
+            inspectorDock && inspectorDock->isVisible(),
+            domainDock && domainDock->isVisible(),
+            resultsDock && resultsDock->isVisible()};
+        check(!canvasFocusAction->isChecked()
+                  && canvasFocusAction->text() == QStringLiteral("Focus Canvas")
+                  && centerViews->currentIndex() == 1
+                  && tabSwitchPanelVisibility == customPanelVisibility
+                  && focusIsWithin(centerViews)
+                  && !focusIsWithin(initialCanvasView),
+              QStringLiteral(
+                  "switching tabs directly exits Canvas Focus, preserves the "
+                  "requested view, restores panels, and moves focus out of the hidden canvas "
+                  "(checked=%1, text=%2, index=%3, panels=%4/%5/%6/%7, "
+                  "expected=%8/%9/%10/%11, centerFocus=%12, canvasFocus=%13)")
+                  .arg(canvasFocusAction->isChecked())
+                  .arg(canvasFocusAction->text())
+                  .arg(centerViews->currentIndex())
+                  .arg(tabSwitchPanelVisibility.value(0))
+                  .arg(tabSwitchPanelVisibility.value(1))
+                  .arg(tabSwitchPanelVisibility.value(2))
+                  .arg(tabSwitchPanelVisibility.value(3))
+                  .arg(customPanelVisibility.value(0))
+                  .arg(customPanelVisibility.value(1))
+                  .arg(customPanelVisibility.value(2))
+                  .arg(customPanelVisibility.value(3))
+                  .arg(focusIsWithin(centerViews))
+                  .arg(focusIsWithin(initialCanvasView)));
+
+        centerViews->setCurrentIndex(0);
+        application.processEvents();
+        canvasFocusAction->trigger();
+        application.processEvents();
+        if (packageNavigation) {
+            packageNavigation->trigger();
+            application.processEvents();
+        }
+        check(!canvasFocusAction->isChecked()
+                  && packageDock && packageDock->isVisible()
+                  && centerViews->currentIndex() == 0
+                  && focusIsWithin(creationPackageSelector),
+              QStringLiteral(
+                  "opening a panel from Canvas Focus restores the workbench "
+                  "before focusing that panel"));
+        if (resetWorkbenchLayoutAction) {
+            resetWorkbenchLayoutAction->trigger();
+            application.processEvents();
+        }
+        restoreRequestedClientSize();
+    };
 
     auto* resultTabs = resultsDock ? qobject_cast<QTabWidget*>(resultsDock->widget()) : nullptr;
     check(resultTabs && resultTabs->count() == 3,
@@ -2217,11 +2230,22 @@ int main(int argc, char** argv) {
           QStringLiteral(
               "Package maintenance actions remain fully visible inside the NoC Library"));
     if (fontScale >= 1.5) {
-        check(installPackageButton && reloadPackagesButton
-                  && installPackageButton->geometry().bottom()
-                      < reloadPackagesButton->geometry().top(),
+        const bool actionsStacked = installPackageButton
+            && reloadPackagesButton
+            && installPackageButton->geometry().bottom()
+                < reloadPackagesButton->geometry().top();
+        const bool actionsFitSideBySide = installPackageButton
+            && reloadPackagesButton
+            && installPackageButton->geometry().right()
+                < reloadPackagesButton->geometry().left()
+            && installPackageButton->width()
+                >= installPackageButton->sizeHint().width()
+            && reloadPackagesButton->width()
+                >= reloadPackagesButton->sizeHint().width();
+        check(actionsStacked || actionsFitSideBySide,
               QStringLiteral(
-                  "large system fonts stack Package maintenance actions before labels clip"));
+                  "large system fonts keep Package actions complete, stacking "
+                  "only when the labels no longer fit side by side"));
     }
     check(activePackage
               && activePackage->text().contains(QStringLiteral("No design is open")),
@@ -2273,9 +2297,9 @@ int main(int argc, char** argv) {
     check(initialSelectCanvasAction && !initialSelectCanvasAction->isEnabled()
               && !initialSelectCanvasAction->isChecked()
               && initialPanCanvasAction && !initialPanCanvasAction->isEnabled()
-              && !initialPanCanvasAction->isChecked(),
+              && initialPanCanvasAction->isChecked(),
           QStringLiteral(
-              "canvas interaction modes are disabled while the canvas has no design"));
+              "the default Pan mode is retained but disabled while no design exists"));
     check(applyParameters && !applyParameters->isEnabled(),
           QStringLiteral("parameter application is disabled without a design"));
     check(resizeMeshButton && !resizeMeshButton->isEnabled()
@@ -2317,10 +2341,6 @@ int main(int argc, char** argv) {
     captureSmokeScreenshot(window, QStringLiteral("no-design"), requestedTheme);
     if (requestedScope == QStringLiteral("workbench")) {
         if (compactPresentation && workspaceSelector && centerViews) {
-            if (canvasFocusAction && !canvasFocusAction->isChecked()) {
-                canvasFocusAction->trigger();
-                application.processEvents();
-            }
             workspaceSelector->setFocus(Qt::ShortcutFocusReason);
             QTest::keyClick(workspaceSelector, Qt::Key_Down);
             application.processEvents();
@@ -2330,7 +2350,7 @@ int main(int argc, char** argv) {
                       && canvasFocusAction
                       && !canvasFocusAction->isChecked(),
                   QStringLiteral(
-                      "the Compact Workspace selector switches views by keyboard using complete text and exits Canvas Focus"));
+                      "the Compact Workspace selector switches views by keyboard using complete text"));
         }
         if (centerViews) {
             centerViews->setCurrentIndex(0);
@@ -2353,12 +2373,101 @@ int main(int argc, char** argv) {
                         && inspectorDock && inspectorDock->isVisible()
                     : packageDock && !packageDock->isVisible()
                         && inspectorDock && !inspectorDock->isVisible();
+        const bool designCompactPresentation =
+            designResponsiveMode != QStringLiteral("wide");
+        const bool designCommandBarReady = runControls
+            && runControls->isVisible()
+            && canvasControlsButton
+            && canvasControlsButton->isVisible()
+                == designCompactPresentation
+            && wideCanvasControls
+            && wideCanvasControls->isVisible()
+                == !designCompactPresentation
+            && canvasModeControl
+            && canvasModeControl->isVisible()
+                == !designCompactPresentation
+            && canvasFocusAction && canvasFocusAction->isVisible()
+            && canvasFocusAction->isEnabled()
+            && fitCanvasAction && fitCanvasAction->isVisible()
+            && fitCanvasAction->isEnabled()
+            && regularizeCanvasAction
+            && regularizeCanvasAction->isVisible()
+            && regularizeCanvasAction->isEnabled()
+            && initialSelectCanvasAction
+            && initialSelectCanvasAction->isVisible()
+            && initialSelectCanvasAction->isEnabled()
+            && initialPanCanvasAction
+            && initialPanCanvasAction->isVisible()
+            && initialPanCanvasAction->isEnabled();
         check(designPanelsMatchPriority
                   && packagePanelAction && packagePanelAction->isChecked()
-                  && inspectorPanelAction && inspectorPanelAction->isChecked(),
+                  && inspectorPanelAction && inspectorPanelAction->isChecked()
+                  && designCommandBarReady,
               QStringLiteral(
-                  "after design creation, %1 responsiveness prioritizes Inspector without erasing Package intent")
+                  "after design creation, %1 responsiveness restores the "
+                  "Editor command bar and prioritizes Inspector without "
+                  "erasing Package intent")
                   .arg(designResponsiveMode));
+
+        QWidget* navigationFocus = designCompactPresentation
+            ? static_cast<QWidget*>(workspaceSelector)
+            : static_cast<QWidget*>(centerViews ? centerViews->tabBar()
+                                                : nullptr);
+        if (navigationFocus) {
+            navigationFocus->setFocus(Qt::TabFocusReason);
+        }
+        const bool panWasChecked = initialPanCanvasAction
+            && initialPanCanvasAction->isChecked();
+        if (centerViews) {
+            centerViews->setCurrentIndex(1);
+            application.processEvents();
+            QTest::keyClick(centerViews->currentWidget(), Qt::Key_V);
+            application.processEvents();
+        }
+        const bool canvasWidgetsHidden = canvasControlsButton
+            && !canvasControlsButton->isVisible()
+            && wideCanvasControls && !wideCanvasControls->isVisible();
+        const bool canvasActionsHidden = canvasFocusAction
+            && !canvasFocusAction->isEnabled()
+            && !canvasFocusAction->isVisible()
+            && fitCanvasAction && !fitCanvasAction->isEnabled()
+            && !fitCanvasAction->isVisible()
+            && regularizeCanvasAction
+            && !regularizeCanvasAction->isEnabled()
+            && !regularizeCanvasAction->isVisible()
+            && initialSelectCanvasAction
+            && !initialSelectCanvasAction->isEnabled()
+            && !initialSelectCanvasAction->isVisible();
+        const bool canvasModeRetained = initialPanCanvasAction
+            && initialPanCanvasAction->isChecked() == panWasChecked;
+        const bool commandBarFocusSafe = !focusIsWithin(wideCanvasControls)
+            && !focusIsWithin(canvasControlsButton);
+        check(runControls && runControls->isVisible()
+                  && canvasWidgetsHidden && canvasActionsHidden
+                  && canvasModeRetained && commandBarFocusSafe,
+              QStringLiteral(
+                  "non-Editor Workspaces retain Run while suppressing Canvas "
+                  "commands, shortcuts, and focus changes (run=%1, "
+                  "widgetsHidden=%2, actionsHidden=%3, modeRetained=%4, "
+                  "focusSafe=%5)")
+                  .arg(runControls && runControls->isVisible())
+                  .arg(canvasWidgetsHidden)
+                  .arg(canvasActionsHidden)
+                  .arg(canvasModeRetained)
+                  .arg(commandBarFocusSafe));
+        if (centerViews) {
+            centerViews->setCurrentIndex(0);
+            application.processEvents();
+        }
+        check(canvasFocusAction && canvasFocusAction->isEnabled()
+                  && (designCompactPresentation
+                          ? canvasControlsButton
+                                && canvasControlsButton->isVisible()
+                          : wideCanvasControls
+                                && wideCanvasControls->isVisible()),
+              QStringLiteral(
+                  "returning to Editor restores the responsive Canvas commands"));
+        verifyCanvasFocusRoundTrip();
         closeDiscarding(window);
         application.processEvents();
         QTextStream(stdout)
@@ -2390,6 +2499,7 @@ int main(int argc, char** argv) {
               && initialValidateAction && initialValidateAction->isEnabled()
               && initialGenerateAction && initialGenerateAction->isEnabled(),
           QStringLiteral("active NoC IP, design actions and Endpoint Palette stay aligned"));
+    verifyCanvasFocusRoundTrip();
     check(endpointLibrarySection && packageLibrarySection
               && endpointLibrarySection->y() < packageLibrarySection->y(),
           QStringLiteral(
@@ -2486,6 +2596,35 @@ int main(int argc, char** argv) {
               && graphicsView
               && graphicsView->dragMode() == QGraphicsView::ScrollHandDrag,
           QStringLiteral("canvas opens in the directly draggable Pan mode"));
+    QWidget* canvasKeyTarget = nullptr;
+    if (graphicsView) {
+        window.activateWindow();
+        window.raise();
+        graphicsView->setFocus(Qt::ShortcutFocusReason);
+        application.processEvents();
+        canvasKeyTarget = QApplication::focusWidget();
+        if (canvasKeyTarget) {
+            QTest::keyClick(canvasKeyTarget, Qt::Key_V);
+        }
+        application.processEvents();
+    }
+    const bool selectShortcutApplied = selectCanvasAction
+        && selectCanvasAction->isChecked()
+        && nodeEditor
+        && nodeEditor->canvasInteractionMode()
+            == finepaper::NocCanvasInteractionMode::Select;
+    if (canvasKeyTarget) {
+        QTest::keyClick(canvasKeyTarget, Qt::Key_H);
+        application.processEvents();
+    }
+    check(canvasKeyTarget && focusIsWithin(graphicsView)
+              && selectShortcutApplied
+              && panCanvasAction && panCanvasAction->isChecked()
+              && nodeEditor
+              && nodeEditor->canvasInteractionMode()
+                  == finepaper::NocCanvasInteractionMode::Pan,
+          QStringLiteral(
+              "V and H switch the visible Canvas mode through real keyboard input"));
     if (reduceMotionAction) {
         const bool originalReducedMotion = reduceMotionAction->isChecked();
         reduceMotionAction->setChecked(!originalReducedMotion);
@@ -4585,14 +4724,27 @@ int main(int argc, char** argv) {
     }
     if (centerViews) {
         centerViews->setCurrentIndex(1);
+        application.processEvents();
     }
     if (canvasFocusAction) {
         canvasFocusAction->trigger();
         application.processEvents();
     }
-    check(canvasFocusAction && canvasFocusAction->isChecked(),
+    const bool focusBlockedOutsideEditor = canvasFocusAction
+        && !canvasFocusAction->isChecked();
+    if (centerViews) {
+        centerViews->setCurrentIndex(0);
+        application.processEvents();
+    }
+    if (canvasFocusAction) {
+        canvasFocusAction->trigger();
+        application.processEvents();
+    }
+    check(focusBlockedOutsideEditor
+              && canvasFocusAction && canvasFocusAction->isChecked(),
           QStringLiteral(
-              "Canvas Focus can remain active while the workbench session closes"));
+              "Canvas Focus enters only from Editor and can remain active while "
+              "the workbench session closes"));
     if (nodeEditor) {
         nodeEditor->setRouterCollapsed(QStringLiteral("r-0-0"), true);
     }
@@ -4633,9 +4785,10 @@ int main(int argc, char** argv) {
                   || (restoredDomainDock && restoredDomainDock->isVisible())
                   || (restoredResultsDock && restoredResultsDock->isVisible()))
               && restoredCenterViews
-              && restoredCenterViews->currentIndex() == 1,
+              && restoredCenterViews->currentIndex() == 0,
           QStringLiteral(
-              "closing during Canvas Focus persists the underlying panel and center-view state, not the transient focus state"));
+              "closing during Canvas Focus persists the underlying Editor and "
+              "panel state, not the transient focus state"));
     check(restoredResultTabs && restoredActivityResultPage
               && restoredResultTabs->currentWidget()
                   == restoredActivityResultPage,

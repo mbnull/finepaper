@@ -23,6 +23,26 @@ QString cssColor(const QColor& color) {
     return color.name(QColor::HexRgb);
 }
 
+QString centeredDividerGradient(const QString& background,
+                                const QString& divider,
+                                Qt::Orientation orientation) {
+    const double halfLine = 0.5
+        / static_cast<double>(UiMetrics::resizerHitExtent);
+    const QString lineStart = QString::number(0.5 - halfLine, 'f', 3);
+    const QString lineEnd = QString::number(0.5 + halfLine, 'f', 3);
+    const QString axis = orientation == Qt::Horizontal
+        ? QStringLiteral("x1:0, y1:0, x2:1, y2:0")
+        : QStringLiteral("x1:0, y1:0, x2:0, y2:1");
+    return QStringLiteral(
+               "qlineargradient(%1, stop:0 %2, stop:%3 %2, "
+               "stop:%3 %4, stop:%5 %4, stop:%5 %2, stop:1 %2)")
+        .arg(axis)
+        .arg(background)
+        .arg(lineStart)
+        .arg(divider)
+        .arg(lineEnd);
+}
+
 void ensureReadableApplicationFont(QApplication& application) {
     QFont font = application.font();
     if (font.pointSizeF() > 0.0
@@ -99,6 +119,14 @@ QString workbenchStyleSheet(const QPalette& palette) {
     const QString warning = cssColor(token.warning);
     const QString error = cssColor(token.error);
     const QString canvas = cssColor(token.canvas);
+    const QString xAxisDivider = centeredDividerGradient(
+        surface, outlineStrong, Qt::Horizontal);
+    const QString yAxisDivider = centeredDividerGradient(
+        surface, outlineStrong, Qt::Vertical);
+    const QString xAxisDividerHover = centeredDividerGradient(
+        surface, accent, Qt::Horizontal);
+    const QString yAxisDividerHover = centeredDividerGradient(
+        surface, accent, Qt::Vertical);
 
     QString sheet;
     QTextStream out(&sheet);
@@ -175,13 +203,24 @@ QString workbenchStyleSheet(const QPalette& palette) {
         << UiMetrics::spacing4 << "px;"
         << "}\n";
 
+    // A crisp centre line keeps the shell visually light while the complete
+    // separator remains an easy-to-hit resize target.
     out << "QMainWindow::separator {"
-        << " background-color: " << outline << ";"
-        << " width: 1px; height: 1px;"
-        << " margin: " << UiMetrics::spacing4 / 2 << "px;"
+        << " background-color: " << surface << ";"
+        << " width: " << UiMetrics::resizerHitExtent << "px;"
+        << " height: " << UiMetrics::resizerHitExtent << "px;"
         << "}\n"
-        << "QMainWindow::separator:hover {"
-        << " background-color: " << accent << ";"
+        << "QMainWindow::separator:horizontal {"
+        << " background: " << yAxisDivider << ";"
+        << "}\n"
+        << "QMainWindow::separator:vertical {"
+        << " background: " << xAxisDivider << ";"
+        << "}\n"
+        << "QMainWindow::separator:horizontal:hover {"
+        << " background: " << yAxisDividerHover << ";"
+        << "}\n"
+        << "QMainWindow::separator:vertical:hover {"
+        << " background: " << xAxisDividerHover << ";"
         << "}\n";
 
     out << "QDockWidget { color: " << text << "; }\n"
@@ -401,10 +440,21 @@ QString workbenchStyleSheet(const QPalette& palette) {
         << " background-color: " << canvas << ";"
         << " border: 0;"
         << "}\n"
-        << "QSplitter::handle { background-color: " << outline << "; }\n"
-        << "QSplitter::handle:horizontal { width: 1px; }\n"
-        << "QSplitter::handle:vertical { height: 1px; }\n"
-        << "QSplitter::handle:hover { background-color: " << accent << "; }\n";
+        << "QSplitter::handle { background-color: " << surface << "; }\n"
+        << "QSplitter::handle:horizontal {"
+        << " width: " << UiMetrics::resizerHitExtent << "px;"
+        << " background: " << xAxisDivider << ";"
+        << "}\n"
+        << "QSplitter::handle:vertical {"
+        << " height: " << UiMetrics::resizerHitExtent << "px;"
+        << " background: " << yAxisDivider << ";"
+        << "}\n"
+        << "QSplitter::handle:horizontal:hover {"
+        << " background: " << xAxisDividerHover << ";"
+        << "}\n"
+        << "QSplitter::handle:vertical:hover {"
+        << " background: " << yAxisDividerHover << ";"
+        << "}\n";
 
     // Semantic roles are deliberately property-based. Components can opt in
     // without tying the theme to object names or feature-specific classes.
@@ -486,16 +536,27 @@ QString workbenchStyleSheet(const QPalette& palette) {
         << " border-color: " << outline << ";"
         << "}\n";
 
-    out << "QToolButton[finepaperRole=\"canvasMode\"] {"
+    out << "QWidget[finepaperRole=\"segmentedControl\"] {"
+        << " background-color: " << sunken << ";"
+        << " border: 1px solid " << outlineStrong << ";"
+        << " border-radius: " << UiMetrics::radiusSmall << "px;"
+        << "}\n"
+        << "QWidget[finepaperRole=\"segmentedControl\"]"
+        << " QToolButton[finepaperRole=\"segment\"] {"
         << " background: transparent;"
-        << " border-color: transparent;"
-        << "}\n"
-        << "QToolButton[finepaperRole=\"canvasMode\"]:hover {"
-        << " background-color: " << accentSubtle << ";"
-        << "}\n"
-        << "QToolButton[finepaperRole=\"canvasMode\"]:checked {"
-        << " background-color: " << accentSubtle << ";"
         << " color: " << text << ";"
+        << " border: 2px solid transparent;"
+        << " border-radius: " << UiMetrics::radiusSmall - 1 << "px;"
+        << " min-height: " << UiMetrics::controlCompactHeight - 2 << "px;"
+        << " padding: 0 " << UiMetrics::spacing8 << "px;"
+        << "}\n"
+        << "QWidget[finepaperRole=\"segmentedControl\"]"
+        << " QToolButton[finepaperRole=\"segment\"]:hover {"
+        << " background-color: " << accentSubtle << ";"
+        << "}\n"
+        << "QWidget[finepaperRole=\"segmentedControl\"]"
+        << " QToolButton[finepaperRole=\"segment\"]:checked {"
+        << " background-color: " << raised << ";"
         << " border-color: " << accent << ";"
         << " font-weight: 600;"
         << "}\n";
@@ -514,6 +575,11 @@ QString workbenchStyleSheet(const QPalette& palette) {
         << "QTabBar::tab:focus {"
         << " border: 1px solid " << accent << ";"
         << " border-bottom: 2px solid " << accent << ";"
+        << "}\n"
+        << "QWidget[finepaperRole=\"segmentedControl\"]"
+        << " QToolButton[finepaperRole=\"segment\"]:focus {"
+        << " background-color: " << accentSubtle << ";"
+        << " border: 2px dashed " << accent << ";"
         << "}\n";
 
     return sheet;

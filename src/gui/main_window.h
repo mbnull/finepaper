@@ -194,6 +194,7 @@ private:
         panelRole(QDockWidget* dock) const;
     void setCanvasFocusMode(bool enabled);
     void updateCanvasFocusActionPresentation(bool enabled);
+    void updateCommandBarPresentation();
     void updateResponsiveWorkbenchPresentation(
         ui::WorkbenchWidthMode mode);
     void updateWorkspaceNavigationPresentation();
@@ -264,9 +265,11 @@ private:
     QAction* m_domainLayerSeparator = nullptr;
     QAction* m_domainLayerLabelAction = nullptr;
     QAction* m_domainLayerSelectorAction = nullptr;
+    QAction* m_runControlsAction = nullptr;
     QAction* m_wideCanvasSeparatorAction = nullptr;
     QAction* m_wideCanvasControlsAction = nullptr;
     QAction* m_compactCanvasControlsAction = nullptr;
+    QAction* m_panelNavigationSeparatorAction = nullptr;
     QAction* m_packagePanelAction = nullptr;
     QAction* m_inspectorPanelAction = nullptr;
     QAction* m_domainManagerPanelAction = nullptr;

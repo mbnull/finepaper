@@ -1,20 +1,33 @@
 #include "ui/components/empty_state.h"
+#include "ui/components/segmented_action_control.h"
 #include "ui/theme/ui_tokens.h"
 #include "ui/theme/workbench_style.h"
 #include "ui/workbench/widgets/workbench_dock_title_bar.h"
 
+#include <QAction>
+#include <QActionGroup>
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDockWidget>
+#include <QEvent>
 #include <QFont>
+#include <QImage>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMainWindow>
 #include <QPalette>
+#include <QPixmap>
+#include <QPointer>
 #include <QPushButton>
+#include <QSplitter>
+#include <QSplitterHandle>
+#include <QStyle>
 #include <QString>
 #include <QTextStream>
 #include <QToolButton>
 #include <QWidget>
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -62,6 +75,13 @@ void verifySemanticPalette(const QPalette& palette, bool expectedDark) {
           QStringLiteral("muted text remains readable against the surface"));
     check(finepaper::ui::contrastRatio(token.onAccent, token.accent) >= 4.5,
           QStringLiteral("accent controls keep readable foreground text"));
+    check(finepaper::ui::contrastRatio(token.outlineStrong, token.surface)
+                  >= 3.0
+              && finepaper::ui::contrastRatio(
+                     token.outlineStrong, token.surfaceRaised)
+                  >= 3.0,
+          QStringLiteral(
+              "strong control outlines meet non-text contrast on both shell surfaces"));
     check(token.canvas != token.canvasFineGrid
               && token.canvasFineGrid != token.canvasCoarseGrid,
           QStringLiteral("canvas background and both grid levels remain distinguishable"));
@@ -71,15 +91,159 @@ void verifySemanticPalette(const QPalette& palette, bool expectedDark) {
     const QString sheet = finepaper::ui::workbenchStyleSheet(palette);
     check(sheet.contains(QStringLiteral("finepaperRole=\"primary\""))
               && sheet.contains(QStringLiteral("finepaperRole=\"danger\""))
-              && sheet.contains(QStringLiteral("finepaperRole=\"canvasMode\""))
+              && sheet.contains(QStringLiteral("finepaperRole=\"segmentedControl\""))
+              && sheet.contains(QStringLiteral("finepaperRole=\"segment\""))
               && sheet.contains(QStringLiteral("finepaperRole=\"dockTitleBar\""))
               && sheet.contains(QStringLiteral("QMainWindow::separator"))
-              && sheet.contains(QStringLiteral("QGraphicsView:focus")),
+              && sheet.contains(QStringLiteral("QGraphicsView:focus"))
+              && sheet.contains(
+                  QStringLiteral("border: 2px dashed %1")
+                      .arg(token.accent.name(QColor::HexRgb))),
           QStringLiteral("workbench stylesheet exposes stable semantic component roles"));
     check(sheet.contains(token.surface.name(QColor::HexRgb))
               && sheet.contains(token.accent.name(QColor::HexRgb))
               && sheet.contains(token.canvas.name(QColor::HexRgb)),
           QStringLiteral("stylesheet is generated from semantic palette tokens"));
+}
+
+void sendKey(QWidget* target, int key) {
+    if (!target) {
+        return;
+    }
+    QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier);
+    QApplication::sendEvent(target, &event);
+}
+
+void verifySegmentedActionControl(QApplication& application) {
+    finepaper::ui::SegmentedActionControl control;
+    control.setAccessibleName(QStringLiteral("Canvas interaction mode"));
+
+    QActionGroup modeGroup(&control);
+    modeGroup.setExclusive(true);
+    QAction selectAction(QStringLiteral("Select"), &control);
+    QAction panAction(QStringLiteral("Pan"), &control);
+    QAction inspectAction(QStringLiteral("Inspect"), &control);
+    for (QAction* action : {&selectAction, &panAction, &inspectAction}) {
+        action->setCheckable(true);
+        modeGroup.addAction(action);
+    }
+    selectAction.setStatusTip(QStringLiteral("Select canvas objects"));
+    selectAction.setChecked(true);
+
+    QToolButton* selectButton = control.addAction(
+        &selectAction, QStringLiteral("test.segment.select"));
+    QToolButton* panButton = control.addAction(
+        &panAction, QStringLiteral("test.segment.pan"));
+    QToolButton* inspectButton = control.addAction(
+        &inspectAction, QStringLiteral("test.segment.inspect"));
+    control.show();
+    application.processEvents();
+
+    check(control.property("finepaperRole").toString()
+                  == QStringLiteral("segmentedControl")
+              && selectButton && panButton && inspectButton
+              && selectButton->property("finepaperRole").toString()
+                  == QStringLiteral("segment")
+              && selectButton->defaultAction() == &selectAction
+              && selectButton->toolButtonStyle() == Qt::ToolButtonTextOnly
+              && selectButton->focusPolicy() == Qt::StrongFocus,
+          QStringLiteral(
+              "segmented controls project shared QActions as keyboard-focusable text"));
+
+    selectButton->setFocus(Qt::TabFocusReason);
+    sendKey(selectButton, Qt::Key_Right);
+    check(panAction.isChecked() && panButton->hasFocus(),
+          QStringLiteral(
+              "Right Arrow moves and activates the next canvas mode"));
+
+    control.setLayoutDirection(Qt::RightToLeft);
+    panButton->setFocus(Qt::TabFocusReason);
+    sendKey(panButton, Qt::Key_Right);
+    check(selectAction.isChecked() && selectButton->hasFocus(),
+          QStringLiteral(
+              "segmented Arrow navigation follows right-to-left visual order"));
+    sendKey(selectButton, Qt::Key_End);
+    check(inspectAction.isChecked() && inspectButton->hasFocus(),
+          QStringLiteral("End activates the final available segment"));
+
+    selectAction.setText(QStringLiteral("&Choose"));
+    selectAction.setStatusTip(QStringLiteral("Choose canvas objects"));
+    application.processEvents();
+    check(selectButton->text() == QStringLiteral("Choose")
+              && selectButton->accessibleName() == QStringLiteral("Choose")
+              && selectButton->accessibleDescription()
+                  == QStringLiteral("Choose canvas objects"),
+          QStringLiteral(
+              "segment labels and accessible guidance stay synchronized with QAction "
+              "(text=%1, name=%2, description=%3)")
+              .arg(selectButton->text(),
+                   selectButton->accessibleName(),
+                   selectButton->accessibleDescription()));
+
+    QFont enlargedFont = control.font();
+    if (enlargedFont.pointSizeF() > 0.0) {
+        enlargedFont.setPointSizeF(enlargedFont.pointSizeF() * 2.0);
+    } else if (enlargedFont.pixelSize() > 0) {
+        enlargedFont.setPixelSize(enlargedFont.pixelSize() * 2);
+    }
+    control.setFont(enlargedFont);
+    control.adjustSize();
+    application.processEvents();
+    const QList<QToolButton*> segmentButtons = control.buttons();
+    const bool enlargedLabelsFit = std::all_of(
+        segmentButtons.cbegin(), segmentButtons.cend(),
+        [](const QToolButton* button) {
+            return button && button->height() >= button->fontMetrics().height()
+                && button->width()
+                    >= button->fontMetrics().horizontalAdvance(button->text());
+        });
+    check(enlargedLabelsFit,
+          QStringLiteral(
+              "segmented text remains visible when the system font is enlarged"));
+
+    finepaper::ui::SegmentedActionControl optionalControl;
+    QActionGroup optionalGroup(&optionalControl);
+    optionalGroup.setExclusionPolicy(
+        QActionGroup::ExclusionPolicy::ExclusiveOptional);
+    QAction optionalAction(QStringLiteral("Optional"), &optionalControl);
+    optionalAction.setCheckable(true);
+    optionalGroup.addAction(&optionalAction);
+    optionalControl.addAction(&optionalAction);
+    optionalControl.show();
+    optionalAction.setChecked(true);
+    optionalAction.setChecked(false);
+    application.processEvents();
+    check(!optionalGroup.checkedAction(),
+          QStringLiteral(
+              "segmented controls preserve ExclusiveOptional action-group semantics"));
+
+    finepaper::ui::SegmentedActionControl lifecycleControl;
+    QActionGroup lifecycleGroup(&lifecycleControl);
+    lifecycleGroup.setExclusionPolicy(
+        QActionGroup::ExclusionPolicy::Exclusive);
+    QAction stableAction(QStringLiteral("Stable"), &lifecycleControl);
+    stableAction.setCheckable(true);
+    lifecycleGroup.addAction(&stableAction);
+    stableAction.setChecked(true);
+    QToolButton* stableButton = lifecycleControl.addAction(&stableAction);
+    QPointer<QToolButton> transientButton;
+    {
+        QAction transientAction(QStringLiteral("Transient"));
+        transientAction.setCheckable(true);
+        lifecycleGroup.addAction(&transientAction);
+        transientButton = lifecycleControl.addAction(&transientAction);
+        lifecycleControl.show();
+        application.processEvents();
+        check(lifecycleControl.buttons().size() == 2,
+              QStringLiteral("both live actions are represented as segments"));
+    }
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    sendKey(stableButton, Qt::Key_Right);
+    check(lifecycleControl.buttons().size() == 1
+              && transientButton.isNull()
+              && stableAction.isChecked(),
+          QStringLiteral(
+              "destroying an external action removes its segment from keyboard navigation"));
 }
 
 } // namespace
@@ -201,13 +365,89 @@ int main(int argc, char** argv) {
               finepaper::ui::colors(dark).surface.name(QColor::HexRgb)),
           QStringLiteral("refreshed stylesheet uses the new palette tokens"));
 
+    verifySegmentedActionControl(application);
+
+    QSplitter horizontalSplitter(Qt::Horizontal);
+    horizontalSplitter.addWidget(new QWidget(&horizontalSplitter));
+    horizontalSplitter.addWidget(new QWidget(&horizontalSplitter));
+    horizontalSplitter.resize(320, 120);
+    horizontalSplitter.setSizes({150, 150});
+    horizontalSplitter.show();
+    application.processEvents();
+    check(horizontalSplitter.handleWidth()
+                  >= finepaper::ui::UiMetrics::resizerHitExtent,
+          QStringLiteral(
+              "splitter dividers expose the semantic resize hit target"));
+    QSplitterHandle* splitterHandle = horizontalSplitter.handle(1);
+    const QImage splitterHandleImage = splitterHandle
+        ? splitterHandle->grab().toImage() : QImage{};
+    double strongestSplitterLineContrast = 0.0;
+    if (!splitterHandleImage.isNull()) {
+        const int sampleY = splitterHandleImage.height() / 2;
+        const QColor edgeColor = splitterHandleImage.pixelColor(0, sampleY);
+        for (int x = 0; x < splitterHandleImage.width(); ++x) {
+            strongestSplitterLineContrast = (std::max)(
+                strongestSplitterLineContrast,
+                finepaper::ui::contrastRatio(
+                    splitterHandleImage.pixelColor(x, sampleY), edgeColor));
+        }
+    }
+    check(splitterHandleImage.width()
+                  >= finepaper::ui::UiMetrics::resizerHitExtent
+              && strongestSplitterLineContrast >= 1.5,
+          QStringLiteral(
+              "the forgiving splitter hit target paints a visibly distinct centre line "
+              "(width=%1, contrast=%2)")
+              .arg(splitterHandleImage.width())
+              .arg(strongestSplitterLineContrast, 0, 'f', 2));
+
     QMainWindow dockHost;
+    auto* centralWidget = new QWidget(&dockHost);
+    dockHost.setCentralWidget(centralWidget);
     auto* dock = new QDockWidget(QStringLiteral("Inspector"), &dockHost);
     dock->setWidget(new QWidget(dock));
     finepaper::ui::installWorkbenchDockTitleBar(dock);
     dockHost.addDockWidget(Qt::RightDockWidgetArea, dock);
+    dockHost.resize(600, 320);
     dockHost.show();
     application.processEvents();
+    check(dockHost.style()->pixelMetric(
+              QStyle::PM_DockWidgetSeparatorExtent, nullptr, &dockHost)
+                  >= finepaper::ui::UiMetrics::resizerHitExtent,
+          QStringLiteral(
+              "Dock separators expose the same forgiving resize hit target"));
+    const int separatorLeft = centralWidget->geometry().right() + 1;
+    const int separatorRight = dock->geometry().left() - 1;
+    const int separatorWidth = separatorRight - separatorLeft + 1;
+    const QImage dockHostImage = dockHost.grab().toImage();
+    const qreal dockImageScale = dockHostImage.devicePixelRatio();
+    const auto logicalPixel = [&dockHostImage, dockImageScale](int x, int y) {
+        const int pixelX = std::clamp(
+            qRound((static_cast<qreal>(x) + 0.5) * dockImageScale),
+            0, dockHostImage.width() - 1);
+        const int pixelY = std::clamp(
+            qRound((static_cast<qreal>(y) + 0.5) * dockImageScale),
+            0, dockHostImage.height() - 1);
+        return dockHostImage.pixelColor(pixelX, pixelY);
+    };
+    double dockSeparatorCenterContrast = 0.0;
+    if (separatorWidth > 0 && !dockHostImage.isNull()) {
+        const int sampleY = centralWidget->geometry().center().y();
+        const QColor separatorEdge = logicalPixel(separatorLeft, sampleY);
+        for (int x = separatorLeft; x <= separatorRight; ++x) {
+            dockSeparatorCenterContrast = (std::max)(
+                dockSeparatorCenterContrast,
+                finepaper::ui::contrastRatio(
+                    logicalPixel(x, sampleY), separatorEdge));
+        }
+    }
+    check(separatorWidth >= finepaper::ui::UiMetrics::resizerHitExtent
+              && dockSeparatorCenterContrast >= 1.5,
+          QStringLiteral(
+              "the Dock resize strip paints a visibly distinct centre line inside "
+              "its forgiving hit target (width=%1, contrast=%2)")
+              .arg(separatorWidth)
+              .arg(dockSeparatorCenterContrast, 0, 'f', 2));
     auto* floatButton = dock->titleBarWidget()->findChild<QToolButton*>(
         QStringLiteral("finepaper.dockTitleBar.floatButton"));
     auto* closeButton = dock->titleBarWidget()->findChild<QToolButton*>(

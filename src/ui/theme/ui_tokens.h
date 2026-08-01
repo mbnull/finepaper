@@ -25,6 +25,10 @@ struct UiMetrics final {
 
     static constexpr int controlCompactHeight = 32;
     static constexpr int controlHeight = 36;
+
+    // Resize handles use a forgiving hit target while the theme paints only
+    // a thin divider through their centre.
+    static constexpr int resizerHitExtent = 7;
 };
 
 struct UiColors final {
