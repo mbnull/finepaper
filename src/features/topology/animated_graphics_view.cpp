@@ -3,10 +3,12 @@
 #include "features/topology/noc_editor_style.h"
 #include "features/topology/topology_text.h"
 
+#include <QAction>
 #include <QBrush>
 #include <QFontMetrics>
 #include <QFocusEvent>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QPainter>
 #include <QRadialGradient>
 
@@ -22,6 +24,7 @@ AnimatedGraphicsView::AnimatedGraphicsView(QtNodes::BasicGraphicsScene* scene,
       m_fadeAnimation(new QVariantAnimation(this)) {
     setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
     setRubberBandSelectionMode(Qt::IntersectsItemShape);
+    installSemanticCommandBoundary();
 
     m_pulseAnimation->setObjectName(
         QStringLiteral("finepaper.endpointDragPulse"));
@@ -56,6 +59,77 @@ AnimatedGraphicsView::AnimatedGraphicsView(QtNodes::BasicGraphicsScene* scene,
 void AnimatedGraphicsView::onDeleteSelectedObjects() {
     if (semanticDeleteRequested) {
         semanticDeleteRequested();
+    }
+}
+
+void AnimatedGraphicsView::onDuplicateSelectedObjects() {
+    reportUnavailableCommand(NocCanvasCommand::Duplicate);
+}
+
+void AnimatedGraphicsView::onCopySelectedObjects() {
+    reportUnavailableCommand(NocCanvasCommand::Copy);
+}
+
+void AnimatedGraphicsView::onPasteObjects() {
+    reportUnavailableCommand(NocCanvasCommand::Paste);
+}
+
+void AnimatedGraphicsView::installSemanticCommandBoundary() {
+    // GraphicsView installs projection-oriented Copy/Paste/Duplicate and
+    // history actions in its constructor. Keep only selection clearing and
+    // semantic Delete. Clearing shortcuts as well as removing the actions is
+    // important: QUndoStack may re-enable its actions when a node is moved.
+    const QList<QAction*> inheritedActions = actions();
+    for (QAction* action : inheritedActions) {
+        if (!action || action == clearSelectionAction()
+            || action == deleteSelectionAction()) {
+            continue;
+        }
+        action->setShortcuts({});
+        action->setEnabled(false);
+        removeAction(action);
+    }
+
+    for (const NocCanvasCommand command : unavailableCanvasCommands) {
+        installUnavailableCommandAction(command);
+    }
+}
+
+void AnimatedGraphicsView::installUnavailableCommandAction(
+    NocCanvasCommand command) {
+    const UnavailableCanvasCommandPresentation presentation =
+        unavailableCanvasCommandPresentation(command);
+    auto* action = new QAction(presentation.actionText, this);
+    action->setObjectName(presentation.actionObjectName);
+    action->setShortcutContext(Qt::WidgetShortcut);
+    action->setAutoRepeat(false);
+    switch (command) {
+    case NocCanvasCommand::Copy:
+        action->setShortcuts(QKeySequence::Copy);
+        break;
+    case NocCanvasCommand::Paste:
+        action->setShortcuts(QKeySequence::Paste);
+        break;
+    case NocCanvasCommand::Duplicate:
+        action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+        break;
+    case NocCanvasCommand::Undo:
+        action->setShortcuts(QKeySequence::Undo);
+        break;
+    case NocCanvasCommand::Redo:
+        action->setShortcuts(QKeySequence::Redo);
+        break;
+    }
+    connect(action, &QAction::triggered, this, [this, command] {
+        reportUnavailableCommand(command);
+    });
+    addAction(action);
+}
+
+void AnimatedGraphicsView::reportUnavailableCommand(
+    NocCanvasCommand command) {
+    if (unavailableCommandRequested) {
+        unavailableCommandRequested(command);
     }
 }
 

@@ -64,7 +64,10 @@
 #include <QToolBar>
 #include <QToolButton>
 #include <QTimer>
+#include <QUndoStack>
 #include <QVariantAnimation>
+
+#include <QtTest/QTest>
 
 #include <QtNodes/AbstractGraphModel>
 #include <QtNodes/BasicGraphicsScene>
@@ -2083,6 +2086,102 @@ int main(int argc, char** argv) {
     const auto router11 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-1-1"));
     check(router00 && router10 && router01 && router11,
           QStringLiteral("Mesh Router identities are present in the editor projection"));
+    if (animatedView && graphicsScene && router00) {
+        graphicsScene->clearSelection();
+        if (auto* router = graphicsScene->nodeGraphicsObject(*router00)) {
+            router->setSelected(true);
+            graphicsScene->nodeSelected(*router00);
+        }
+        application.processEvents();
+
+        const std::unordered_set<QtNodes::NodeId> nodesBeforeBlockedCommands =
+            graphicsScene->graphModel().allNodeIds();
+        const std::unordered_set<QtNodes::ConnectionId>
+            connectionsBeforeBlockedCommands = sceneConnectionIds(graphicsScene);
+        const bool modifiedBeforeBlockedCommands = window.isWindowModified();
+        bool blockedActionsInstalled = true;
+        bool blockedActionsReported = true;
+        QSet<QString> blockedActionNames;
+        window.activateWindow();
+        animatedView->setFocus(Qt::ShortcutFocusReason);
+        application.processEvents();
+        for (const finepaper::NocCanvasCommand command
+             : finepaper::unavailableCanvasCommands) {
+            const finepaper::UnavailableCanvasCommandPresentation presentation =
+                finepaper::unavailableCanvasCommandPresentation(command);
+            blockedActionNames.insert(presentation.actionObjectName);
+            QAction* action = animatedView->findChild<QAction*>(
+                presentation.actionObjectName, Qt::FindDirectChildrenOnly);
+            blockedActionsInstalled = blockedActionsInstalled
+                && action && animatedView->actions().contains(action)
+                && action->shortcutContext() == Qt::WidgetShortcut
+                && !action->shortcuts().isEmpty();
+            if (action && !action->shortcuts().isEmpty()) {
+                animatedView->setFocus(Qt::ShortcutFocusReason);
+                window.statusBar()->clearMessage();
+                QTest::keySequence(
+                    animatedView, action->shortcuts().constFirst());
+                application.processEvents();
+                const bool commandReported =
+                    window.statusBar()->currentMessage()
+                    == presentation.statusMessage;
+                blockedActionsReported = blockedActionsReported
+                    && commandReported;
+                check(commandReported,
+                      QStringLiteral(
+                          "%1 shortcut reports the semantic canvas policy")
+                          .arg(presentation.actionText));
+            }
+        }
+        check(blockedActionsInstalled,
+              QStringLiteral(
+                  "canvas-local Copy, Paste, Duplicate, Undo, and Redo shortcuts are semantic no-op actions"));
+        check(blockedActionsReported,
+              QStringLiteral(
+                  "unsupported canvas commands explain their semantic alternative in text"));
+
+        bool activeCanvasShortcutsAreSemantic = true;
+        for (QAction* action : animatedView->actions()) {
+            if (!action || action == animatedView->clearSelectionAction()
+                || action == animatedView->deleteSelectionAction()
+                || action->shortcuts().isEmpty()) {
+                continue;
+            }
+            activeCanvasShortcutsAreSemantic =
+                activeCanvasShortcutsAreSemantic
+                && blockedActionNames.contains(action->objectName())
+                && action->shortcutContext() == Qt::WidgetShortcut;
+        }
+        check(activeCanvasShortcutsAreSemantic,
+              QStringLiteral(
+                  "every active canvas editing shortcut is an explicit semantic action"));
+
+        animatedView->onCopySelectedObjects();
+        animatedView->onPasteObjects();
+        animatedView->onDuplicateSelectedObjects();
+        application.processEvents();
+        check(graphicsScene->graphModel().allNodeIds()
+                      == nodesBeforeBlockedCommands
+                  && sceneConnectionIds(graphicsScene)
+                      == connectionsBeforeBlockedCommands
+                  && window.isWindowModified()
+                      == modifiedBeforeBlockedCommands
+                  && !graphicsScene->undoStack().canUndo()
+                  && !graphicsScene->undoStack().canRedo(),
+              QStringLiteral(
+                  "generic canvas command entry points cannot mutate design, projection, dirty state, or transient history"));
+
+        const QtNodes::NodeId rejectedGenericNode =
+            graphicsScene->graphModel().addNode(
+                QStringLiteral("FinepaperNoCNode"));
+        check(rejectedGenericNode == QtNodes::InvalidNodeId
+                  && graphicsScene->graphModel().allNodeIds()
+                      == nodesBeforeBlockedCommands,
+              QStringLiteral(
+                  "the graph model rejects generic node creation outside a semantic projection rebuild"));
+        graphicsScene->clearSelection();
+        application.processEvents();
+    }
     if (graphicsView && graphicsScene) {
         graphicsScene->clearSelection();
         graphicsView->setFocus(Qt::TabFocusReason);
@@ -2384,23 +2483,45 @@ int main(int argc, char** argv) {
                              .arg(draggedRouterPosition->x())
                              .arg(draggedRouterPosition->y())
                        : QStringLiteral("missing")));
+    check(graphicsScene && !graphicsScene->undoStack().canUndo()
+              && !graphicsScene->undoStack().canRedo(),
+          QStringLiteral(
+              "a Router projection rebuild discards QtNodes history containing transient NodeIds"));
     auto* shortcutTextInput = window.findChild<QLineEdit*>(
         QStringLiteral("finepaper.outputRoot"));
+    QString shortcutTextBeforeTyping;
+    bool shortcutTextAcceptedInput = false;
+    bool textUndoStayedLocal = false;
     if (shortcutTextInput) {
         shortcutTextInput->setFocus();
+        shortcutTextBeforeTyping = shortcutTextInput->text();
         shortcutTextInput->setCursorPosition(shortcutTextInput->text().size());
         QKeyEvent pressR(QEvent::KeyPress, Qt::Key_R, Qt::NoModifier, QStringLiteral("r"));
         QKeyEvent releaseR(QEvent::KeyRelease, Qt::Key_R, Qt::NoModifier, QStringLiteral("r"));
         QApplication::sendEvent(shortcutTextInput, &pressR);
         QApplication::sendEvent(shortcutTextInput, &releaseR);
         application.processEvents();
+        shortcutTextAcceptedInput =
+            shortcutTextInput->text() == shortcutTextBeforeTyping + QLatin1Char('r');
+        QKeyEvent undoPress(
+            QEvent::KeyPress, Qt::Key_Z, Qt::ControlModifier);
+        QKeyEvent undoRelease(
+            QEvent::KeyRelease, Qt::Key_Z, Qt::ControlModifier);
+        QApplication::sendEvent(shortcutTextInput, &undoPress);
+        QApplication::sendEvent(shortcutTextInput, &undoRelease);
+        application.processEvents();
+        textUndoStayedLocal =
+            shortcutTextInput->text() == shortcutTextBeforeTyping;
     }
     const std::optional<QPointF> routerAfterTextInput = nodeEditor
         ? nodeEditor->routerVisualPosition(QStringLiteral("r-0-0")) : std::nullopt;
-    check(shortcutTextInput && shortcutTextInput->text().endsWith(QLatin1Char('r'))
+    check(shortcutTextInput && shortcutTextAcceptedInput
               && routerAfterTextInput
               && QLineF(*routerAfterTextInput, movedRouterPosition).length() < 1.0,
           QStringLiteral("single-key canvas shortcuts do not fire while editing text"));
+    check(textUndoStayedLocal,
+          QStringLiteral(
+              "Ctrl+Z remains available to a focused text field instead of reaching the canvas"));
     const auto selectedMovedRouter = nodeIdWithCaption(
         graphicsScene, QStringLiteral("r-0-0"));
     check(selectedMovedRouter
@@ -2986,6 +3107,10 @@ int main(int argc, char** argv) {
     check(selectedFreeEndpoint
               && graphicsScene->nodeGraphicsObject(*selectedFreeEndpoint)->isSelected(),
           QStringLiteral("releasing a freely moved Endpoint keeps it selected"));
+    check(graphicsScene && !graphicsScene->undoStack().canUndo()
+              && !graphicsScene->undoStack().canRedo(),
+          QStringLiteral(
+              "persisting a freely moved Endpoint discards projection-only move history"));
     if (nodeEditor) {
         nodeEditor->setRouterVisualPosition(
             QStringLiteral("r-0-0"), movedRouterPosition);

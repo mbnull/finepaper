@@ -35,6 +35,7 @@ namespace finepaper {
 
 class AnimatedGraphicsView;
 enum class EndpointDragTarget;
+enum class NocCanvasCommand;
 
 enum class NocCanvasInteractionMode {
     Select,
@@ -179,6 +180,7 @@ public:
         workspaceDiagnosticRaised;
     std::function<void(attachment::Rejection, std::optional<RouterPosition>)>
         attachmentRejected;
+    std::function<void(NocCanvasCommand)> canvasCommandUnavailable;
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -222,6 +224,7 @@ private:
     };
 
     void rebuildGraph(bool zoomToContents = true);
+    void discardTransientProjectionHistory();
     void applyDesign(const NocDesign* design, attachment::Policy policy);
     void beginSemanticMutation();
     void endSemanticMutation(bool refreshProjection);

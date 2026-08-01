@@ -6,6 +6,7 @@
 #include "features/domain/domain_manager_panel.h"
 #include "features/domain/presentation/domain_text.h"
 #include "features/attachment/endpoint_attachment_rules.h"
+#include "features/topology/canvas_command_policy.h"
 #include "gui/element_configuration_panel.h"
 #include "gui/endpoint_configuration_panel.h"
 #include "features/domain/endpoint_domain_assignment_dialog.h"
@@ -572,6 +573,7 @@ FinepaperMainWindow::~FinepaperMainWindow() {
         m_nodeEditor->semanticSelectionChanged = {};
         m_nodeEditor->workspaceDiagnosticRaised = {};
         m_nodeEditor->attachmentRejected = {};
+        m_nodeEditor->canvasCommandUnavailable = {};
     }
     if (m_domainManager) {
         m_domainManager->validateAddDomain = {};
@@ -928,6 +930,12 @@ void FinepaperMainWindow::createCentralViews() {
         statusBar()->showMessage(message, 6000);
         appendActivity(QStringLiteral("Endpoint attachment unchanged: %1")
                            .arg(message));
+    };
+    m_nodeEditor->canvasCommandUnavailable = [this](
+        NocCanvasCommand command) {
+        statusBar()->showMessage(
+            unavailableCanvasCommandPresentation(command).statusMessage,
+            unavailableCanvasCommandStatusDurationMs);
     };
     m_nodeEditor->semanticSelectionChanged = [this](
         const NocEditorSelectionSet& selection) {

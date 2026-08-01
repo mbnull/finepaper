@@ -1,5 +1,7 @@
 #pragma once
 
+#include "features/topology/canvas_command_policy.h"
+
 #include <QtNodes/GraphicsView>
 
 #include <QColor>
@@ -37,7 +39,11 @@ public:
     // QtNodes owns the platform Delete shortcut. Route that entry point back
     // through the NoC semantic model instead of its generic graph deletion.
     void onDeleteSelectedObjects() override;
+    void onDuplicateSelectedObjects() override;
+    void onCopySelectedObjects() override;
+    void onPasteObjects() override;
     std::function<void()> semanticDeleteRequested;
+    std::function<void(NocCanvasCommand)> unavailableCommandRequested;
 
     void beginEndpointDrag(const QPoint& viewportPosition,
                            const QString& endpointLabel,
@@ -70,6 +76,14 @@ protected:
     void focusOutEvent(QFocusEvent* event) override;
 
 private:
+    // A NoC canvas and its semantic model share one lifetime. Replacing the
+    // scene would also reinstall QtNodes' projection-editing shortcuts, so it
+    // is intentionally unavailable through the concrete view type.
+    using QtNodes::GraphicsView::setScene;
+
+    void installSemanticCommandBoundary();
+    void installUnavailableCommandAction(NocCanvasCommand command);
+    void reportUnavailableCommand(NocCanvasCommand command);
     void animateOverlayTo(qreal targetOpacity);
     void drawEndpointDragOverlay(QPainter* painter) const;
     void drawDomainLegend(QPainter* painter) const;

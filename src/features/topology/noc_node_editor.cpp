@@ -39,6 +39,7 @@
 #include <QSet>
 #include <QSignalBlocker>
 #include <QTimer>
+#include <QUndoStack>
 #include <QVBoxLayout>
 #include <QLineF>
 #include <QPainter>
@@ -46,6 +47,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 #include <unordered_set>
 #include <utility>
 
@@ -920,6 +922,24 @@ public:
     std::function<bool(const QtNodes::ConnectionId&)> userConnectionPossible;
     std::function<bool(const QtNodes::ConnectionId&)> userConnectionDeletable;
 
+    QtNodes::NodeId addNode(QString const nodeType) override {
+        if (!m_projectionMutation) {
+            return QtNodes::InvalidNodeId;
+        }
+        return QtNodes::DataFlowGraphModel::addNode(nodeType);
+    }
+
+    void loadNode(QJsonObject const& nodeJson) override {
+        if (!m_projectionMutation) {
+            // QtNodes' PasteCommand catches load failures and marks itself
+            // obsolete. A silent no-op is unsafe because it immediately
+            // dereferences the graphics object for the requested node ID.
+            throw std::logic_error(
+                "NoC canvas projections cannot be restored as generic nodes");
+        }
+        QtNodes::DataFlowGraphModel::loadNode(nodeJson);
+    }
+
     bool connectionPossible(QtNodes::ConnectionId const connectionId) const override {
         if (m_projectionMutation) {
             return QtNodes::DataFlowGraphModel::connectionPossible(connectionId);
@@ -929,6 +949,20 @@ public:
             && QtNodes::DataFlowGraphModel::connectionPossible(connectionId);
     }
     bool detachPossible(QtNodes::ConnectionId const) const override { return false; }
+
+    void addConnection(QtNodes::ConnectionId const connectionId) override {
+        if (m_projectionMutation || connectionPossible(connectionId)) {
+            QtNodes::DataFlowGraphModel::addConnection(connectionId);
+        }
+    }
+
+    bool setNodeData(QtNodes::NodeId nodeId,
+                     QtNodes::NodeRole role,
+                     QVariant value) override {
+        return nodeExists(nodeId)
+            && QtNodes::DataFlowGraphModel::setNodeData(
+                nodeId, role, std::move(value));
+    }
 
     bool deleteConnection(QtNodes::ConnectionId const connectionId) override {
         if (m_projectionMutation) {
@@ -1019,6 +1053,11 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
             deleteSelectedSemanticItem();
         }
     };
+    m_view->unavailableCommandRequested = [this](NocCanvasCommand command) {
+        if (canvasCommandUnavailable) {
+            canvasCommandUnavailable(command);
+        }
+    };
     m_view->setObjectName(QStringLiteral("finepaper.canvasView"));
     m_view->setAccessibleName(QStringLiteral("NoC topology canvas"));
     updateCanvasAccessibleDescription();
@@ -1091,6 +1130,7 @@ NocNodeEditor::~NocNodeEditor() {
     }
     if (m_view) {
         m_view->semanticDeleteRequested = {};
+        m_view->unavailableCommandRequested = {};
     }
     m_highlightedNodeIds.clear();
     m_highlightedConnectionIds.clear();
@@ -1241,6 +1281,7 @@ void NocNodeEditor::beginDocumentSession(QString sessionToken) {
     m_nextPendingEndpoint = 0;
     m_canvasSelectionGesture = false;
     m_canvasItemGesture = false;
+    discardTransientProjectionHistory();
 }
 
 void NocNodeEditor::syncDesignState(const NocDesign& design) {
@@ -1511,6 +1552,7 @@ QStringList NocNodeEditor::detachedEndpointDraftIds() const {
 }
 
 void NocNodeEditor::rebuildGraph(bool zoomToContents) {
+    discardTransientProjectionHistory();
     ++m_graphRevision;
     m_pendingConnectionDetachments.clear();
     clearEndpointAttachmentDraft();
@@ -1721,6 +1763,12 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
 
     if (zoomToContents) {
         deferForCurrentGraph([this] { zoomToFit(); });
+    }
+}
+
+void NocNodeEditor::discardTransientProjectionHistory() {
+    if (m_scene) {
+        m_scene->undoStack().clear();
     }
 }
 
@@ -2102,6 +2150,7 @@ void NocNodeEditor::handlePointerReleased(const QPoint& viewportPosition) {
         return;
     }
     restoreSelection();
+    discardTransientProjectionHistory();
 }
 
 void NocNodeEditor::handleConnectionCreated(QtNodes::ConnectionId connectionId) {
