@@ -604,9 +604,23 @@ int WorkbenchLayoutController::readableWideCenterWidth() const {
     int completeNavigationWidth = 0;
     if (const auto* tabs = qobject_cast<const QTabWidget*>(
             m_centerWorkspace)) {
-        completeNavigationWidth = tabs->tabBar()->sizeHint().width()
-            + 2 * tabs->style()->pixelMetric(
-                QStyle::PM_DefaultFrameWidth, nullptr, tabs);
+        const QTabBar* tabBar = tabs->tabBar();
+        const int frameWidth = 2 * tabs->style()->pixelMetric(
+            QStyle::PM_DefaultFrameWidth, nullptr, tabs);
+        // QTabBar::sizeHint() may already contain elided tab widths. Measure
+        // every current title as well so a large system font transitions to
+        // the compact workspace selector before text becomes ambiguous.
+        const int tabPadding = 2 * tabBar->style()->pixelMetric(
+            QStyle::PM_TabBarTabHSpace, nullptr, tabBar);
+        int unelidedNavigationWidth = 0;
+        for (int index = 0; index < tabBar->count(); ++index) {
+            unelidedNavigationWidth += tabPadding
+                + tabBar->fontMetrics().horizontalAdvance(
+                    tabBar->tabText(index));
+        }
+        completeNavigationWidth = (std::max)(
+            tabBar->sizeHint().width(),
+            unelidedNavigationWidth) + frameWidth;
     }
     return (std::max)({
         minimumResponsiveWorkspaceWidth,

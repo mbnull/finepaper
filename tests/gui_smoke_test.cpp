@@ -2997,6 +2997,8 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.designMetadata"));
     auto* designAvailability = window.findChild<QLabel*>(
         QStringLiteral("finepaper.designAvailability"));
+    auto* performanceSummary = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.performanceSummary"));
     check(designOverview
               && designOverview->text() == provenanceDesignName
               && !designOverview->text().contains(QStringLiteral("%6"))
@@ -3008,6 +3010,10 @@ int main(int argc, char** argv) {
               && designAvailability && !designAvailability->isVisible(),
           QStringLiteral(
               "Inspector uses a compact plain-text design summary without reinterpreting placeholder text"));
+    check(performanceSummary
+              && performanceSummary->text().contains(provenanceDesignName),
+          QStringLiteral(
+              "Performance summary preserves literal percent markers in a design name"));
     const QString overviewBeforeCancelledResize = designOverview
         ? designOverview->text() : QString();
     const bool modifiedBeforeCancelledResize = window.isWindowModified();

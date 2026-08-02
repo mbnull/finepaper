@@ -439,6 +439,25 @@ void verifyControllerIntentAndFocus() {
           QStringLiteral("a Compact-session restart restores logical Package intent in a Wide window"));
 }
 
+void verifyLargeTextUsesCompactWorkspaceNavigation() {
+    using finepaper::ui::WorkbenchWidthMode;
+
+    WorkbenchHarness harness;
+    QFont largeFont = harness.window.font();
+    if (largeFont.pointSizeF() > 0.0) {
+        largeFont.setPointSizeF(largeFont.pointSizeF() * 2.0);
+    } else if (largeFont.pixelSize() > 0) {
+        largeFont.setPixelSize(qRound(largeFont.pixelSize() * 2.0));
+    }
+    harness.window.setFont(largeFont);
+    settleEvents();
+    harness.resizeWidth(1280);
+
+    check(harness.controller->widthMode() == WorkbenchWidthMode::Compact,
+          QStringLiteral(
+              "large workspace labels request the compact selector before tabs elide"));
+}
+
 void verifyRuntimeFontMeasurement() {
     using finepaper::ui::WorkbenchWidthMode;
 
@@ -530,6 +549,7 @@ int main(int argc, char** argv) {
 
     verifyPureWidthPolicy();
     verifyControllerIntentAndFocus();
+    verifyLargeTextUsesCompactWorkspaceNavigation();
     verifyRuntimeFontMeasurement();
     verifyResponsiveActionLayout();
     return failures == 0 ? 0 : 1;

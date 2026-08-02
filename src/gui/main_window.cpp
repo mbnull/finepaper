@@ -709,6 +709,8 @@ void FinepaperMainWindow::createCentralViews() {
                        "generated reports or Package/IP Engine results without replacing the "
                        "NoC design model."),
         &m_performanceSummary);
+    m_performanceSummary->setObjectName(
+        QStringLiteral("finepaper.performanceSummary"));
     m_viewRegistry->addView(
         {workbench::performanceViewId,
          workbench::performanceViewTitle,
@@ -5225,13 +5227,13 @@ void FinepaperMainWindow::refreshDesignViews() {
             availabilityNote});
     }
     m_performanceSummary->setText(
-        QStringLiteral("NoC %1 currently contains a %2 × %3 Mesh and %4 Endpoint(s). "
-                       "This view is reserved for Package or IP Engine performance results; "
-                       "the NodeEditor remains the source interaction surface.")
-            .arg(m_design->name,
-                 QString::number(m_design->topology.rows),
-                 QString::number(m_design->topology.columns),
-                 QString::number(m_design->endpoints.size())));
+        QStringLiteral("NoC ") + m_design->name
+        + QStringLiteral(" currently contains a %1 × %2 Mesh and %3 Endpoint(s). "
+                         "This view is reserved for Package or IP Engine performance results; "
+                         "the NodeEditor remains the source interaction surface.")
+              .arg(QString::number(m_design->topology.rows),
+                   QString::number(m_design->topology.columns),
+                   QString::number(m_design->endpoints.size())));
 
     if (!packageMetadataAvailable) {
         statusBar()->showMessage(
