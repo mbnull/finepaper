@@ -1,4 +1,4 @@
-#include "gui/element_configuration_panel.h"
+#include "features/element_configuration/element_configuration_panel.h"
 
 #include <QApplication>
 #include <QComboBox>

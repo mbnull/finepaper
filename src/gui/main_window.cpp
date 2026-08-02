@@ -10,7 +10,7 @@
 #include "features/package_library/package_library_panel.h"
 #include "features/package_library/package_library_projection.h"
 #include "features/topology/canvas_command_policy.h"
-#include "gui/element_configuration_panel.h"
+#include "features/element_configuration/element_configuration_panel.h"
 #include "gui/endpoint_configuration_panel.h"
 #include "features/domain/endpoint_domain_assignment_dialog.h"
 #include "features/topology/mesh_resize_dialog.h"

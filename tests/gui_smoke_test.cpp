@@ -1,7 +1,7 @@
 #include "gui/main_window.h"
 #include "features/topology/animated_graphics_view.h"
 #include "features/domain/domain_manager_panel.h"
-#include "gui/element_configuration_panel.h"
+#include "features/element_configuration/element_configuration_panel.h"
 #include "gui/endpoint_configuration_panel.h"
 #include "features/topology/noc_editor_style.h"
 #include "features/topology/noc_node_editor.h"

@@ -1,4 +1,4 @@
-#include "gui/element_configuration_panel.h"
+#include "features/element_configuration/element_configuration_panel.h"
 
 #include "application/element_configuration.h"
 #include "package/parameter_schema_identity.h"
