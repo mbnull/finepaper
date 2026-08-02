@@ -4,7 +4,6 @@
 #include "ui/common/schema_value_editor.h"
 #include "ui/theme/ui_tokens.h"
 
-#include <QFormLayout>
 #include <QGroupBox>
 #include <QJsonValue>
 #include <QLabel>
@@ -213,17 +212,17 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
     advancedLayout->setContentsMargins(0, 0, 0, 0);
     advancedLayout->setSpacing(ui::UiMetrics::spacing8);
 
-    QHash<QString, QFormLayout*> standardForms;
-    QHash<QString, QFormLayout*> advancedForms;
+    QHash<QString, QVBoxLayout*> standardLayouts;
+    QHash<QString, QVBoxLayout*> advancedLayouts;
     int advancedCount = 0;
 
-    auto formFor = [&](const ParameterDefinition& definition) {
-        QHash<QString, QFormLayout*>& forms = definition.advanced
-            ? advancedForms : standardForms;
+    auto layoutFor = [&](const ParameterDefinition& definition) {
+        QHash<QString, QVBoxLayout*>& layouts = definition.advanced
+            ? advancedLayouts : standardLayouts;
         QVBoxLayout* sectionLayout = definition.advanced
             ? advancedLayout : standardLayout;
         const QString category = categoryLabel(definition);
-        if (QFormLayout* existing = forms.value(category, nullptr)) {
+        if (QVBoxLayout* existing = layouts.value(category, nullptr)) {
             return existing;
         }
         auto* group = new QGroupBox(category,
@@ -240,13 +239,15 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
         group->setMinimumWidth(0);
         group->setSizePolicy(
             QSizePolicy::Ignored, QSizePolicy::Preferred);
-        auto* form = new QFormLayout(group);
-        form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-        form->setRowWrapPolicy(QFormLayout::WrapLongRows);
-        form->setHorizontalSpacing(ui::UiMetrics::spacing8);
-        form->setVerticalSpacing(ui::UiMetrics::spacing8);
+        auto* form = new QVBoxLayout(group);
+        form->setContentsMargins(
+            ui::UiMetrics::spacing8,
+            ui::UiMetrics::spacing8,
+            ui::UiMetrics::spacing8,
+            ui::UiMetrics::spacing8);
+        form->setSpacing(ui::UiMetrics::spacing8);
         sectionLayout->addWidget(group);
-        forms.insert(category, form);
+        layouts.insert(category, form);
         return form;
     };
 
@@ -270,8 +271,20 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
             definition.hasDefault
                 ? std::optional<QJsonValue>(definition.defaultValue)
                 : std::nullopt);
-        QFormLayout* form = formFor(definition);
-        auto* label = new QLabel(displayLabel(definition));
+        QVBoxLayout* form = layoutFor(definition);
+        auto* field = new QWidget(m_content);
+        field->setObjectName(
+            QStringLiteral("%1.field.%2")
+                .arg(m_objectNamePrefix, definition.id));
+        field->setMinimumWidth(0);
+        field->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        auto* fieldLayout = new QVBoxLayout(field);
+        fieldLayout->setContentsMargins(0, 0, 0, 0);
+        fieldLayout->setSpacing(ui::UiMetrics::spacing4);
+        auto* label = new QLabel(displayLabel(definition), field);
+        label->setObjectName(
+            QStringLiteral("%1.label.%2")
+                .arg(m_objectNamePrefix, definition.id));
         label->setTextFormat(Qt::PlainText);
         label->setWordWrap(true);
         label->setMinimumWidth(0);
@@ -280,14 +293,16 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
         labelPolicy.setHeightForWidth(true);
         label->setSizePolicy(labelPolicy);
         label->setBuddy(editor->primaryInput());
-        form->addRow(label, editor);
+        fieldLayout->addWidget(label);
+        fieldLayout->addWidget(editor);
+        form->addWidget(field);
         m_controls.append(Control{definition, editor});
         if (definition.advanced) {
             ++advancedCount;
         }
     }
 
-    if (!standardForms.isEmpty()) {
+    if (!standardLayouts.isEmpty()) {
         standardLayout->addStretch(1);
         contentLayout->addWidget(standardContainer);
     } else {

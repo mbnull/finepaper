@@ -227,6 +227,8 @@ void genericFormUsesSchemaMetadataAndTracksDrafts() {
         QStringLiteral("finepaper.schemaValue.width.scalar.text"));
     auto* widthPresence = form.findChild<QPushButton*>(
         QStringLiteral("finepaper.schemaValue.width.present"));
+    auto* widthLabel = form.findChild<QLabel*>(
+        QStringLiteral("finepaper.testParameter.label.width"));
     auto* advancedToggle = form.findChild<QToolButton*>(
         QStringLiteral("finepaper.testParameter.advanced.toggle"));
     auto* advancedContent = form.findChild<QWidget*>(
@@ -242,6 +244,11 @@ void genericFormUsesSchemaMetadataAndTracksDrafts() {
                   QStringLiteral("Unit: bits")),
           QStringLiteral(
               "required Package field is direct and exposes metadata on its actual input"));
+    check(widthLabel && widthLabel->text() == QStringLiteral("Arbitrary width (bits)")
+              && widthLabel->buddy() == widthInput
+              && widthLabel->geometry().bottom() < width->geometry().top(),
+          QStringLiteral(
+              "Package parameter labels stay visible above their inputs in a narrow Inspector"));
     check(form.findChild<QGroupBox*>(
               QStringLiteral("finepaper.testParameter.category.standard.Interface"))
               && advancedToggle && advancedContent && !advancedContent->isVisible(),
