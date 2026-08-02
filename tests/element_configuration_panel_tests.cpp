@@ -333,6 +333,13 @@ void identicalContextPreservesEditorAndRevisionsForceRefresh() {
         return;
     }
     panel.activateWindow();
+    // The offscreen Qt platform does not honour QWidget::activateWindow().
+    // Force an active test window so this regression covers focus retention,
+    // not a platform capability that the test backend intentionally lacks.
+    QT_WARNING_PUSH
+    QT_WARNING_DISABLE_DEPRECATED
+    QApplication::setActiveWindow(&panel);
+    QT_WARNING_POP
     QApplication::processEvents();
     initialEditor->setFocus(Qt::OtherFocusReason);
     editPipeline(panel, QStringLiteral("1e"));
@@ -420,9 +427,24 @@ void resolutionErrorsSurviveBusyTransitions() {
               && form && !form->isEnabled()
               && !pipelineEditor(panel)
               && apply && !apply->isEnabled()
-              && reset && !reset->isEnabled(),
+              && reset && reset->isEnabled(),
           QStringLiteral(
-              "an invalid stored Element configuration fails closed with an explicit diagnostic"));
+              "an invalid stored Element configuration fails closed while retaining its safe Reset recovery"));
+
+    std::optional<QString> resetPropertySet;
+    panel.resetRequested = [&](ElementRef element, QString propertySetId) {
+        check(element == router,
+              QStringLiteral(
+                  "invalid override recovery retains the exact element"));
+        resetPropertySet = std::move(propertySetId);
+    };
+    if (reset) {
+        reset->click();
+    }
+    check(resetPropertySet
+              == QStringLiteral("vendor.router-implementation"),
+          QStringLiteral(
+              "invalid override exposes a working reset-to-default request"));
 
     panel.setBusy(true);
     panel.setBusy(false);
@@ -433,9 +455,109 @@ void resolutionErrorsSurviveBusyTransitions() {
               && form && !form->isEnabled()
               && !pipelineEditor(panel)
               && apply && !apply->isEnabled()
-              && reset && !reset->isEnabled(),
+              && reset && reset->isEnabled(),
           QStringLiteral(
-              "the resolution diagnostic and read-only editor survive a busy-to-idle transition"));
+              "the resolution diagnostic and reset recovery survive a busy-to-idle transition"));
+}
+
+void sparseOverrideOriginAndDefaultRecoveryAreExplicit() {
+    const PackageDefinition package = packageFixture();
+    const NocDesign design = designFixture();
+    const ElementRef router{
+        ElementKind::Router, QStringLiteral("r-0-0")};
+    const ElementRef link{
+        ElementKind::RouterLink,
+        linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))};
+
+    ElementConfigurationPanel panel;
+    panel.resize(360, 560);
+    panel.show();
+    panel.setContext(
+        &design,
+        &package,
+        router,
+        contextStamp(QStringLiteral("element-origin")));
+    QApplication::processEvents();
+
+    auto* origin = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.elementConfiguration.origin.pipeline"));
+    auto* useDefault = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.useDefault.pipeline"));
+    auto* presence = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.schemaValue.pipeline.present"));
+    auto* apply = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    QLineEdit* input = pipelineEditor(panel);
+    QLabel* fieldLabel = nullptr;
+    for (QLabel* label : panel.findChildren<QLabel*>()) {
+        if (label->text() == QStringLiteral("Arbitrary pipeline")) {
+            fieldLabel = label;
+            break;
+        }
+    }
+    check(origin && origin->text() == QStringLiteral("Design override")
+              && useDefault && useDefault->isVisible()
+              && !presence && input
+              && input->accessibleName()
+                  == QStringLiteral("Arbitrary pipeline")
+              && fieldLabel && fieldLabel->buddy() == input,
+          QStringLiteral(
+              "Element field exposes its sparse origin, actual input label, and explicit default action without Set"));
+
+    std::optional<QJsonObject> appliedValues;
+    panel.applyRequested = [&](ElementRef, QString, QJsonObject values) {
+        appliedValues = std::move(values);
+    };
+    if (useDefault) {
+        useDefault->click();
+        QApplication::processEvents();
+    }
+    check(input && input->text() == QStringLiteral("2")
+              && origin
+              && origin->text() == QStringLiteral("Package default")
+              && useDefault && !useDefault->isVisible()
+              && apply && apply->isEnabled(),
+          QStringLiteral(
+              "Use Package default creates one valid removal of the durable override"));
+    if (apply) {
+        apply->click();
+    }
+    check(appliedValues
+              && appliedValues->value(QStringLiteral("pipeline")).toInt() == 2,
+          QStringLiteral(
+              "default recovery emits the effective value for sparse backend normalization"));
+
+    panel.setContext(
+        &design,
+        &package,
+        link,
+        contextStamp(QStringLiteral("element-origin")));
+    QApplication::processEvents();
+    origin = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.elementConfiguration.origin.pipeline"));
+    useDefault = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.useDefault.pipeline"));
+    apply = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.elementConfiguration.apply"));
+    check(origin && origin->text() == QStringLiteral("Package default")
+              && useDefault && !useDefault->isVisible()
+              && apply && !apply->isEnabled(),
+          QStringLiteral(
+              "a pure Package default begins clean and cannot manufacture a no-op Apply"));
+    editPipeline(panel, QStringLiteral("6"));
+    check(origin
+              && origin->text()
+                  == QStringLiteral("Unapplied Design override")
+              && useDefault && useDefault->isVisible()
+              && apply && apply->isEnabled(),
+          QStringLiteral(
+              "editing a default value exposes an unapplied sparse override"));
+    useDefault->click();
+    QApplication::processEvents();
+    check(origin && origin->text() == QStringLiteral("Package default")
+              && apply && !apply->isEnabled(),
+          QStringLiteral(
+              "returning an edit to its Package default restores a clean draft"));
 }
 
 } // namespace
@@ -591,6 +713,7 @@ int main(int argc, char** argv) {
     draftsSurviveContextChangesAndFailClosedOnConflicts();
     identicalContextPreservesEditorAndRevisionsForceRefresh();
     resolutionErrorsSurviveBusyTransitions();
+    sparseOverrideOriginAndDefaultRecoveryAreExplicit();
     qInstallMessageHandler(previousMessageHandler);
     messageHandlerToForward.store(nullptr, std::memory_order_release);
 

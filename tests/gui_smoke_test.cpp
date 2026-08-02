@@ -3835,12 +3835,21 @@ int main(int argc, char** argv) {
                   "Endpoint properties take priority while design settings stay collapsed"));
         auto* endpointTypeEditor = window.findChild<QComboBox*>(
             QStringLiteral("finepaper.endpointConfiguration.type"));
+        auto* firstEndpointParameter = endpointConfigurationGroup
+            ? endpointConfigurationGroup->findChild<QComboBox*>(
+                  QStringLiteral("finepaper.schemaValue.protocol.scalar.choice"))
+            : nullptr;
         check(inspectorScroll && endpointTypeEditor
                   && inspectorScroll->verticalScrollBar()->value() == 0
                   && widgetIntersectsScrollViewport(
                       inspectorScroll, endpointTypeEditor),
               QStringLiteral(
-                  "a new Endpoint selection returns the Inspector to its visible primary editor"));
+              "a new Endpoint selection returns the Inspector to its visible primary editor"));
+        check(inspectorScroll && firstEndpointParameter
+                  && widgetIsFullyVisibleInScrollViewport(
+                      inspectorScroll, firstEndpointParameter),
+              QStringLiteral(
+                  "the first Endpoint parameter is fully visible at the top of the selected Inspector task"));
         if (inspectorNavigation && inspectorDock) {
             window.activateWindow();
             application.processEvents();

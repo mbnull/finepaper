@@ -94,12 +94,14 @@ void exactMissingPropertyUsesDefaultWhenFirstEnabled() {
     check(!form.values().contains(QStringLiteral("count")),
           QStringLiteral("ExactValues preserves an initially absent property"));
 
-    auto* presence = form.findChild<QCheckBox*>(
+    auto* presence = form.findChild<QPushButton*>(
         QStringLiteral("finepaper.schemaValue.count.present"));
     check(presence != nullptr,
-          QStringLiteral("optional scalar exposes a stable presence control"));
+          QStringLiteral("optional scalar exposes an explicit Set value action"));
     if (presence) {
-        presence->setChecked(true);
+        check(presence->text() == QStringLiteral("Set value"),
+              QStringLiteral("absent optional value names the Set action"));
+        presence->click();
         QApplication::processEvents();
     }
 
@@ -108,6 +110,121 @@ void exactMissingPropertyUsesDefaultWhenFirstEnabled() {
               && enabled.value(QStringLiteral("count")).isDouble()
               && enabled.value(QStringLiteral("count")).toInt() == 7,
           QStringLiteral("first enabling an absent property uses its declared default"));
+}
+
+void requiredBooleanIsDirectAndTwoState() {
+    finepaper::DomainPropertyDefinition flag = property(
+        QStringLiteral("flag"),
+        finepaper::ParameterType::Boolean,
+        false,
+        QJsonValue(false));
+    flag.required = true;
+
+    finepaper::DomainPropertyForm form;
+    form.setSchema(
+        {flag},
+        {},
+        QJsonObject{{QStringLiteral("flag"), false}},
+        finepaper::PropertyInitialization::ExactValues);
+
+    auto* boolean = form.findChild<QCheckBox*>(
+        QStringLiteral("finepaper.schemaValue.flag.scalar.boolean"));
+    auto* presence = form.findChild<QPushButton*>(
+        QStringLiteral("finepaper.schemaValue.flag.present"));
+    check(boolean && !boolean->isTristate() && !presence
+              && form.locallyValid()
+              && form.values().value(QStringLiteral("flag")).isBool()
+              && !form.values().value(QStringLiteral("flag")).toBool(),
+          QStringLiteral(
+              "required Boolean is a direct two-state value without Set/Clear"));
+    if (!boolean) {
+        return;
+    }
+    boolean->click();
+    QApplication::processEvents();
+    check(form.locallyValid()
+              && form.values().value(QStringLiteral("flag")).toBool(),
+          QStringLiteral(
+              "one click changes required Boolean false directly to true"));
+    boolean->click();
+    QApplication::processEvents();
+    check(form.locallyValid()
+              && form.values().contains(QStringLiteral("flag"))
+              && !form.values().value(QStringLiteral("flag")).toBool(),
+          QStringLiteral(
+              "required Boolean returns to false without passing through absence"));
+}
+
+void optionalBooleanSeparatesPresenceFromValue() {
+    const finepaper::DomainPropertyDefinition flag = property(
+        QStringLiteral("flag"),
+        finepaper::ParameterType::Boolean,
+        false,
+        QJsonValue(false));
+
+    finepaper::DomainPropertyForm form;
+    form.setSchema(
+        {flag}, {}, {}, finepaper::PropertyInitialization::ExactValues);
+    auto* presence = form.findChild<QPushButton*>(
+        QStringLiteral("finepaper.schemaValue.flag.present"));
+    auto* boolean = form.findChild<QCheckBox*>(
+        QStringLiteral("finepaper.schemaValue.flag.scalar.boolean"));
+    check(presence && boolean && !boolean->isEnabled()
+              && !form.values().contains(QStringLiteral("flag")),
+          QStringLiteral(
+              "optional Boolean begins absent with a separate disabled value"));
+    if (!presence || !boolean) {
+        return;
+    }
+    presence->click();
+    QApplication::processEvents();
+    check(boolean->isEnabled()
+              && presence->text() == QStringLiteral("Clear value")
+              && form.values().contains(QStringLiteral("flag"))
+              && !form.values().value(QStringLiteral("flag")).toBool(),
+          QStringLiteral(
+              "Set value adopts the suggested false without conflating it with absence"));
+    boolean->click();
+    presence->click();
+    QApplication::processEvents();
+    check(!form.values().contains(QStringLiteral("flag"))
+              && presence->text() == QStringLiteral("Set value"),
+          QStringLiteral(
+              "Clear value removes an optional Boolean regardless of its truth value"));
+}
+
+void missingRequiredValueUsesExplicitRepair() {
+    finepaper::DomainPropertyDefinition count = property(
+        QStringLiteral("count"),
+        finepaper::ParameterType::Integer,
+        false,
+        QJsonValue(7));
+    count.required = true;
+
+    finepaper::DomainPropertyForm form;
+    form.setSchema(
+        {count}, {}, {}, finepaper::PropertyInitialization::ExactValues);
+    auto* repair = form.findChild<QPushButton*>(
+        QStringLiteral("finepaper.schemaValue.count.acceptRequired"));
+    auto* input = form.findChild<QLineEdit*>(
+        QStringLiteral("finepaper.schemaValue.count.scalar.text"));
+    check(repair && !repair->isHidden()
+              && repair->text() == QStringLiteral("Use Package default")
+              && input && input->isEnabled()
+              && input->text() == QStringLiteral("7")
+              && input->accessibleName() == QStringLiteral("count")
+              && !form.values().contains(QStringLiteral("count"))
+              && !form.locallyValid(),
+          QStringLiteral(
+              "missing required value stays absent while exposing its field and explicit repair"));
+    if (repair) {
+        repair->click();
+        QApplication::processEvents();
+    }
+    check(form.locallyValid()
+              && form.values().value(QStringLiteral("count")).toInt() == 7,
+          QStringLiteral(
+              "explicit repair adopts the Package default exactly once"));
 }
 
 void createDefaultsAreOverriddenBySuppliedValues() {
@@ -305,6 +422,39 @@ void multipleRowsAreSelectableAndOperableThroughTheirEditors() {
     }
     check(itemObjectNames.size() == table->rowCount(),
           QStringLiteral("Remove followed by Add keeps every multiple row objectName unique"));
+
+    QFont enlarged = form.font();
+    if (enlarged.pointSizeF() > 0.0) {
+        enlarged.setPointSizeF(enlarged.pointSizeF() * 2.0);
+    } else if (enlarged.pixelSize() > 0) {
+        enlarged.setPixelSize(enlarged.pixelSize() * 2);
+    }
+    form.setFont(enlarged);
+    form.resize(240, 900);
+    QApplication::processEvents();
+    auto* multiple = form.findChild<QWidget*>(
+        QStringLiteral("finepaper.schemaValue.sequence.multiple"));
+    const QVector<QPushButton*> actions{
+        add, remove, moveUp, moveDown};
+    bool contained = multiple != nullptr;
+    bool distinct = true;
+    QVector<QRect> actionRects;
+    for (QPushButton* action : actions) {
+        if (!multiple || !action || !action->isVisibleTo(multiple)) {
+            contained = false;
+            continue;
+        }
+        const QRect rect(
+            action->mapTo(multiple, QPoint{}), action->size());
+        contained = contained && multiple->rect().contains(rect);
+        for (const QRect& existing : actionRects) {
+            distinct = distinct && !existing.intersects(rect);
+        }
+        actionRects.append(rect);
+    }
+    check(contained && distinct,
+          QStringLiteral(
+              "240 px and 2x font keep every text multiple action contained and non-overlapping"));
     form.close();
 }
 
@@ -434,6 +584,9 @@ int main(int argc, char** argv) {
         previousMessageHandler, std::memory_order_release);
 
     exactMissingPropertyUsesDefaultWhenFirstEnabled();
+    requiredBooleanIsDirectAndTwoState();
+    optionalBooleanSeparatesPresenceFromValue();
+    missingRequiredValueUsesExplicitRepair();
     createDefaultsAreOverriddenBySuppliedValues();
     unknownPropertiesRoundTripWithoutLoss();
     explicitEmptyAndFalseValuesRoundTrip();

@@ -12,6 +12,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QSizePolicy>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -122,6 +123,8 @@ ElementConfigurationPanelProjection projectElementConfigurationPanel(
 ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
     : QWidget(parent) {
     setObjectName(QStringLiteral("finepaper.elementConfiguration"));
+    setMinimumWidth(0);
+    setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(ui::UiMetrics::spacing8);
@@ -134,6 +137,7 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
     m_status->setObjectName(
         QStringLiteral("finepaper.elementConfiguration.status"));
     m_status->setWordWrap(true);
+    m_status->setMinimumWidth(0);
     m_status->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(m_status);
 
@@ -155,6 +159,7 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
     m_overrideState->setObjectName(
         QStringLiteral("finepaper.elementConfiguration.overrideState"));
     m_overrideState->setWordWrap(true);
+    m_overrideState->setMinimumWidth(0);
     m_overrideState->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(m_overrideState);
 
@@ -164,6 +169,7 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
     m_draftStatus->setProperty(
         "finepaperRole", QStringLiteral("warning"));
     m_draftStatus->setWordWrap(true);
+    m_draftStatus->setMinimumWidth(0);
     m_draftStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_draftStatus->hide();
     layout->addWidget(m_draftStatus);
@@ -171,9 +177,14 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
     m_formContent = new QWidget(this);
     m_formContent->setObjectName(
         QStringLiteral("finepaper.elementConfiguration.form"));
+    m_formContent->setMinimumWidth(0);
+    m_formContent->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Preferred);
     m_form = new QFormLayout(m_formContent);
     m_form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     m_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+    m_form->setHorizontalSpacing(ui::UiMetrics::spacing8);
+    m_form->setVerticalSpacing(ui::UiMetrics::spacing8);
     layout->addWidget(m_formContent);
 
     auto* buttons = new QVBoxLayout;
@@ -181,9 +192,14 @@ ElementConfigurationPanel::ElementConfigurationPanel(QWidget* parent)
     m_apply = new QPushButton(QStringLiteral("Apply"), this);
     m_apply->setObjectName(
         QStringLiteral("finepaper.elementConfiguration.apply"));
+    m_apply->setProperty(
+        "finepaperRole", QStringLiteral("primary"));
     m_reset = new QPushButton(QStringLiteral("Reset to Package Defaults"), this);
     m_reset->setObjectName(
         QStringLiteral("finepaper.elementConfiguration.reset"));
+    m_reset->setText(QStringLiteral("Reset all to Package defaults"));
+    m_reset->setProperty(
+        "finepaperRole", QStringLiteral("quiet"));
     m_discardDraft = new QPushButton(
         QStringLiteral("Discard Unapplied Changes"), this);
     m_discardDraft->setObjectName(
@@ -267,9 +283,11 @@ void ElementConfigurationPanel::setBusy(bool busy) {
 }
 
 QWidget* ElementConfigurationPanel::preferredFocusTarget() {
+    QWidget* firstValue = m_rows.isEmpty() || !m_rows.front().editor
+        ? nullptr : m_rows.front().editor->primaryInput();
     return ui::firstAvailableFocusTarget(
         this,
-        {m_discardDraft, m_propertySetSelector, m_apply, m_reset});
+        {m_discardDraft, firstValue, m_propertySetSelector, m_apply, m_reset});
 }
 
 bool ElementConfigurationPanel::hasUnappliedDrafts(
@@ -449,29 +467,49 @@ void ElementConfigurationPanel::rebuildForm() {
 
     const ResolvedElementConfiguration resolved = resolveElementConfiguration(
         *m_design, *m_package, *m_projection.element, propertySet->id);
+    m_currentPropertySetId = propertySet->id;
+    m_currentSchemaIdentity = elementPropertySchemaIdentity(
+        propertySet->properties);
+    m_initialEffectiveValues = resolved.properties;
+    m_overrideValues = resolved.overrideProperties;
     if (!resolved.success()) {
         m_resolutionFailureStatus = QStringLiteral(
             "<b>Read-only:</b> this stored configuration could not be "
-            "resolved. %1")
+            "resolved. %1 Reset all to Package defaults remains available "
+            "when a stored override can be removed safely.")
             .arg(diagnosticSummary(resolved.diagnostics).toHtmlEscaped());
+        m_overrideState->setText(
+            m_overrideValues.isEmpty()
+                ? QStringLiteral("No removable Design override was found.")
+                : QStringLiteral(
+                      "The invalid Design override can be reset to Package defaults."));
         showProjectionMessage();
         updateButtons();
         return;
     }
 
     m_resolved = true;
-    m_currentPropertySetId = propertySet->id;
-    m_currentSchemaIdentity = elementPropertySchemaIdentity(
-        propertySet->properties);
-    m_initialEffectiveValues = resolved.properties;
-    m_overrideValues = resolved.overrideProperties;
     m_rows.reserve(propertySet->properties.size());
     for (const ElementPropertyDefinition& definition : propertySet->properties) {
         SchemaValueOptions options;
         options.multiple = definition.multiple;
+        options.required = true;
+        options.validationMode = PropertyValidationMode::Complete;
+        options.presenceSemantics =
+            ValuePresenceSemantics::SparseOverride;
+        auto* field = new QWidget(m_formContent);
+        field->setObjectName(
+            QStringLiteral("finepaper.elementConfiguration.field.%1")
+                .arg(definition.id));
+        field->setMinimumWidth(0);
+        field->setSizePolicy(
+            QSizePolicy::Ignored, QSizePolicy::Preferred);
+        auto* fieldLayout = new QVBoxLayout(field);
+        fieldLayout->setContentsMargins(0, 0, 0, 0);
+        fieldLayout->setSpacing(ui::UiMetrics::spacing4);
         auto* editor = new SchemaValueEditor(
             static_cast<const ParameterDefinition&>(definition), options,
-            m_formContent);
+            field);
         const QString initialLabel = definition.label.trimmed().isEmpty()
             ? definition.id
             : definition.label;
@@ -484,12 +522,44 @@ void ElementConfigurationPanel::rebuildForm() {
                 ? std::optional<QJsonValue>(definition.defaultValue)
                 : std::nullopt);
         editor->valueChanged = [this] { updateButtons(); };
+        auto* origin = new QLabel(field);
+        origin->setObjectName(
+            QStringLiteral("finepaper.elementConfiguration.origin.%1")
+                .arg(definition.id));
+        origin->setProperty("finepaperRole", QStringLiteral("muted"));
+        origin->setTextFormat(Qt::PlainText);
+        origin->setWordWrap(true);
+        origin->setMinimumWidth(0);
+        auto* usePackageDefault = new QPushButton(
+            QStringLiteral("Use Package default"), field);
+        usePackageDefault->setObjectName(
+            QStringLiteral("finepaper.elementConfiguration.useDefault.%1")
+                .arg(definition.id));
+        usePackageDefault->setProperty(
+            "finepaperRole", QStringLiteral("quiet"));
+        usePackageDefault->setAccessibleDescription(
+            QStringLiteral(
+                "Remove this property's Design override and use the Package default."));
+        fieldLayout->addWidget(origin);
+        fieldLayout->addWidget(editor);
+        fieldLayout->addWidget(usePackageDefault);
+        connect(usePackageDefault, &QPushButton::clicked,
+                this, [this, editor, defaultValue = definition.defaultValue] {
+                    editor->setValue(defaultValue);
+                    updateButtons();
+                });
         auto* label = new QLabel(initialLabel);
         label->setTextFormat(Qt::PlainText);
         label->setWordWrap(true);
-        label->setBuddy(editor);
-        m_form->addRow(label, editor);
-        m_rows.append(PropertyRow{definition, editor});
+        label->setMinimumWidth(0);
+        QSizePolicy labelPolicy(
+            QSizePolicy::Ignored, QSizePolicy::Preferred);
+        labelPolicy.setHeightForWidth(true);
+        label->setSizePolicy(labelPolicy);
+        label->setBuddy(editor->primaryInput());
+        m_form->addRow(label, field);
+        m_rows.append(PropertyRow{
+            definition, editor, origin, usePackageDefault});
     }
 
     m_overrideState->setText(
@@ -525,12 +595,41 @@ void ElementConfigurationPanel::updateButtons() {
         currentEditorState();
     const bool changed = editable
         && editorState != m_initialEditorState;
+    for (const PropertyRow& row : std::as_const(m_rows)) {
+        if (!row.editor || !row.origin || !row.usePackageDefault) {
+            continue;
+        }
+        const std::optional<QJsonValue> current = row.editor->value();
+        const bool usesPackageDefault = current
+            && row.definition.hasDefault
+            && *current == row.definition.defaultValue;
+        const auto initial = m_initialEditorState.constFind(
+            row.definition.id);
+        const bool rowChanged = initial == m_initialEditorState.cend()
+            || row.editor->draftState() != *initial;
+        row.origin->setText(
+            usesPackageDefault
+                ? QStringLiteral("Package default")
+                : rowChanged
+                ? QStringLiteral("Unapplied Design override")
+                : QStringLiteral("Design override"));
+        row.origin->setAccessibleDescription(
+            usesPackageDefault
+                ? QStringLiteral(
+                      "This effective value comes from the Package default.")
+                : QStringLiteral(
+                      "This effective value is stored as a sparse Design override."));
+        row.usePackageDefault->setVisible(!usesPackageDefault);
+        row.usePackageDefault->setEnabled(
+            editable && !m_draftConflict && !usesPackageDefault);
+    }
     m_propertySetSelector->setEnabled(m_projection.ready() && !m_busy);
     m_formContent->setEnabled(editable && !m_draftConflict);
     m_apply->setEnabled(
         editable && !m_draftConflict && errors.isEmpty() && changed);
     m_reset->setEnabled(
-        editable && !m_draftConflict && !m_overrideValues.isEmpty());
+        m_projection.ready() && !m_busy && !m_draftConflict
+        && !m_overrideValues.isEmpty());
     m_discardDraft->setVisible(changed || m_draftConflict);
     m_discardDraft->setEnabled(!m_busy && (changed || m_draftConflict));
     if (editable && !errors.isEmpty()) {

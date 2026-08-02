@@ -942,6 +942,7 @@ void FinepaperMainWindow::createInspectorDock() {
     auto* content = new QWidget(m_inspectorScroll);
     content->setObjectName(QStringLiteral("finepaper.inspectorContent"));
     content->setMinimumWidth(0);
+    content->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(
         ui::UiMetrics::spacing12, ui::UiMetrics::spacing12,
@@ -957,6 +958,8 @@ void FinepaperMainWindow::createInspectorDock() {
     m_endpointConfigurationGroup->setObjectName(
         QStringLiteral("finepaper.endpointConfigurationGroup"));
     m_endpointConfigurationGroup->setMinimumWidth(0);
+    m_endpointConfigurationGroup->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* endpointConfigurationLayout =
         new QVBoxLayout(m_endpointConfigurationGroup);
     endpointConfigurationLayout->setContentsMargins(0, 0, 0, 0);
@@ -970,6 +973,8 @@ void FinepaperMainWindow::createInspectorDock() {
     m_elementConfigurationGroup->setObjectName(
         QStringLiteral("finepaper.elementConfigurationGroup"));
     m_elementConfigurationGroup->setMinimumWidth(0);
+    m_elementConfigurationGroup->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* elementConfigurationLayout =
         new QVBoxLayout(m_elementConfigurationGroup);
     elementConfigurationLayout->setContentsMargins(0, 0, 0, 0);
@@ -4831,6 +4836,8 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
     if (!m_inspectorSummaryPanel) {
         return;
     }
+    m_inspectorSummaryPanel->setSelectionTaskFocused(
+        !selection.items.isEmpty());
     updateInspectorContextActions();
     if (!m_design) {
         m_inspectorSummaryPanel->setSelectionSummary(std::nullopt);
@@ -4972,11 +4979,13 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
     const bool endpointFound = endpoint != m_design->endpoints.cend();
     if (item.kind == NocEditorSelection::Kind::Endpoint && endpointFound) {
         summary.title = QStringLiteral("Endpoint %1").arg(endpoint->id);
-        summary.metadata = QStringLiteral("%1 · Router %2 · Slot %3")
-            .arg(endpoint->type,
-                 routerId(endpoint->attachment.router),
-                 endpoint->attachment.slot.value_or(
-                     QStringLiteral("automatic")));
+        // Keep the active editing header to one readable line. The full
+        // attachment detail remains in the explicit selection disclosure.
+        summary.metadata = QStringLiteral("%1 · %2")
+            .arg(endpoint->type, routerId(endpoint->attachment.router));
+        appendDetail(QStringLiteral("Attachment slot: %1.").arg(
+            endpoint->attachment.slot.value_or(
+                QStringLiteral("automatic"))));
         appendDetail(QStringLiteral(
             "Move freely on the canvas. Reconnect the EP port to change its "
             "Router attachment."));

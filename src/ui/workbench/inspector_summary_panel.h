@@ -10,6 +10,8 @@ class QEvent;
 class QFrame;
 class QLabel;
 class QPushButton;
+class QToolButton;
+class QVBoxLayout;
 
 namespace finepaper::ui {
 
@@ -40,6 +42,10 @@ public:
 
     void setDesignSummary(const InspectorDesignSummary& summary);
     void setSelectionSummary(const std::optional<InspectorSelectionSummary>& summary);
+    // Selection tasks use a compact context header so the first editable
+    // field remains in the Inspector viewport. Details stay available through
+    // an explicit text disclosure.
+    void setSelectionTaskFocused(bool focused);
     void setContextActions(const InspectorContextActions& actions);
     [[nodiscard]] QWidget* preferredFocusTarget();
 
@@ -51,6 +57,7 @@ protected:
 
 private:
     void applyRoleFonts();
+    void updatePresentation();
 
     QWidget* m_designContext = nullptr;
     QLabel* m_designTitle = nullptr;
@@ -61,9 +68,17 @@ private:
     QLabel* m_selectionTitle = nullptr;
     QLabel* m_selectionMetadata = nullptr;
     QLabel* m_selectionDetail = nullptr;
+    QToolButton* m_selectionDetailToggle = nullptr;
+    QVBoxLayout* m_selectionLayout = nullptr;
     QWidget* m_contextActions = nullptr;
     QPushButton* m_editDomainAssignments = nullptr;
     QPushButton* m_reviewDiagnostics = nullptr;
+    bool m_hasDesignSummary = false;
+    bool m_hasSelection = false;
+    bool m_hasSelectionDetail = false;
+    bool m_selectionTaskFocused = false;
+    bool m_selectionDetailsExpanded = false;
+    QString m_selectionIdentity;
 };
 
 } // namespace finepaper::ui

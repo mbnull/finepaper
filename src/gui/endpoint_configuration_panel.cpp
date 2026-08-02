@@ -19,6 +19,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSet>
+#include <QSizePolicy>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
@@ -340,6 +341,8 @@ const EndpointTypeDefinition* EndpointCreationDialog::selectedType() const {
 EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     : QWidget(parent) {
     setObjectName(QStringLiteral("finepaper.endpointConfigurationPanel"));
+    setMinimumWidth(0);
+    setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(ui::UiMetrics::spacing8);
@@ -348,6 +351,7 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     m_status->setObjectName(
         QStringLiteral("finepaper.endpointConfiguration.status"));
     m_status->setWordWrap(true);
+    m_status->setMinimumWidth(0);
     m_status->setTextFormat(Qt::PlainText);
     m_status->setTextInteractionFlags(Qt::TextSelectableByMouse);
     root->addWidget(m_status);
@@ -357,6 +361,7 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
         QStringLiteral("finepaper.endpointConfiguration.conflictStatus"));
     m_conflictStatus->setTextFormat(Qt::PlainText);
     m_conflictStatus->setWordWrap(true);
+    m_conflictStatus->setMinimumWidth(0);
     m_conflictStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_conflictStatus->hide();
     root->addWidget(m_conflictStatus);
@@ -371,6 +376,9 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     m_editor = new QWidget(this);
     m_editor->setObjectName(
         QStringLiteral("finepaper.endpointConfiguration.editor"));
+    m_editor->setMinimumWidth(0);
+    m_editor->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* editorLayout = new QVBoxLayout(m_editor);
     editorLayout->setContentsMargins(0, 0, 0, 0);
     editorLayout->setSpacing(ui::UiMetrics::spacing8);
@@ -388,6 +396,8 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     m_type->setSizeAdjustPolicy(
         QComboBox::AdjustToMinimumContentsLengthWithIcon);
     m_type->setMinimumContentsLength(12);
+    m_type->setMinimumWidth(0);
+    m_type->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     identityForm->addRow(QStringLiteral("Endpoint type"), m_type);
     m_migration = new QComboBox(identity);
     m_migration->setObjectName(
@@ -401,6 +411,9 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     m_migration->setSizeAdjustPolicy(
         QComboBox::AdjustToMinimumContentsLengthWithIcon);
     m_migration->setMinimumContentsLength(12);
+    m_migration->setMinimumWidth(0);
+    m_migration->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Fixed);
     identityForm->addRow(QStringLiteral("Type-change migration"), m_migration);
     m_migrationLabel = qobject_cast<QLabel*>(
         identityForm->labelForField(m_migration));
@@ -415,6 +428,7 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     m_typeChangeSummary->setObjectName(
         QStringLiteral("finepaper.endpointConfiguration.typeChangeSummary"));
     m_typeChangeSummary->setWordWrap(true);
+    m_typeChangeSummary->setMinimumWidth(0);
     m_typeChangeSummary->setTextFormat(Qt::PlainText);
     m_typeChangeSummary->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_typeChangeSummary->hide();
@@ -423,6 +437,9 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     auto* parameters = new QWidget(m_editor);
     parameters->setObjectName(
         QStringLiteral("finepaper.endpointConfiguration.parameters"));
+    parameters->setAccessibleDescription(
+        QStringLiteral(
+            "Endpoint instance parameters. Select the attachment line to edit its connection properties."));
     auto* parameterLayout = new QVBoxLayout(parameters);
     parameterLayout->setContentsMargins(0, 0, 0, 0);
     parameterLayout->setSpacing(ui::UiMetrics::spacing8);
@@ -431,14 +448,6 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
     parameterTitle->setProperty(
         "finepaperRole", QStringLiteral("subtitle"));
     parameterLayout->addWidget(parameterTitle);
-    auto* note = new QLabel(
-        QStringLiteral("Select the connection to edit attachment properties."),
-        parameters);
-    note->setObjectName(
-        QStringLiteral("finepaper.endpointConfiguration.attachmentNote"));
-    note->setProperty("finepaperRole", QStringLiteral("muted"));
-    note->setWordWrap(true);
-    parameterLayout->addWidget(note);
     m_parameters = new PackageParameterForm(
         QStringLiteral("finepaper.endpointParameter"), parameters);
     parameterLayout->addWidget(m_parameters);
@@ -449,11 +458,14 @@ EndpointConfigurationPanel::EndpointConfigurationPanel(QWidget* parent)
         QStringLiteral("finepaper.endpointConfiguration.diagnostics"));
     m_diagnostics->setTextFormat(Qt::PlainText);
     m_diagnostics->setWordWrap(true);
+    m_diagnostics->setMinimumWidth(0);
     m_diagnostics->setTextInteractionFlags(Qt::TextSelectableByMouse);
     editorLayout->addWidget(m_diagnostics);
     m_apply = new QPushButton(QStringLiteral("Apply Endpoint Changes"), m_editor);
     m_apply->setObjectName(
         QStringLiteral("finepaper.endpointConfiguration.apply"));
+    m_apply->setProperty(
+        "finepaperRole", QStringLiteral("primary"));
     editorLayout->addWidget(m_apply);
     root->addWidget(m_editor);
 

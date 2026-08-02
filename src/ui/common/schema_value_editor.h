@@ -11,8 +11,7 @@
 #include <functional>
 #include <optional>
 
-class QCheckBox;
-class QHBoxLayout;
+class QEvent;
 class QLabel;
 class QPushButton;
 class QTableWidget;
@@ -33,10 +32,23 @@ enum class PropertyValidationMode {
     Partial
 };
 
+// Presence is a feature-level semantic, not a visual side effect of the
+// concrete scalar widget.  Automatic keeps the common Package/Domain
+// behaviour while allowing sparse effective-value editors to opt into a
+// direct, always-present value field.
+enum class ValuePresenceSemantics {
+    Automatic,
+    RequiredValue,
+    OptionalValue,
+    SparseOverride,
+};
+
 struct SchemaValueOptions {
     bool multiple = false;
     bool required = false;
     PropertyValidationMode validationMode = PropertyValidationMode::Complete;
+    ValuePresenceSemantics presenceSemantics =
+        ValuePresenceSemantics::Automatic;
     std::optional<QString> referenceDomainType;
     QVector<SchemaChoice> choices;
     bool allowCustomReferences = false;
@@ -71,6 +83,9 @@ public:
     [[nodiscard]] SchemaValueEditorDraft draftState() const;
     [[nodiscard]] QStringList localErrors() const;
     [[nodiscard]] bool locallyValid() const { return localErrors().isEmpty(); }
+    // Returns the concrete child that should receive label mnemonics and
+    // programmatic focus.  The target follows optional Set/Clear state.
+    [[nodiscard]] QWidget* primaryInput() const;
 
     // These callbacks avoid a moc dependency and keep the editor usable by the
     // lightweight GUI test targets.
@@ -79,9 +94,14 @@ public:
 private:
     class ScalarValueWidget;
 
+    [[nodiscard]] ValuePresenceSemantics presenceSemantics() const;
+    [[nodiscard]] bool valueCanBeAbsent() const;
     void setPresent(bool present);
     [[nodiscard]] bool isPresent() const;
     void notifyValueChanged();
+    void updatePresentation();
+    void updateMetrics();
+    [[nodiscard]] QJsonValue missingValueSuggestion() const;
     void addMultipleValue(const QJsonValue& value);
     void rebuildMultipleValues(const QVector<QJsonValue>& values,
                                int selectedRow = -1);
@@ -93,16 +113,16 @@ private:
     ParameterDefinition m_definition;
     SchemaValueOptions m_options;
     bool m_updating = false;
+    bool m_present = false;
+    bool m_requiredValueMissing = false;
     bool m_preserveInvalidMultipleValue = false;
     QJsonValue m_invalidMultipleValue;
-    bool m_preserveInvalidBooleanValue = false;
-    QJsonValue m_invalidBooleanValue;
     std::optional<QJsonValue> m_absentSuggestion;
     quint64 m_nextMultipleItemToken = 0;
 
     QVBoxLayout* m_rootLayout = nullptr;
-    QCheckBox* m_presenceToggle = nullptr;
-    QCheckBox* m_booleanEditor = nullptr;
+    QPushButton* m_presenceAction = nullptr;
+    QPushButton* m_acceptRequiredValue = nullptr;
     ScalarValueWidget* m_scalarEditor = nullptr;
     QWidget* m_multipleContainer = nullptr;
     QLabel* m_invalidMultipleLabel = nullptr;
@@ -111,6 +131,10 @@ private:
     QPushButton* m_removeButton = nullptr;
     QPushButton* m_moveUpButton = nullptr;
     QPushButton* m_moveDownButton = nullptr;
+    QLabel* m_validationLabel = nullptr;
+
+protected:
+    void changeEvent(QEvent* event) override;
 };
 
 } // namespace finepaper

@@ -1,11 +1,14 @@
 #include "features/domain/domain_property_form.h"
 
+#include "ui/layouts/responsive_action_layout.h"
+#include "ui/theme/ui_tokens.h"
+
 #include <QFormLayout>
-#include <QHBoxLayout>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLabel>
 #include <QPushButton>
+#include <QSizePolicy>
 
 #include <utility>
 
@@ -27,9 +30,13 @@ QString compactJsonValue(const QJsonValue& value) {
 DomainPropertyForm::DomainPropertyForm(QWidget* parent)
     : QWidget(parent) {
     setObjectName(QStringLiteral("finepaper.domainPropertyForm"));
+    setMinimumWidth(0);
+    setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     m_form = new QFormLayout(this);
     m_form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     m_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+    m_form->setHorizontalSpacing(ui::UiMetrics::spacing8);
+    m_form->setVerticalSpacing(ui::UiMetrics::spacing8);
 }
 
 void DomainPropertyForm::setSchema(
@@ -53,6 +60,7 @@ void DomainPropertyForm::setSchema(
         retained->setObjectName(
             QStringLiteral("finepaper.domainPropertyForm.passthrough"));
         retained->setWordWrap(true);
+        retained->setMinimumWidth(0);
         m_form->addRow(retained);
         const QStringList passthroughKeys = m_passthroughValues.keys();
         for (const QString& key : passthroughKeys) {
@@ -60,8 +68,12 @@ void DomainPropertyForm::setSchema(
             row->setObjectName(
                 QStringLiteral("finepaper.domainPropertyForm.passthrough.%1")
                     .arg(QString::fromLatin1(key.toUtf8().toHex())));
-            auto* layout = new QHBoxLayout(row);
+            row->setMinimumWidth(0);
+            row->setSizePolicy(
+                QSizePolicy::Ignored, QSizePolicy::Preferred);
+            auto* layout = new ui::ResponsiveActionLayout(row);
             layout->setContentsMargins(0, 0, 0, 0);
+            layout->setSpacing(ui::UiMetrics::spacing8);
             auto* valueLabel = new QLabel(
                 QStringLiteral("%1 = %2")
                     .arg(key, compactJsonValue(
@@ -69,11 +81,14 @@ void DomainPropertyForm::setSchema(
                 row);
             valueLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
             valueLabel->setWordWrap(true);
+            valueLabel->setMinimumWidth(0);
+            valueLabel->setSizePolicy(
+                QSizePolicy::Ignored, QSizePolicy::Preferred);
             auto* remove = new QPushButton(QStringLiteral("Remove"), row);
             remove->setObjectName(
                 row->objectName() + QStringLiteral(".remove"));
             remove->setProperty("finepaper.propertyId", key);
-            layout->addWidget(valueLabel, 1);
+            layout->addWidget(valueLabel);
             layout->addWidget(remove);
             connect(remove, &QPushButton::clicked, this, [this, key, row] {
                 m_passthroughValues.remove(key);
@@ -153,7 +168,12 @@ void DomainPropertyForm::setSchema(
         auto* labelWidget = new QLabel(label);
         labelWidget->setTextFormat(Qt::PlainText);
         labelWidget->setWordWrap(true);
-        labelWidget->setBuddy(editor);
+        labelWidget->setMinimumWidth(0);
+        QSizePolicy labelPolicy(
+            QSizePolicy::Ignored, QSizePolicy::Preferred);
+        labelPolicy.setHeightForWidth(true);
+        labelWidget->setSizePolicy(labelPolicy);
+        labelWidget->setBuddy(editor->primaryInput());
         m_form->addRow(labelWidget, editor);
         m_rows.append(PropertyRow{definition, editor});
     }

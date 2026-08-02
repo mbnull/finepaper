@@ -51,6 +51,8 @@ void summaryUsesStablePlainTextWidgets() {
         QStringLiteral("finepaper.inspectorSelectionTitle"));
     auto* selectionDetail = panel.findChild<QLabel*>(
         QStringLiteral("finepaper.inspectorSelectionDetail"));
+    auto* selectionDetailToggle = panel.findChild<QToolButton*>(
+        QStringLiteral("finepaper.inspectorSelectionDetailToggle"));
     check(designTitle && designTitle->text() == hostileTitle
               && designTitle->textFormat() == Qt::PlainText,
           QStringLiteral("design content is preserved as literal plain text"));
@@ -70,14 +72,35 @@ void summaryUsesStablePlainTextWidgets() {
         QStringLiteral("finepaper.inspectorEditDomainAssignments"));
     auto* reviewDiagnostics = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.inspectorReviewDiagnostics"));
-    check(selection && editDomainAssignments && reviewDiagnostics
+    check(selection && selectionDetailToggle
+              && editDomainAssignments && reviewDiagnostics
               && !editDomainAssignments->isVisible()
               && !reviewDiagnostics->isVisible()
+              && !selectionDetailToggle->isVisible()
               && editDomainAssignments->icon().isNull()
               && reviewDiagnostics->icon().isNull()
-              && selection->findChildren<QToolButton*>().isEmpty(),
+              && selectionDetailToggle->icon().isNull()
+              && selectionDetailToggle->toolButtonStyle()
+                  == Qt::ToolButtonTextOnly,
           QStringLiteral(
               "selection summary keeps only explicit text task routes hidden by default"));
+
+    panel.setSelectionTaskFocused(true);
+    QApplication::processEvents();
+    check(designTitle && !designTitle->isVisible()
+              && selectionDetail && !selectionDetail->isVisible()
+              && selectionDetailToggle->isVisible()
+              && selectionDetailToggle->text()
+                  == QStringLiteral("Show selection details"),
+          QStringLiteral(
+              "selection task mode hides design metadata and collapses guidance behind text disclosure"));
+    selectionDetailToggle->click();
+    QApplication::processEvents();
+    check(selectionDetail->isVisible()
+              && selectionDetailToggle->text()
+                  == QStringLiteral("Hide selection details"),
+          QStringLiteral(
+              "selection guidance remains explicitly available without an icon"));
 
     int editDomainRequests = 0;
     int reviewDiagnosticRequests = 0;
@@ -99,7 +122,7 @@ void summaryUsesStablePlainTextWidgets() {
                   == QStringLiteral("Review diagnostics")
               && panel.preferredFocusTarget() == editDomainAssignments
               && editDomainAssignments->mapTo(&panel, QPoint{}).y()
-                  < designTitle->mapTo(&panel, QPoint{}).y()
+                  < selectionTitle->mapTo(&panel, QPoint{}).y()
               && editDomainRequests == 1 && reviewDiagnosticRequests == 1,
           QStringLiteral(
               "selection summary keeps text task routes before descriptive metadata with stable callbacks"));
@@ -109,6 +132,7 @@ void summaryUsesStablePlainTextWidgets() {
     QFont enlarged = panel.font();
     enlarged.setPointSizeF(enlarged.pointSizeF() * 1.5);
     panel.setFont(enlarged);
+    panel.setSelectionTaskFocused(false);
     panel.setDesignSummary({hostileTitle, QStringLiteral("metadata"), {}});
     panel.setSelectionSummary(std::nullopt);
     panel.setContextActions({false, true});

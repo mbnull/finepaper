@@ -223,16 +223,25 @@ void genericFormUsesSchemaMetadataAndTracksDrafts() {
 
     auto* width = schemaEditor(
         &form, QStringLiteral("finepaper.testParameter.width"));
+    auto* widthInput = form.findChild<QLineEdit*>(
+        QStringLiteral("finepaper.schemaValue.width.scalar.text"));
+    auto* widthPresence = form.findChild<QPushButton*>(
+        QStringLiteral("finepaper.schemaValue.width.present"));
     auto* advancedToggle = form.findChild<QToolButton*>(
         QStringLiteral("finepaper.testParameter.advanced.toggle"));
     auto* advancedContent = form.findChild<QWidget*>(
         QStringLiteral("finepaper.testParameter.advanced.content"));
-    check(width
+    check(width && widthInput && !widthPresence
               && width->toolTip().contains(QStringLiteral("Package description"))
               && width->toolTip().contains(QStringLiteral("Unit: bits"))
               && width->accessibleDescription()
-                  == QStringLiteral("Package description for width"),
-          QStringLiteral("SchemaValueEditor exposes Package description and unit metadata"));
+                  == QStringLiteral("Package description for width")
+              && widthInput->accessibleName()
+                  == QStringLiteral("Arbitrary width")
+              && widthInput->accessibleDescription().contains(
+                  QStringLiteral("Unit: bits")),
+          QStringLiteral(
+              "required Package field is direct and exposes metadata on its actual input"));
     check(form.findChild<QGroupBox*>(
               QStringLiteral("finepaper.testParameter.category.standard.Interface"))
               && advancedToggle && advancedContent && !advancedContent->isVisible(),
@@ -265,6 +274,23 @@ void genericFormUsesSchemaMetadataAndTracksDrafts() {
     check(form.schemaIdentity() == semanticIdentity,
           QStringLiteral(
               "presentation-only Package changes keep a compatible parameter schema identity"));
+
+    form.setSchema({schema.front()}, {});
+    auto* repair = form.findChild<QPushButton*>(
+        QStringLiteral("finepaper.schemaValue.width.acceptRequired"));
+    check(repair && !repair->isHidden()
+              && repair->text() == QStringLiteral("Use Package default")
+              && !form.values().contains(QStringLiteral("width"))
+              && !form.locallyValid() && !form.isModified(),
+          QStringLiteral(
+              "missing required Package value stays an unchanged invalid source until explicit repair"));
+    if (repair) {
+        repair->click();
+    }
+    check(form.locallyValid() && form.isModified()
+              && form.values().value(QStringLiteral("width")).toInt() == 64,
+          QStringLiteral(
+              "required Package repair adopts its declared default as a real draft change"));
     QVector<ParameterDefinition> semanticChange = presentationOnly;
     semanticChange.front().maximum = 32;
     form.setSchema(
@@ -610,11 +636,13 @@ void inspectorEditsEndpointOnlyAndPreviewsTypeImpact() {
         &panel, QStringLiteral("finepaper.endpointParameter.width"));
     check(apply && !apply->isEnabled(),
           QStringLiteral("unchanged Endpoint values do not create a dirty no-op"));
-    auto* attachmentNote = panel.findChild<QLabel*>(
-        QStringLiteral("finepaper.endpointConfiguration.attachmentNote"));
-    check(attachmentNote
-              && attachmentNote->text().contains(QStringLiteral("connection")),
-          QStringLiteral("Inspector keeps Endpoint parameters separate from Attachment configuration"));
+    auto* parameterSection = panel.findChild<QWidget*>(
+        QStringLiteral("finepaper.endpointConfiguration.parameters"));
+    check(parameterSection
+              && parameterSection->accessibleDescription().contains(
+                  QStringLiteral("attachment line")),
+          QStringLiteral(
+              "Inspector keeps Endpoint parameters separate from Attachment configuration without consuming edit space"));
     if (width) {
         width->setValue(QJsonValue(96));
         if (width->valueChanged) {

@@ -287,6 +287,7 @@ target("finepaper-domain-schema-editor-tests")
     add_files("tests/domain_schema_editor_tests.cpp")
     add_files("src/features/domain/domain_property_form.cpp")
     add_files("src/ui/common/schema_value_editor.cpp")
+    add_files("src/ui/layouts/responsive_action_layout.cpp")
     add_includedirs("src")
     add_tests("default", {
         trim_output = true,
@@ -302,6 +303,7 @@ target("finepaper-element-configuration-panel-tests")
     add_files("tests/element_configuration_panel_tests.cpp")
     add_files("src/gui/element_configuration_panel.cpp")
     add_files("src/ui/common/schema_value_editor.cpp")
+    add_files("src/ui/layouts/responsive_action_layout.cpp")
     add_includedirs("src")
     add_tests("default", {
         trim_output = true,
@@ -364,6 +366,7 @@ target("finepaper-domain-configuration-dialog-tests")
     add_files("src/features/domain/domain_property_form.cpp")
     add_files("src/features/domain/presentation/domain_text.cpp")
     add_files("src/ui/common/schema_value_editor.cpp")
+    add_files("src/ui/layouts/responsive_action_layout.cpp")
     add_includedirs("src")
     add_tests("default", {
         trim_output = true,
@@ -397,6 +400,7 @@ target("finepaper-endpoint-configuration-panel-tests")
     add_files("src/features/domain/presentation/domain_text.cpp")
     add_files("src/gui/package_parameter_form.cpp")
     add_files("src/ui/common/schema_value_editor.cpp")
+    add_files("src/ui/layouts/responsive_action_layout.cpp")
     add_includedirs("src")
     add_tests("default", {
         trim_output = true,

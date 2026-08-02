@@ -2,11 +2,13 @@
 
 #include "package/parameter_schema_identity.h"
 #include "ui/common/schema_value_editor.h"
+#include "ui/theme/ui_tokens.h"
 
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QJsonValue>
 #include <QLabel>
+#include <QSizePolicy>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -36,9 +38,11 @@ PackageParameterForm::PackageParameterForm(
     : QWidget(parent),
       m_objectNamePrefix(std::move(objectNamePrefix)) {
     setObjectName(m_objectNamePrefix + QStringLiteral(".form"));
+    setMinimumWidth(0);
+    setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     m_rootLayout = new QVBoxLayout(this);
     m_rootLayout->setContentsMargins(0, 0, 0, 0);
-    m_rootLayout->setSpacing(8);
+    m_rootLayout->setSpacing(ui::UiMetrics::spacing8);
 }
 
 void PackageParameterForm::setSchema(
@@ -172,9 +176,11 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
     }
     m_content = new QWidget(this);
     m_content->setObjectName(m_objectNamePrefix + QStringLiteral(".content"));
+    m_content->setMinimumWidth(0);
+    m_content->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* contentLayout = new QVBoxLayout(m_content);
     contentLayout->setContentsMargins(0, 0, 0, 0);
-    contentLayout->setSpacing(8);
+    contentLayout->setSpacing(ui::UiMetrics::spacing8);
 
     if (m_definitions.isEmpty()) {
         auto* empty = new QLabel(
@@ -190,16 +196,22 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
     auto* standardContainer = new QWidget(m_content);
     standardContainer->setObjectName(
         m_objectNamePrefix + QStringLiteral(".standard"));
+    standardContainer->setMinimumWidth(0);
+    standardContainer->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* standardLayout = new QVBoxLayout(standardContainer);
     standardLayout->setContentsMargins(0, 0, 0, 0);
-    standardLayout->setSpacing(8);
+    standardLayout->setSpacing(ui::UiMetrics::spacing8);
 
     auto* advancedContainer = new QWidget(m_content);
     advancedContainer->setObjectName(
         m_objectNamePrefix + QStringLiteral(".advanced.content"));
+    advancedContainer->setMinimumWidth(0);
+    advancedContainer->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* advancedLayout = new QVBoxLayout(advancedContainer);
     advancedLayout->setContentsMargins(0, 0, 0, 0);
-    advancedLayout->setSpacing(8);
+    advancedLayout->setSpacing(ui::UiMetrics::spacing8);
 
     QHash<QString, QFormLayout*> standardForms;
     QHash<QString, QFormLayout*> advancedForms;
@@ -225,9 +237,14 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
                          ? QStringLiteral("advanced")
                          : QStringLiteral("standard"),
                      category));
+        group->setMinimumWidth(0);
+        group->setSizePolicy(
+            QSizePolicy::Ignored, QSizePolicy::Preferred);
         auto* form = new QFormLayout(group);
         form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
         form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+        form->setHorizontalSpacing(ui::UiMetrics::spacing8);
+        form->setVerticalSpacing(ui::UiMetrics::spacing8);
         sectionLayout->addWidget(group);
         forms.insert(category, form);
         return form;
@@ -238,6 +255,8 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
         SchemaValueOptions options;
         options.required = true;
         options.validationMode = PropertyValidationMode::Complete;
+        options.presenceSemantics =
+            ValuePresenceSemantics::RequiredValue;
         auto* editor = new SchemaValueEditor(definition, options, m_content);
         editor->setObjectName(
             QStringLiteral("%1.%2").arg(m_objectNamePrefix, definition.id));
@@ -255,7 +274,12 @@ void PackageParameterForm::rebuild(const QJsonObject& values) {
         auto* label = new QLabel(displayLabel(definition));
         label->setTextFormat(Qt::PlainText);
         label->setWordWrap(true);
-        label->setBuddy(editor);
+        label->setMinimumWidth(0);
+        QSizePolicy labelPolicy(
+            QSizePolicy::Ignored, QSizePolicy::Preferred);
+        labelPolicy.setHeightForWidth(true);
+        label->setSizePolicy(labelPolicy);
+        label->setBuddy(editor->primaryInput());
         form->addRow(label, editor);
         m_controls.append(Control{definition, editor});
         if (definition.advanced) {

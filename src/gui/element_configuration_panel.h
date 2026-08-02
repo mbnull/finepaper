@@ -96,6 +96,8 @@ private:
     struct PropertyRow {
         ElementPropertyDefinition definition;
         SchemaValueEditor* editor = nullptr;
+        QLabel* origin = nullptr;
+        QPushButton* usePackageDefault = nullptr;
     };
 
     struct CachedDraft {

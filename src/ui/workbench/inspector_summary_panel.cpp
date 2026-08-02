@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QStringList>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace finepaper::ui {
@@ -94,25 +95,40 @@ InspectorSummaryPanel::InspectorSummaryPanel(QWidget* parent) : QWidget(parent) 
     m_selectionContext->setMinimumWidth(0);
     m_selectionContext->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
-    auto* selectionLayout = new QVBoxLayout(m_selectionContext);
-    selectionLayout->setContentsMargins(UiMetrics::spacing12, UiMetrics::spacing12,
-                                        UiMetrics::spacing12, UiMetrics::spacing12);
-    selectionLayout->setSpacing(UiMetrics::spacing4);
+    m_selectionLayout = new QVBoxLayout(m_selectionContext);
+    m_selectionLayout->setContentsMargins(
+        UiMetrics::spacing12, UiMetrics::spacing12,
+        UiMetrics::spacing12, UiMetrics::spacing12);
+    m_selectionLayout->setSpacing(UiMetrics::spacing4);
 
     m_selectionTitle = new QLabel(m_selectionContext);
     configureTextLabel(m_selectionTitle, QStringLiteral("finepaper.inspectorSelectionTitle"),
                        QStringLiteral("Selection title"), QStringLiteral("subtitle"));
-    selectionLayout->addWidget(m_selectionTitle);
+    m_selectionLayout->addWidget(m_selectionTitle);
 
     m_selectionMetadata = new QLabel(m_selectionContext);
     configureTextLabel(m_selectionMetadata, QStringLiteral("finepaper.inspectorSelectionMetadata"),
                        QStringLiteral("Selection details"), QStringLiteral("muted"));
-    selectionLayout->addWidget(m_selectionMetadata);
+    m_selectionLayout->addWidget(m_selectionMetadata);
 
     m_selectionDetail = new QLabel(m_selectionContext);
     configureTextLabel(m_selectionDetail, QStringLiteral("finepaper.inspectorSelectionDetail"),
                        QStringLiteral("Selection guidance"));
-    selectionLayout->addWidget(m_selectionDetail);
+
+    m_selectionDetailToggle = new QToolButton(m_selectionContext);
+    m_selectionDetailToggle->setText(tr("Show selection details"));
+    m_selectionDetailToggle->setObjectName(
+        QStringLiteral("finepaper.inspectorSelectionDetailToggle"));
+    m_selectionDetailToggle->setProperty(
+        "finepaperRole", QStringLiteral("quiet"));
+    m_selectionDetailToggle->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_selectionDetailToggle->setAutoRaise(true);
+    m_selectionDetailToggle->setSizePolicy(
+        QSizePolicy::Maximum, QSizePolicy::Fixed);
+    m_selectionDetailToggle->setAccessibleName(
+        tr("Show selection details"));
+    m_selectionLayout->addWidget(m_selectionDetailToggle);
+    m_selectionLayout->addWidget(m_selectionDetail);
 
     m_contextActions = new QWidget(this);
     m_contextActions->setObjectName(
@@ -148,6 +164,12 @@ InspectorSummaryPanel::InspectorSummaryPanel(QWidget* parent) : QWidget(parent) 
                     reviewDiagnosticsRequested();
                 }
             });
+    connect(m_selectionDetailToggle, &QPushButton::clicked,
+            this, [this] {
+                m_selectionDetailsExpanded =
+                    !m_selectionDetailsExpanded;
+                updatePresentation();
+            });
 
     applyRoleFonts();
     setDesignSummary({});
@@ -168,7 +190,7 @@ QWidget* InspectorSummaryPanel::preferredFocusTarget() {
     return firstAvailableFocusTarget(
         this,
         {m_editDomainAssignments, m_reviewDiagnostics,
-         m_selectionTitle, m_designTitle});
+         m_selectionDetailToggle, m_selectionTitle, m_designTitle});
 }
 
 void InspectorSummaryPanel::setDesignSummary(const InspectorDesignSummary& summary) {
@@ -178,9 +200,10 @@ void InspectorSummaryPanel::setDesignSummary(const InspectorDesignSummary& summa
 
     const QString description =
         joinedAccessibleDescription({summary.title, summary.metadata, summary.availability});
+    m_hasDesignSummary = !description.isEmpty();
     m_designContext->setAccessibleDescription(description);
     setAccessibleDescription(description);
-    updateGeometry();
+    updatePresentation();
 }
 
 void InspectorSummaryPanel::setSelectionSummary(
@@ -190,17 +213,64 @@ void InspectorSummaryPanel::setSelectionSummary(
         m_selectionMetadata->clear();
         m_selectionDetail->clear();
         m_selectionContext->setAccessibleDescription(QString());
-        m_selectionContext->hide();
-        updateGeometry();
+        m_hasSelection = false;
+        m_hasSelectionDetail = false;
+        m_selectionIdentity.clear();
+        m_selectionDetailsExpanded = false;
+        updatePresentation();
         return;
+    }
+
+    const QString nextIdentity = summary->title + QLatin1Char('\n')
+        + summary->metadata;
+    if (nextIdentity != m_selectionIdentity) {
+        m_selectionDetailsExpanded = false;
+        m_selectionIdentity = nextIdentity;
     }
 
     setOptionalLabelText(m_selectionTitle, summary->title);
     setOptionalLabelText(m_selectionMetadata, summary->metadata);
     setOptionalLabelText(m_selectionDetail, summary->detail);
+    m_hasSelection = true;
+    m_hasSelectionDetail = !summary->detail.trimmed().isEmpty();
     m_selectionContext->setAccessibleDescription(
         joinedAccessibleDescription({summary->title, summary->metadata, summary->detail}));
-    m_selectionContext->show();
+    updatePresentation();
+}
+
+void InspectorSummaryPanel::setSelectionTaskFocused(bool focused) {
+    if (m_selectionTaskFocused == focused) {
+        return;
+    }
+    m_selectionTaskFocused = focused;
+    if (focused) {
+        m_selectionDetailsExpanded = false;
+    }
+    updatePresentation();
+}
+
+void InspectorSummaryPanel::updatePresentation() {
+    m_designContext->setVisible(
+        m_hasDesignSummary && !m_selectionTaskFocused);
+    m_selectionContext->setVisible(m_hasSelection);
+    const bool discloseSelectionDetail = m_hasSelection
+        && m_hasSelectionDetail && m_selectionTaskFocused;
+    m_selectionDetailToggle->setVisible(discloseSelectionDetail);
+    m_selectionDetailToggle->setText(
+        m_selectionDetailsExpanded
+            ? tr("Hide selection details")
+            : tr("Show selection details"));
+    m_selectionDetailToggle->setAccessibleName(
+        m_selectionDetailToggle->text());
+    m_selectionDetail->setVisible(
+        m_hasSelection && m_hasSelectionDetail
+        && (!m_selectionTaskFocused || m_selectionDetailsExpanded));
+    if (m_selectionLayout) {
+        const int margin = m_selectionTaskFocused
+            ? UiMetrics::spacing8 : UiMetrics::spacing12;
+        m_selectionLayout->setContentsMargins(
+            margin, margin, margin, margin);
+    }
     updateGeometry();
 }
 
