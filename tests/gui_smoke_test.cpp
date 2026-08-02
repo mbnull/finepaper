@@ -2425,7 +2425,8 @@ int main(int argc, char** argv) {
               && creationPackageSelector->currentData().toString()
                   == QStringLiteral("finepaper.noc@1.0.0")
               && creationPackageSelector->currentText()
-                  == QStringLiteral("Finepaper Mesh NoC")
+                  == QStringLiteral(
+                      "Finepaper Mesh NoC — finepaper.noc@1.0.0")
               && !creationPackageSelector->accessibleName().isEmpty(),
           QStringLiteral(
               "the Package for a new design is visible before opening the dialog"));

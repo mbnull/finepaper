@@ -104,7 +104,7 @@ PackageLibraryPanel::PackageLibraryPanel(QWidget* parent)
     contentLayout->setSpacing(ui::UiMetrics::spacing12);
 
     m_packageGroup = new QGroupBox(
-        QStringLiteral("Packages"), content);
+        QStringLiteral("NoC IP Packages"), content);
     m_packageGroup->setObjectName(
         QStringLiteral("finepaper.packageLibrarySection"));
     m_packageGroup->setSizePolicy(
@@ -443,11 +443,11 @@ void PackageLibraryPanel::rebuildCreationPackages(
     const QSignalBlocker blocker(m_creationPackageSelector);
     m_creationPackageSelector->clear();
     for (const CreationPackageItem& package : m_state.runnablePackages) {
-        m_creationPackageSelector->addItem(
-            packageDisplayText(package), package.key());
-        const int index = m_creationPackageSelector->count() - 1;
         const QString completeText = QStringLiteral("%1 — %2")
             .arg(packageDisplayText(package), package.key());
+        m_creationPackageSelector->addItem(
+            completeText, package.key());
+        const int index = m_creationPackageSelector->count() - 1;
         m_creationPackageSelector->setItemData(
             index, completeText, Qt::ToolTipRole);
         m_creationPackageSelector->setItemData(

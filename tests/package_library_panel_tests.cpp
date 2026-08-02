@@ -153,10 +153,16 @@ void noDesignPrimaryTaskAndMaintenanceFit() {
     check(selector && selector->isEnabled() && selector->count() == 2
               && selector->currentData().toString()
                      == QStringLiteral("example.fabric@1.0.0")
+              && selector->currentText()
+                     == QStringLiteral(
+                         "Example Fabric — example.fabric@1.0.0")
+              && selector->itemText(1)
+                     == QStringLiteral(
+                         "Example Fabric Pro — example.fabric-pro@2.0.0")
               && details && details->text().contains(
                      QStringLiteral("example.fabric@1.0.0")),
           QStringLiteral(
-              "no-design state exposes an independent, exact Package preference"));
+              "no-design state exposes an independent, visibly exact Package preference"));
     const bool selectorVisible = fullyVisibleInScroll(scroll, selector);
     const bool createVisible = fullyVisibleWithin(&panel, create);
     const bool installVisible = fullyVisibleWithin(&panel, install);
