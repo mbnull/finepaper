@@ -3,6 +3,7 @@
 #include "application/application.h"
 #include "application/runtime_settings.h"
 #include "features/operations/design_run_state.h"
+#include "features/package_library/runtime_package_cache.h"
 #include "features/topology/noc_node_editor.h"
 #include "gui/package_parameter_form.h"
 #include "gui/workbench_view_registry.h"
@@ -19,11 +20,8 @@ class QAction;
 class QCloseEvent;
 class QComboBox;
 class QDockWidget;
-class QGroupBox;
 class QLabel;
 class QLineEdit;
-class QListWidget;
-class QListWidgetItem;
 class QMenu;
 class QPlainTextEdit;
 class QPushButton;
@@ -39,7 +37,6 @@ class QWidget;
 
 namespace finepaper {
 
-class EndpointPaletteList;
 struct FinepaperMainWindowSmokeAccess;
 class DomainConfigurationWorkspace;
 class DomainManagerPanel;
@@ -47,6 +44,7 @@ class DesignExtensionsWorkspace;
 class ElementConfigurationPanel;
 class EndpointConfigurationPanel;
 class PackageParameterForm;
+class PackageLibraryPanel;
 namespace ui {
 class EmptyState;
 class InspectorDesignSettings;
@@ -127,13 +125,15 @@ private:
     void loadInstalledPackageRoots();
     void reloadPackages();
     void installPackage();
+    RuntimePackageRefreshResult refreshRuntimePackageAvailability(
+        RuntimePackageRefreshPolicy policy =
+            RuntimePackageRefreshPolicy::IfCatalogChanged);
+    [[nodiscard]] bool revalidateRuntimePackage(const QString& key);
     void updatePackageControls();
-    void updateCreationPackageDetails();
+    void refreshPackageLibraryView();
     void updateEditorEmptyState();
     void updateInspectorContextActions();
-    void updateEndpointQuickAddState();
-    void filterEndpointPalette(const QString& text);
-    void addEndpointFromPalette(QListWidgetItem* item = nullptr);
+    void addEndpointFromLibrary(const QString& endpointType);
     void updateDomainLayerControls();
     void applyDomainLayer(const QString& domainType);
     void updateDomainManager();
@@ -193,6 +193,8 @@ private:
     bool confirmDiscardEndpointCanvasDrafts();
     bool maybeSave();
     void createDesign();
+    void createDesignWithPreferredPackage(
+        const QString& preferredPackageKey);
     void openDesign();
     bool saveDesign();
     bool saveDesignAs();
@@ -265,7 +267,6 @@ private:
     const PackageDefinition* packageForDesign() const;
     const PackageDefinition* runtimePackageByKey(const QString& key) const;
     const PackageDefinition* runtimePackageForDesign() const;
-    QVector<PackageDefinition> runtimePackages() const;
     [[nodiscard]] QSet<QString> endpointIdsReservedByCanvasDrafts() const;
     [[nodiscard]] QSet<QString> unavailableEndpointIds() const;
     QString nextEndpointId(const QString& endpointType) const;
@@ -295,7 +296,7 @@ private:
     GenerationPublicationKind m_generationPublicationKind =
         GenerationPublicationKind::None;
     QString m_diagnosticsSource;
-    QSet<QString> m_runtimeAvailablePackageKeys;
+    RuntimePackageCache m_runtimePackageCache;
     std::optional<RouterPosition> m_selectedRouter = std::nullopt;
     NocEditorSelectionSet m_editorSelection;
 
@@ -357,20 +358,7 @@ private:
     QPlainTextEdit* m_problemReport = nullptr;
 
     QDockWidget* m_packageDock = nullptr;
-    QGroupBox* m_currentDesignGroup = nullptr;
-    QLabel* m_activePackageLabel = nullptr;
-    QLabel* m_activePackageAvailability = nullptr;
-    QLabel* m_availablePackagesLabel = nullptr;
-    QComboBox* m_creationPackageSelector = nullptr;
-    QLabel* m_creationPackageDetails = nullptr;
-    QPushButton* m_createDesignButton = nullptr;
-    QPushButton* m_installPackageButton = nullptr;
-    QPushButton* m_reloadPackagesButton = nullptr;
-    QGroupBox* m_endpointLibraryGroup = nullptr;
-    QLineEdit* m_endpointFilter = nullptr;
-    QLabel* m_endpointPaletteHint = nullptr;
-    QPushButton* m_addEndpointButton = nullptr;
-    EndpointPaletteList* m_endpointPalette = nullptr;
+    PackageLibraryPanel* m_packageLibraryPanel = nullptr;
 
     QDockWidget* m_inspectorDock = nullptr;
     QScrollArea* m_inspectorScroll = nullptr;

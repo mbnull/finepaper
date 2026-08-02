@@ -49,6 +49,8 @@ target("finepaper-gui")
     add_files("src/features/domain/*.cpp")
     add_files("src/features/domain/presentation/*.cpp")
     add_files("src/features/operations/*.cpp")
+    add_files("src/features/package_library/*.cpp")
+    add_files("src/features/package_library/package_library_panel.h")
     add_files("src/features/topology/*.cpp")
     add_files("src/features/topology/drafts/*.cpp")
     add_files("src/ui/common/*.cpp")
@@ -456,6 +458,44 @@ target("finepaper-new-design-dialog-tests")
         }
     })
 
+target("finepaper-package-runtime-cache-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/package_runtime_cache_tests.cpp")
+    add_files("src/features/package_library/runtime_package_cache.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
+target("finepaper-package-library-panel-tests")
+    add_rules("qt.widgetapp")
+    add_frameworks("QtTest")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/package_library_panel_tests.cpp")
+    add_files("src/features/package_library/package_library_panel.cpp")
+    add_files("src/features/package_library/package_library_panel.h")
+    add_files("src/ui/layouts/responsive_action_layout.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+    add_tests("minimum-maximum-font", {
+        trim_output = true,
+        runenvs = {
+            QT_QPA_PLATFORM = "offscreen",
+            FINEPAPER_PACKAGE_LIBRARY_SIZE = "240x360",
+            FINEPAPER_PACKAGE_LIBRARY_FONT_SCALE = "2.0"
+        }
+    })
+
 target("finepaper-gui-smoke")
     add_rules("qt.widgetapp")
     add_frameworks("QtConcurrent")
@@ -484,6 +524,10 @@ target("finepaper-gui-smoke")
     add_files("src/features/domain/domain_property_form.cpp")
     add_files("src/features/domain/presentation/domain_text.cpp")
     add_files("src/features/operations/design_run_state.cpp")
+    add_files("src/features/package_library/package_library_panel.cpp")
+    add_files("src/features/package_library/package_library_panel.h")
+    add_files("src/features/package_library/package_library_projection.cpp")
+    add_files("src/features/package_library/runtime_package_cache.cpp")
     add_files("src/gui/element_configuration_panel.cpp")
     add_files("src/gui/endpoint_configuration_panel.cpp")
     add_files("src/features/domain/endpoint_domain_assignment_dialog.cpp")
@@ -563,6 +607,16 @@ target("finepaper-gui-smoke")
         runenvs = {
             QT_QPA_PLATFORM = "offscreen",
             FINEPAPER_GUI_SMOKE_SIZE = "1280x720",
+            FINEPAPER_GUI_SMOKE_THEME = "light",
+            FINEPAPER_GUI_SMOKE_FONT_SCALE = "2.0",
+            FINEPAPER_GUI_SMOKE_SCOPE = "workbench"
+        }
+    })
+    add_tests("minimum-maximum-font", {
+        trim_output = true,
+        runenvs = {
+            QT_QPA_PLATFORM = "offscreen",
+            FINEPAPER_GUI_SMOKE_SIZE = "800x600",
             FINEPAPER_GUI_SMOKE_THEME = "light",
             FINEPAPER_GUI_SMOKE_FONT_SCALE = "2.0",
             FINEPAPER_GUI_SMOKE_SCOPE = "workbench"

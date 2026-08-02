@@ -14,6 +14,7 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLayout>
 #include <QMainWindow>
 #include <QPalette>
 #include <QPixmap>
@@ -452,7 +453,100 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.dockTitleBar.floatButton"));
     auto* closeButton = dock->titleBarWidget()->findChild<QToolButton*>(
         QStringLiteral("finepaper.dockTitleBar.closeButton"));
+    auto* dockTitle = dock->titleBarWidget()->findChild<QLabel*>(
+        QStringLiteral("finepaper.dockTitleBar.title"));
+    const QString fullDockTitle = QStringLiteral(
+        "NoC Library and Domain Inspector");
+    dock->setWindowTitle(fullDockTitle);
+    application.processEvents();
+
+    QLayout* dockTitleLayout = dock->titleBarWidget()->layout();
+    const QMargins titleMargins = dockTitleLayout
+        ? dockTitleLayout->contentsMargins() : QMargins{};
+    const int titleSpacing = dockTitleLayout
+        ? (std::max)(0, dockTitleLayout->spacing()) : 0;
+    const int fullTitleWidth = dockTitle
+        ? dockTitle->fontMetrics().horizontalAdvance(fullDockTitle) : 0;
+    const int allLabelsWidth = titleMargins.left()
+        + titleMargins.right()
+        + fullTitleWidth
+        + (floatButton ? floatButton->sizeHint().width() : 0)
+        + (closeButton ? closeButton->sizeHint().width() : 0)
+        + (2 * titleSpacing);
+    const int wideDockWidth = allLabelsWidth
+        + (floatButton ? floatButton->sizeHint().width() : titleSpacing);
+    dockHost.resize(wideDockWidth + 320, dockHost.height());
+    const auto resizeDock = [&application, &dockHost, dock](
+                                int requestedWidth) {
+        dockHost.resizeDocks(
+            {dock}, {requestedWidth}, Qt::Horizontal);
+        application.processEvents();
+        // Hiding Float reduces the title bar's minimum width. A second pass
+        // lets QMainWindow apply the requested dock width with that new hint.
+        dockHost.resizeDocks(
+            {dock}, {requestedWidth}, Qt::Horizontal);
+        application.processEvents();
+    };
+    resizeDock(wideDockWidth);
+    check(floatButton && floatButton->isVisible()
+              && dockTitle && dockTitle->text() == fullDockTitle,
+          QStringLiteral(
+              "a wide dock title bar preserves the full title and Float command "
+              "(actual=%1, requested=%2, Float=%3, title='%4')")
+              .arg(dock->titleBarWidget()->width())
+              .arg(wideDockWidth)
+              .arg(floatButton && floatButton->isVisible())
+              .arg(dockTitle ? dockTitle->text() : QString{}));
+
+    const int titleAndCloseWidth = titleMargins.left()
+        + titleMargins.right()
+        + fullTitleWidth
+        + (closeButton ? closeButton->sizeHint().width() : 0)
+        + titleSpacing;
+    resizeDock(titleAndCloseWidth);
+    check(floatButton && !floatButton->isVisible()
+              && dockTitle && dockTitle->text() == fullDockTitle,
+          QStringLiteral(
+              "a clearly narrow docked title bar hides secondary Float while "
+              "preserving the full title (actual=%1, requested=%2, Float=%3, "
+              "title='%4')")
+              .arg(dock->titleBarWidget()->width())
+              .arg(titleAndCloseWidth)
+              .arg(floatButton && floatButton->isVisible())
+              .arg(dockTitle ? dockTitle->text() : QString{}));
+
+    const int elidedTitleBudget = dockTitle
+        ? dockTitle->fontMetrics().horizontalAdvance(
+              QStringLiteral("NoC Library…"))
+        : 0;
+    const int narrowTitleBarWidth = titleMargins.left()
+        + titleMargins.right()
+        + (closeButton ? closeButton->sizeHint().width() : 0)
+        + titleSpacing
+        + elidedTitleBudget;
+    resizeDock(narrowTitleBarWidth);
+    const int actualTitleBudget = dockTitle
+        ? dock->titleBarWidget()->width()
+            - titleMargins.left() - titleMargins.right()
+            - (closeButton ? closeButton->sizeHint().width() : 0)
+            - titleSpacing
+        : 0;
+    const QString expectedElidedTitle = dockTitle
+        ? dockTitle->fontMetrics().elidedText(
+              fullDockTitle, Qt::ElideRight, actualTitleBudget)
+        : QString{};
+    check(dockTitle && dockTitle->text() == expectedElidedTitle
+              && dockTitle->text().endsWith(QChar(0x2026))
+              && dockTitle->toolTip() == fullDockTitle
+              && dockTitle->accessibleName() == fullDockTitle
+              && closeButton && closeButton->isVisible(),
+          QStringLiteral(
+              "a narrow dock title uses a real ellipsis while retaining the full "
+              "accessible title and Close command"));
+
+    resizeDock(wideDockWidth);
     check(floatButton && floatButton->text() == QStringLiteral("Float")
+              && floatButton->isVisible()
               && floatButton->height()
                   >= finepaper::ui::UiMetrics::controlCompactHeight
               && !floatButton->accessibleName().isEmpty()
@@ -467,10 +561,17 @@ int main(int argc, char** argv) {
         floatButton->click();
         application.processEvents();
     }
+    if (dock->isFloating()) {
+        dock->titleBarWidget()->resize(
+            narrowTitleBarWidth, dock->titleBarWidget()->height());
+    }
     check(dock->isFloating()
               && floatButton
-              && floatButton->text() == QStringLiteral("Dock"),
-          QStringLiteral("the Float command becomes an explicit Dock command"));
+              && floatButton->text() == QStringLiteral("Dock")
+              && floatButton->isVisible(),
+          QStringLiteral(
+              "the Float command becomes a discoverable Dock command even when "
+              "the floating title bar is narrow"));
     if (floatButton) {
         floatButton->click();
         application.processEvents();

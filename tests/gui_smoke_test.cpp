@@ -7,6 +7,7 @@
 #include "features/topology/noc_node_editor.h"
 #include "features/topology/topology_workspace_store.h"
 #include "ui/common/schema_value_editor.h"
+#include "ui/theme/ui_tokens.h"
 #include "ui/theme/workbench_style.h"
 #include "ui/workbench/workbench_config.h"
 
@@ -120,6 +121,15 @@ struct FinepaperMainWindowSmokeAccess final {
         const QStringList& retainedRuntimePaths) {
         window.presentProcessCleanupFailure(
             operationName, diagnostics, retainedRuntimePaths, {});
+    }
+
+    static quint64 runtimePackageProbeGeneration(
+        const FinepaperMainWindow& window) {
+        return window.m_runtimePackageCache.probeGeneration();
+    }
+
+    static void refreshDesignProjection(FinepaperMainWindow& window) {
+        window.refreshDesignViews();
     }
 };
 
@@ -311,6 +321,16 @@ bool widgetIntersectsScrollViewport(QScrollArea* scroll, QWidget* widget) {
     const QRect widgetRect(
         widget->mapTo(scroll->viewport(), QPoint(0, 0)), widget->size());
     return scroll->viewport()->rect().intersects(widgetRect);
+}
+
+bool widgetIsFullyVisibleInScrollViewport(
+    QScrollArea* scroll, QWidget* widget) {
+    if (!scroll || !widget || !widget->isVisibleTo(scroll)) {
+        return false;
+    }
+    const QRect widgetRect(
+        widget->mapTo(scroll->viewport(), QPoint(0, 0)), widget->size());
+    return scroll->viewport()->rect().contains(widgetRect);
 }
 
 bool visibleSiblingLabelsDoNotOverlap(QWidget* root,
@@ -2333,13 +2353,20 @@ int main(int argc, char** argv) {
             packageNavigation->trigger();
             application.processEvents();
         }
+        auto* endpointLibraryFilter = window.findChild<QLineEdit*>(
+            QStringLiteral("finepaper.endpointPaletteFilter"));
+        QWidget* expectedLibraryFocus = endpointLibraryFilter
+                && endpointLibraryFilter->isEnabled()
+                && endpointLibraryFilter->isVisibleTo(packageDock)
+            ? static_cast<QWidget*>(endpointLibraryFilter)
+            : static_cast<QWidget*>(creationPackageSelector);
         check(!canvasFocusAction->isChecked()
                   && packageDock && packageDock->isVisible()
                   && centerViews->currentIndex() == 0
-                  && focusIsWithin(creationPackageSelector),
+                  && focusIsWithin(expectedLibraryFocus),
               QStringLiteral(
                   "opening a panel from Canvas Focus restores the workbench "
-                  "before focusing that panel"));
+                  "before focusing its current Library task"));
         if (resetWorkbenchLayoutAction) {
             resetWorkbenchLayoutAction->trigger();
             application.processEvents();
@@ -2367,10 +2394,14 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.creationPackageDetails"));
     auto* packageLibrarySection = window.findChild<QGroupBox*>(
         QStringLiteral("finepaper.packageLibrarySection"));
+    auto* packageLibraryScroll = window.findChild<QScrollArea*>(
+        QStringLiteral("finepaper.packageLibraryScroll"));
     auto* installPackageButton = window.findChild<QPushButton*>(
         QStringLiteral("finepaper.installPackage"));
     auto* reloadPackagesButton = window.findChild<QPushButton*>(
         QStringLiteral("finepaper.reloadPackages"));
+    auto* createButton = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.createDesign"));
     auto* endpointPalette = window.findChild<QListWidget*>(QStringLiteral("finepaper.endpointPalette"));
     auto* currentDesignSection = window.findChild<QGroupBox*>(
         QStringLiteral("finepaper.currentDesignSection"));
@@ -2379,7 +2410,7 @@ int main(int argc, char** argv) {
     auto* initialDomainSelector = window.findChild<QComboBox*>(
         finepaper::workbench::domainLayerSelectorName);
     check(availablePackages
-              && availablePackages->text().startsWith(QStringLiteral("1 NoC IP Package")),
+              && availablePackages->text().startsWith(QStringLiteral("1 available")),
           QStringLiteral("runtime NoC IP availability is summarized in the workbench"));
     check(creationPackageSelector
               && creationPackageSelector->count() == 1
@@ -2400,12 +2431,22 @@ int main(int argc, char** argv) {
                   QStringLiteral("Mesh")),
           QStringLiteral(
               "the compact Package selector keeps the exact version and capability range visible in text"));
+    const bool packageDetailsReachable = packageLibraryScroll
+        && creationPackageDetails
+        && (widgetIsFullyVisibleInScrollViewport(
+                packageLibraryScroll, creationPackageDetails)
+            || packageLibraryScroll->verticalScrollBar()->maximum() > 0);
     const bool packageActionsFit = packageLibrarySection
+        && packageLibraryScroll && creationPackageSelector
+        && packageDetailsReachable && createButton
         && installPackageButton && reloadPackagesButton
-        && packageLibrarySection->rect().contains(
-            installPackageButton->geometry())
-        && packageLibrarySection->rect().contains(
-            reloadPackagesButton->geometry())
+        && widgetIsFullyVisibleInScrollViewport(
+            packageLibraryScroll, creationPackageSelector)
+        && widgetIsFullyVisibleWithin(packageDock, createButton)
+        && widgetIsFullyVisibleWithin(
+            packageDock, installPackageButton)
+        && widgetIsFullyVisibleWithin(
+            packageDock, reloadPackagesButton)
         && installPackageButton->width()
             >= installPackageButton->sizeHint().width()
         && reloadPackagesButton->width()
@@ -2498,14 +2539,14 @@ int main(int argc, char** argv) {
           QStringLiteral(
               "the no-design Inspector hides topology, selection, and parameter editors"));
 
-    auto* createButton = window.findChild<QPushButton*>(QStringLiteral("finepaper.createDesign"));
     check(createButton && createButton->isEnabled()
-              && !createButton->isVisible()
+              && createButton->isVisible()
+              && widgetIsFullyVisibleWithin(packageDock, createButton)
               && currentDesignSection && !currentDesignSection->isVisible()
               && endpointLibrarySection && !endpointLibrarySection->isVisible(),
           QStringLiteral(
-              "the no-design library prioritizes Package selection without duplicate creation or Endpoint controls"));
-    auto* canvasEmptyState = window.findChild<QWidget*>(
+              "the no-design library keeps a fully visible pinned creation entry without exposing Endpoint controls"));
+    auto* canvasEmptyState = window.findChild<QScrollArea*>(
         QStringLiteral("finepaper.canvasEmptyState"));
     auto* emptyStateCreate = window.findChild<QPushButton*>(
         QStringLiteral("finepaper.emptyStateCreate"));
@@ -2513,14 +2554,36 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.emptyStateOpen"));
     auto* emptyStateInstall = window.findChild<QPushButton*>(
         QStringLiteral("finepaper.emptyStateInstall"));
+    bool emptyStateActionsReachable = canvasEmptyState
+        && emptyStateCreate && emptyStateOpen
+        && widgetIsFullyVisibleInScrollViewport(
+            canvasEmptyState, emptyStateCreate)
+        && widgetIsFullyVisibleInScrollViewport(
+            canvasEmptyState, emptyStateOpen);
+    if (!emptyStateActionsReachable && canvasEmptyState
+        && emptyStateOpen) {
+        canvasEmptyState->ensureWidgetVisible(
+            emptyStateOpen,
+            finepaper::ui::UiMetrics::spacing12,
+            finepaper::ui::UiMetrics::spacing12);
+        application.processEvents();
+        emptyStateActionsReachable =
+            widgetIsFullyVisibleInScrollViewport(
+                canvasEmptyState, emptyStateCreate)
+            && widgetIsFullyVisibleInScrollViewport(
+                canvasEmptyState, emptyStateOpen);
+        canvasEmptyState->verticalScrollBar()->setValue(0);
+        application.processEvents();
+    }
     check(canvasEmptyState && canvasEmptyState->isVisible()
               && emptyStateCreate && emptyStateCreate->isVisible()
               && emptyStateCreate->isEnabled()
               && emptyStateOpen && emptyStateOpen->isVisible()
               && emptyStateOpen->isEnabled()
+              && emptyStateActionsReachable
               && emptyStateInstall && !emptyStateInstall->isVisible(),
           QStringLiteral(
-              "the no-design canvas offers Create and Open CTAs when a runnable NoC IP is installed"));
+              "the no-design canvas keeps Create and Open reachable by scrolling while the Library guarantees a visible creation fallback"));
 
     finepaper::FinepaperMainWindow cleanupWindow(locations);
     cleanupWindow.resize(window.size());
@@ -2860,10 +2923,28 @@ int main(int argc, char** argv) {
     }
     const QString provenanceDesignName =
         QStringLiteral("NoC %2-%3-%4-%5");
+    const quint64 packageProbeBeforeCreate =
+        finepaper::FinepaperMainWindowSmokeAccess::
+            runtimePackageProbeGeneration(window);
     createDesignThroughDialog(
         window,
         QStringLiteral("finepaper.noc@1.0.0"),
         provenanceDesignName);
+    const quint64 packageProbeAfterCreate =
+        finepaper::FinepaperMainWindowSmokeAccess::
+            runtimePackageProbeGeneration(window);
+    finepaper::FinepaperMainWindowSmokeAccess::
+        refreshDesignProjection(window);
+    const quint64 packageProbeAfterRoutineRefresh =
+        finepaper::FinepaperMainWindowSmokeAccess::
+            runtimePackageProbeGeneration(window);
+    check(packageProbeBeforeCreate > 0
+              && packageProbeAfterCreate
+                     == packageProbeBeforeCreate + 1
+              && packageProbeAfterRoutineRefresh
+                     == packageProbeAfterCreate,
+          QStringLiteral(
+              "Package availability is probed at the Create boundary but not during routine design projection"));
     restoreRequestedClientSize();
     check(window.isWindowModified(),
           QStringLiteral("creating a design marks the workbench dirty"));
@@ -2883,9 +2964,9 @@ int main(int argc, char** argv) {
           QStringLiteral("active NoC IP, design actions and Endpoint Palette stay aligned"));
     verifyCanvasFocusRoundTrip();
     check(endpointLibrarySection && packageLibrarySection
-              && endpointLibrarySection->y() < packageLibrarySection->y(),
+              && packageLibrarySection->y() < endpointLibrarySection->y(),
           QStringLiteral(
-              "an open design prioritizes Endpoint types ahead of secondary Package maintenance"));
+              "the Library keeps new-design Package selection before the active Endpoint catalog"));
     check(applyParameters && !applyParameters->isEnabled(),
           QStringLiteral("Package defaults are editable but do not enable a no-op Apply"));
     check(meshTopologyGroup && meshTopologyGroup->isVisible()
@@ -5870,7 +5951,7 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.availablePackages"));
     check(explicitAvailablePackages
               && explicitAvailablePackages->text().startsWith(
-                  QStringLiteral("1 NoC IP Package")),
+                  QStringLiteral("1 available")),
           QStringLiteral("explicit-slot Package fixture loads at runtime"));
     auto* explicitCreate = explicitWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.createDesign"));
@@ -6116,7 +6197,7 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.packageSelector"));
     check(multiAvailablePackages
               && multiAvailablePackages->text().startsWith(
-                  QStringLiteral("2 NoC IP Package"))
+                  QStringLiteral("2 available"))
               && multiPackageSelector && multiPackageSelector->count() == 2
               && chooseComboData(
                   multiPackageSelector,
@@ -6315,7 +6396,7 @@ int main(int argc, char** argv) {
               && retainedPackageAvailability->isHidden()
               && retainedAvailablePackages
               && retainedAvailablePackages->text().startsWith(
-                  QStringLiteral("1 NoC IP Package"))
+                  QStringLiteral("1 available"))
               && retainedValidate && retainedValidate->isEnabled()
               && retainedGenerate && retainedGenerate->isEnabled()
               && retainedNew && retainedNew->isEnabled()
@@ -7712,7 +7793,7 @@ int main(int argc, char** argv) {
                   QStringLiteral("Install this exact Package ID and version"))
               && missingAvailablePackages
               && missingAvailablePackages->text().startsWith(
-                  QStringLiteral("1 NoC IP Package")),
+                  QStringLiteral("1 available")),
           QStringLiteral("missing active Package is not replaced by an unrelated available IP"));
     check(missingPalette && missingPalette->count() == 0
               && !missingPalette->isEnabled(),

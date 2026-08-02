@@ -1,5 +1,7 @@
 #include "application/package_catalog/catalog.h"
 
+#include "package/package_root_identity.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
@@ -22,14 +24,6 @@ void appendDiagnostic(QVector<Diagnostic>& diagnostics,
                       const QString& message,
                       const QString& path = {}) {
     diagnostics.append(Diagnostic{severity, code, message, path});
-}
-
-QString canonicalPackagePath(const QString& packagePath) {
-    const QFileInfo packageInfo(packagePath);
-    const QString canonicalPath = packageInfo.canonicalFilePath();
-    return canonicalPath.isEmpty()
-        ? QDir::cleanPath(packageInfo.absoluteFilePath())
-        : canonicalPath;
 }
 
 QStringList packagePathsInRoot(const QString& rootPath) {
@@ -74,7 +68,8 @@ PackageCatalogDiscoveryResult discoverPackageCatalog(const QStringList& roots) {
         foundUsableRoot = true;
 
         for (const QString& packagePath : packagePathsInRoot(rootPath)) {
-            const QString canonicalPath = canonicalPackagePath(packagePath);
+            const QString canonicalPath =
+                normalizedPackageRootPath(packagePath);
             if (discoveredPackagePaths.contains(canonicalPath)) {
                 continue;
             }

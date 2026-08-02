@@ -4,10 +4,15 @@
 
 #include <QCoreApplication>
 #include <QDockWidget>
+#include <QEvent>
+#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QResizeEvent>
 #include <QSizePolicy>
 #include <QToolButton>
+
+#include <algorithm>
 
 namespace finepaper::ui {
 namespace {
@@ -75,31 +80,108 @@ WorkbenchDockTitleBar::WorkbenchDockTitleBar(QDockWidget& dock)
 }
 
 void WorkbenchDockTitleBar::updatePresentation() {
-    const QString title = m_dock.windowTitle();
+    m_fullTitle = m_dock.windowTitle();
     const bool floating = m_dock.isFloating();
     const QString floatVerb = floating
         ? titleBarText("Dock")
         : titleBarText("Float");
-    m_title->setText(title);
-    m_title->setToolTip(title);
-    setAccessibleName(titleBarText("%1 panel controls").arg(title));
+    m_title->setToolTip(m_fullTitle);
+    m_title->setAccessibleName(m_fullTitle);
+    setAccessibleName(
+        titleBarText("%1 panel controls").arg(m_fullTitle));
 
     m_floatButton->setText(floatVerb);
     m_floatButton->setAccessibleName(
-        titleBarText("%1 %2 panel").arg(floatVerb).arg(title));
+        titleBarText("%1 %2 panel").arg(floatVerb).arg(m_fullTitle));
     m_floatButton->setToolTip(
         floating
-            ? titleBarText("Return %1 to the workbench").arg(title)
-            : titleBarText("Float %1 in its own window").arg(title));
-    m_floatButton->setVisible(
-        m_dock.features().testFlag(QDockWidget::DockWidgetFloatable));
+            ? titleBarText("Return %1 to the workbench").arg(m_fullTitle)
+            : titleBarText("Float %1 in its own window").arg(m_fullTitle));
 
     m_closeButton->setAccessibleName(
-        titleBarText("Close %1 panel").arg(title));
+        titleBarText("Close %1 panel").arg(m_fullTitle));
     m_closeButton->setToolTip(
-        titleBarText("Close %1 panel").arg(title));
+        titleBarText("Close %1 panel").arg(m_fullTitle));
     m_closeButton->setVisible(
         m_dock.features().testFlag(QDockWidget::DockWidgetClosable));
+
+    updateResponsivePresentation();
+}
+
+void WorkbenchDockTitleBar::changeEvent(QEvent* event) {
+    QWidget::changeEvent(event);
+    if (!event) {
+        return;
+    }
+
+    switch (event->type()) {
+    case QEvent::FontChange:
+    case QEvent::StyleChange:
+    case QEvent::LayoutDirectionChange:
+        updateResponsivePresentation();
+        break;
+    default:
+        break;
+    }
+}
+
+void WorkbenchDockTitleBar::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    updateResponsivePresentation();
+}
+
+void WorkbenchDockTitleBar::updateResponsivePresentation() {
+    if (!m_title || !m_floatButton || !m_closeButton || !layout()) {
+        return;
+    }
+
+    const QMargins margins = layout()->contentsMargins();
+    const int spacing = (std::max)(0, layout()->spacing());
+    const bool floating = m_dock.isFloating();
+    const bool floatable = m_dock.features().testFlag(
+        QDockWidget::DockWidgetFloatable);
+    const bool closable = m_dock.features().testFlag(
+        QDockWidget::DockWidgetClosable);
+    const int fullTitleWidth = m_title->fontMetrics().horizontalAdvance(
+        m_fullTitle);
+
+    const auto requiredWidth = [&](bool includeFloat) {
+        int result = margins.left() + margins.right() + fullTitleWidth;
+        int actionCount = 0;
+        if (includeFloat) {
+            result += m_floatButton->sizeHint().width();
+            ++actionCount;
+        }
+        if (closable) {
+            result += m_closeButton->sizeHint().width();
+            ++actionCount;
+        }
+        return result + (actionCount * spacing);
+    };
+
+    // While docked, Float is secondary to an intact panel title and Close.
+    // Once floating, Dock remains available even in a very narrow window so
+    // there is always an obvious route back to the workbench.
+    const bool showFloat = floating
+        || (floatable && width() >= requiredWidth(true));
+    m_floatButton->setVisible(showFloat);
+
+    int availableTitleWidth = width() - margins.left() - margins.right();
+    int visibleActionCount = 0;
+    if (showFloat) {
+        availableTitleWidth -= m_floatButton->sizeHint().width();
+        ++visibleActionCount;
+    }
+    if (closable) {
+        availableTitleWidth -= m_closeButton->sizeHint().width();
+        ++visibleActionCount;
+    }
+    availableTitleWidth -= visibleActionCount * spacing;
+
+    m_title->setText(m_title->fontMetrics().elidedText(
+        m_fullTitle,
+        Qt::ElideRight,
+        (std::max)(0, availableTitleWidth)));
 }
 
 void installWorkbenchDockTitleBar(QDockWidget* dock) {
