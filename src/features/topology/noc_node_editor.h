@@ -153,6 +153,9 @@ public:
     bool reducedMotion() const;
     [[nodiscard]] attachment::SlotResolution endpointAttachmentAvailability(
         RouterPosition router) const;
+    // Disconnecting keeps the Endpoint as a recoverable canvas draft. This
+    // is deliberately distinct from deleting the Endpoint lifecycle object.
+    bool disconnectEndpointAttachment(const QString& endpointId);
     void selectElements(const QVector<ElementRef>& elements);
     bool setRouterVisualPosition(const QString& routerId, QPointF position);
     std::optional<QPointF> routerVisualPosition(const QString& routerId) const;

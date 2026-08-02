@@ -146,6 +146,16 @@ InspectorSummaryPanel::InspectorSummaryPanel(QWidget* parent) : QWidget(parent) 
     m_reviewDiagnostics->setObjectName(
         QStringLiteral("finepaper.inspectorReviewDiagnostics"));
     actionLayout->addWidget(m_reviewDiagnostics);
+    m_disconnectEndpointAttachment = new QPushButton(
+        tr("Disconnect Endpoint"), m_contextActions);
+    m_disconnectEndpointAttachment->setObjectName(
+        QStringLiteral("finepaper.inspectorDisconnectEndpoint"));
+    m_disconnectEndpointAttachment->setProperty(
+        "finepaperRole", QStringLiteral("danger"));
+    m_disconnectEndpointAttachment->setAccessibleDescription(
+        tr("Disconnect this Endpoint from its Router. The Endpoint remains "
+           "recoverable until you reconnect or delete it."));
+    actionLayout->addWidget(m_disconnectEndpointAttachment);
     // Contextual task routes are the primary action for the current
     // selection. Keep them before descriptive design metadata so they remain
     // reachable in compact windows and at large system font sizes.
@@ -162,6 +172,12 @@ InspectorSummaryPanel::InspectorSummaryPanel(QWidget* parent) : QWidget(parent) 
             this, [this] {
                 if (reviewDiagnosticsRequested) {
                     reviewDiagnosticsRequested();
+                }
+            });
+    connect(m_disconnectEndpointAttachment, &QPushButton::clicked,
+            this, [this] {
+                if (disconnectEndpointAttachmentRequested) {
+                    disconnectEndpointAttachmentRequested();
                 }
             });
     connect(m_selectionDetailToggle, &QPushButton::clicked,
@@ -181,15 +197,19 @@ void InspectorSummaryPanel::setContextActions(
     const InspectorContextActions& actions) {
     m_editDomainAssignments->setVisible(actions.editDomainAssignments);
     m_reviewDiagnostics->setVisible(actions.reviewDiagnostics);
+    m_disconnectEndpointAttachment->setVisible(
+        actions.disconnectEndpointAttachment);
     m_contextActions->setVisible(
-        actions.editDomainAssignments || actions.reviewDiagnostics);
+        actions.editDomainAssignments || actions.reviewDiagnostics
+        || actions.disconnectEndpointAttachment);
     updateGeometry();
 }
 
 QWidget* InspectorSummaryPanel::preferredFocusTarget() {
     return firstAvailableFocusTarget(
         this,
-        {m_editDomainAssignments, m_reviewDiagnostics,
+        {m_disconnectEndpointAttachment, m_editDomainAssignments,
+         m_reviewDiagnostics,
          m_selectionDetailToggle, m_selectionTitle, m_designTitle});
 }
 

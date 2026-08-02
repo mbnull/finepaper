@@ -3732,13 +3732,14 @@ int main(int argc, char** argv) {
     const QSet<QString> expectedContextButtonNames = {
         QStringLiteral("finepaper.inspectorEditDomainAssignments"),
         QStringLiteral("finepaper.inspectorReviewDiagnostics"),
+        QStringLiteral("finepaper.inspectorDisconnectEndpoint"),
     };
     check(selectionInspector && selectionCardButtons.isEmpty()
               && inspectorContextActions
               && contextButtons.size() == expectedContextButtonNames.size()
               && contextButtonNames == expectedContextButtonNames,
           QStringLiteral(
-              "selection Inspector exposes task navigation without duplicating connect or delete controls"));
+              "selection Inspector exposes text task routes, including an attachment-only Disconnect action"));
     std::unique_ptr<QMimeData> endpointMime;
     if (endpointPalette && endpointPalette->count() > 0) {
         endpointMime.reset(endpointPalette->model()->mimeData(
@@ -5230,12 +5231,18 @@ int main(int argc, char** argv) {
             ->setSelected(true);
         application.processEvents();
     }
+    auto* inspectorDisconnectEndpoint = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.inspectorDisconnectEndpoint"));
     check(observedSemanticSelection.size() == 1
               && observedSemanticSelection.items.front().kind
                   == finepaper::NocEditorSelection::Kind::EndpointAttachment
               && !observedSemanticSelection.items.front().id.isEmpty()
+              && inspectorDisconnectEndpoint
+              && inspectorDisconnectEndpoint->isVisible()
+              && inspectorDisconnectEndpoint->isEnabled()
               && semanticSelectionCallbacks > 0,
-          QStringLiteral("an Endpoint attachment line is exposed as a distinct semantic selection"));
+          QStringLiteral(
+              "an Endpoint attachment line is a distinct selection with an explicit Disconnect action"));
     if (nodeEditor) {
         nodeEditor->semanticSelectionChanged = mainWindowSelectionHandler;
     }

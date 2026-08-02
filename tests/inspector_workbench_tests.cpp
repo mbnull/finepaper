@@ -5,8 +5,10 @@
 #include <QApplication>
 #include <QLabel>
 #include <QPushButton>
+#include <QRect>
 #include <QTextStream>
 #include <QToolButton>
+#include <QVector>
 #include <QVBoxLayout>
 
 namespace {
@@ -72,10 +74,13 @@ void summaryUsesStablePlainTextWidgets() {
         QStringLiteral("finepaper.inspectorEditDomainAssignments"));
     auto* reviewDiagnostics = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.inspectorReviewDiagnostics"));
+    auto* disconnectEndpoint = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.inspectorDisconnectEndpoint"));
     check(selection && selectionDetailToggle
-              && editDomainAssignments && reviewDiagnostics
+              && editDomainAssignments && reviewDiagnostics && disconnectEndpoint
               && !editDomainAssignments->isVisible()
               && !reviewDiagnostics->isVisible()
+              && !disconnectEndpoint->isVisible()
               && !selectionDetailToggle->isVisible()
               && editDomainAssignments->icon().isNull()
               && reviewDiagnostics->icon().isNull()
@@ -104,34 +109,67 @@ void summaryUsesStablePlainTextWidgets() {
 
     int editDomainRequests = 0;
     int reviewDiagnosticRequests = 0;
+    int disconnectRequests = 0;
     panel.editDomainAssignmentsRequested = [&editDomainRequests] {
         ++editDomainRequests;
     };
     panel.reviewDiagnosticsRequested = [&reviewDiagnosticRequests] {
         ++reviewDiagnosticRequests;
     };
-    panel.setContextActions({true, true});
+    panel.disconnectEndpointAttachmentRequested = [&disconnectRequests] {
+        ++disconnectRequests;
+    };
+    panel.setContextActions({true, true, true});
     QApplication::processEvents();
     editDomainAssignments->click();
     reviewDiagnostics->click();
+    disconnectEndpoint->click();
     check(editDomainAssignments->isVisible()
               && editDomainAssignments->text()
                   == QStringLiteral("Edit Domain assignments")
               && reviewDiagnostics->isVisible()
               && reviewDiagnostics->text()
                   == QStringLiteral("Review diagnostics")
-              && panel.preferredFocusTarget() == editDomainAssignments
+              && disconnectEndpoint->isVisible()
+              && disconnectEndpoint->text()
+                  == QStringLiteral("Disconnect Endpoint")
+              && panel.preferredFocusTarget() == disconnectEndpoint
               && editDomainAssignments->mapTo(&panel, QPoint{}).y()
                   < selectionTitle->mapTo(&panel, QPoint{}).y()
-              && editDomainRequests == 1 && reviewDiagnosticRequests == 1,
+              && editDomainRequests == 1 && reviewDiagnosticRequests == 1
+              && disconnectRequests == 1,
           QStringLiteral(
               "selection summary keeps text task routes before descriptive metadata with stable callbacks"));
+    QFont actionFont = panel.font();
+    actionFont.setPointSizeF(actionFont.pointSizeF() * 2.0);
+    panel.setFont(actionFont);
+    panel.resize(240, 720);
+    QApplication::processEvents();
+    const QVector<QPushButton*> taskActions{
+        disconnectEndpoint, editDomainAssignments, reviewDiagnostics};
+    QVector<QRect> taskActionRects;
+    bool taskActionsContained = true;
+    bool taskActionsDistinct = true;
+    for (QPushButton* action : taskActions) {
+        if (!action || !action->isVisibleTo(&panel)) {
+            taskActionsContained = false;
+            continue;
+        }
+        const QRect actionRect(action->mapTo(&panel, QPoint{}), action->size());
+        taskActionsContained = taskActionsContained
+            && panel.rect().contains(actionRect);
+        for (const QRect& existing : taskActionRects) {
+            taskActionsDistinct = taskActionsDistinct
+                && !existing.intersects(actionRect);
+        }
+        taskActionRects.append(actionRect);
+    }
+    check(taskActionsContained && taskActionsDistinct,
+          QStringLiteral(
+              "240 px Inspector at 2x font keeps text task actions contained and non-overlapping"));
     check(panel.minimumSizeHint().width() <= panel.width(),
           QStringLiteral("long summary text does not force a wider Inspector"));
 
-    QFont enlarged = panel.font();
-    enlarged.setPointSizeF(enlarged.pointSizeF() * 1.5);
-    panel.setFont(enlarged);
     panel.setSelectionTaskFocused(false);
     panel.setDesignSummary({hostileTitle, QStringLiteral("metadata"), {}});
     panel.setSelectionSummary(std::nullopt);
@@ -142,6 +180,7 @@ void summaryUsesStablePlainTextWidgets() {
               && selectionTitle && selectionTitle->text().isEmpty()
               && editDomainAssignments && !editDomainAssignments->isVisible()
               && reviewDiagnostics && reviewDiagnostics->isVisible()
+              && disconnectEndpoint && !disconnectEndpoint->isVisible()
               && panel.minimumSizeHint().width() <= panel.width(),
           QStringLiteral(
               "clearing verbose state leaves no stale selection while design-level diagnostics remain reachable"));

@@ -366,6 +366,7 @@ FinepaperMainWindow::~FinepaperMainWindow() {
     if (m_inspectorSummaryPanel) {
         m_inspectorSummaryPanel->editDomainAssignmentsRequested = {};
         m_inspectorSummaryPanel->reviewDiagnosticsRequested = {};
+        m_inspectorSummaryPanel->disconnectEndpointAttachmentRequested = {};
     }
     if (m_nodeEditor) {
         m_nodeEditor->endpointTypeDropped = {};
@@ -1823,6 +1824,15 @@ void FinepaperMainWindow::createActions() {
                 ui::WorkbenchPanelId::Results,
                 ui::WorkbenchPanelIntent::ReviewDiagnostics);
         }
+    };
+    m_inspectorSummaryPanel->disconnectEndpointAttachmentRequested = [this] {
+        if (m_operationBusy || !m_nodeEditor || m_editorSelection.items.size() != 1
+            || m_editorSelection.items.front().kind
+                != NocEditorSelection::Kind::EndpointAttachment) {
+            return;
+        }
+        m_nodeEditor->disconnectEndpointAttachment(
+            m_editorSelection.items.front().id);
     };
 
     QMenu* fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
@@ -5088,8 +5098,16 @@ void FinepaperMainWindow::updateInspectorContextActions() {
     const bool canReviewDiagnostics = m_design
         && (m_diagnosticsStamp.has_value()
             || (m_drcTable && m_drcTable->rowCount() > 0));
+    const bool canDisconnectEndpointAttachment = !m_operationBusy
+        && m_nodeEditor
+        && m_nodeEditor->editingEnabled()
+        && m_editorSelection.items.size() == 1
+        && m_editorSelection.items.front().kind
+            == NocEditorSelection::Kind::EndpointAttachment;
     m_inspectorSummaryPanel->setContextActions(
-        {canEditDomainAssignments, canReviewDiagnostics});
+        {canEditDomainAssignments,
+         canReviewDiagnostics,
+         canDisconnectEndpointAttachment});
 }
 
 void FinepaperMainWindow::adoptDesignResult(

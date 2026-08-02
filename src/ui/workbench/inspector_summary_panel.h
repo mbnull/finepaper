@@ -34,6 +34,7 @@ struct InspectorSelectionSummary final {
 struct InspectorContextActions final {
     bool editDomainAssignments = false;
     bool reviewDiagnostics = false;
+    bool disconnectEndpointAttachment = false;
 };
 
 class InspectorSummaryPanel final : public QWidget {
@@ -51,6 +52,7 @@ public:
 
     std::function<void()> editDomainAssignmentsRequested;
     std::function<void()> reviewDiagnosticsRequested;
+    std::function<void()> disconnectEndpointAttachmentRequested;
 
 protected:
     void changeEvent(QEvent* event) override;
@@ -73,6 +75,7 @@ private:
     QWidget* m_contextActions = nullptr;
     QPushButton* m_editDomainAssignments = nullptr;
     QPushButton* m_reviewDiagnostics = nullptr;
+    QPushButton* m_disconnectEndpointAttachment = nullptr;
     bool m_hasDesignSummary = false;
     bool m_hasSelection = false;
     bool m_hasSelectionDetail = false;

@@ -1402,6 +1402,16 @@ bool NocNodeEditor::editingEnabled() const {
     return m_editingEnabled;
 }
 
+bool NocNodeEditor::disconnectEndpointAttachment(const QString& endpointId) {
+    if (!m_editingEnabled || endpointId.trimmed().isEmpty()) {
+        return false;
+    }
+    const auto node = m_elementNodes.constFind(
+        ElementRef{ElementKind::Endpoint, endpointId});
+    return node != m_elementNodes.constEnd()
+        && detachEndpoint(node.value(), true);
+}
+
 void NocNodeEditor::setCanvasInteractionMode(NocCanvasInteractionMode mode) {
     m_canvasInteractionMode = mode;
     m_canvasSelectionGesture = false;
