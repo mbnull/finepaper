@@ -6,12 +6,15 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFont>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QTableWidget>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QTextStream>
 #include <QTimer>
@@ -30,6 +33,22 @@ void check(bool condition, const QString& message) {
         QTextStream(stderr) << "FAILED: " << message << Qt::endl;
         ++failures;
     }
+}
+
+bool fullyVisibleWithin(QWidget* ancestor, QWidget* child) {
+    if (!ancestor || !child || !child->isVisibleTo(ancestor)) {
+        return false;
+    }
+    return ancestor->rect().contains(
+        QRect(child->mapTo(ancestor, QPoint{}), child->size()));
+}
+
+bool intersectsScrollViewport(QScrollArea* scroll, QWidget* child) {
+    if (!scroll || !child || !child->isVisibleTo(scroll)) {
+        return false;
+    }
+    return scroll->viewport()->rect().intersects(
+        QRect(child->mapTo(scroll->viewport(), QPoint{}), child->size()));
 }
 
 PackageDefinition genericPackage() {
@@ -192,6 +211,18 @@ struct AssignmentCall {
 
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
+    bool fontScaleOk = false;
+    const double fontScale = qEnvironmentVariable(
+        "FINEPAPER_DOMAIN_MANAGER_FONT_SCALE").toDouble(&fontScaleOk);
+    if (fontScaleOk && fontScale > 1.0) {
+        QFont font = application.font();
+        if (font.pointSizeF() > 0.0) {
+            font.setPointSizeF(font.pointSizeF() * fontScale);
+        } else if (font.pixelSize() > 0) {
+            font.setPixelSize(qRound(font.pixelSize() * fontScale));
+        }
+        application.setFont(font);
+    }
 
     const PackageDefinition package = genericPackage();
     const NocDesign design = genericDesign();
@@ -204,7 +235,7 @@ int main(int argc, char** argv) {
         linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))};
 
     DomainManagerPanel panel;
-    panel.resize(640, 720);
+    panel.resize(fontScaleOk && fontScale > 1.0 ? 360 : 640, 720);
     panel.show();
     panel.setContext(&design, &resolved, &package,
                      QStringLiteral("security-zone"));
@@ -212,6 +243,8 @@ int main(int argc, char** argv) {
 
     auto* typeSelector = panel.findChild<QComboBox*>(
         QStringLiteral("finepaper.domainManager.typeSelector"));
+    auto* typeControls = panel.findChild<QWidget*>(
+        QStringLiteral("finepaper.domainManager.typeControls"));
     auto* instances = panel.findChild<QTableWidget*>(
         QStringLiteral("finepaper.domainManager.instanceView"));
     auto* tabs = panel.findChild<QTabWidget*>(
@@ -222,6 +255,8 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.assignmentPage"));
     auto* assignmentState = panel.findChild<QLabel*>(
         QStringLiteral("finepaper.domainManager.assignmentState"));
+    auto* taskStatus = panel.findChild<QLabel*>(
+        QStringLiteral("finepaper.domainAssignmentTaskBar.status"));
     auto* assignmentFeedback = panel.findChild<QLabel*>(
         QStringLiteral("finepaper.domainManager.assignmentFeedback"));
     auto* singleAssignment = panel.findChild<QComboBox*>(
@@ -234,6 +269,10 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.clearAssignment"));
     auto* discardAssignment = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.discardAssignment"));
+    auto* assignmentTaskBar = panel.findChild<QWidget*>(
+        QStringLiteral("finepaper.domainAssignmentTaskBar"));
+    auto* contentScroll = panel.findChild<QScrollArea*>(
+        QStringLiteral("finepaper.domainManagerScroll"));
     auto* completeConfiguration = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.completeConfiguration"));
     auto* addDomain = panel.findChild<QPushButton*>(
@@ -249,19 +288,19 @@ int main(int argc, char** argv) {
     auto* selectUnassigned = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.selectUnassigned"));
 
-    check(typeSelector && instances && tabs && instancesPage
-              && assignmentPage && assignmentState
+    check(typeSelector && typeControls && instances && tabs && instancesPage
+              && assignmentPage && assignmentState && taskStatus
               && assignmentFeedback && singleAssignment
               && multipleAssignment && applyAssignment && clearAssignment
-              && discardAssignment
+              && discardAssignment && assignmentTaskBar && contentScroll
               && completeConfiguration && addDomain && editDomain && deleteDomain
               && selectMembers && selectAllEligible && selectUnassigned,
           QStringLiteral("Domain Manager exposes its stable test controls"));
-    if (!typeSelector || !instances || !tabs || !instancesPage
-        || !assignmentPage || !assignmentState
+    if (!typeSelector || !typeControls || !instances || !tabs || !instancesPage
+        || !assignmentPage || !assignmentState || !taskStatus
         || !assignmentFeedback || !singleAssignment
         || !multipleAssignment || !applyAssignment || !clearAssignment
-        || !discardAssignment
+        || !discardAssignment || !assignmentTaskBar || !contentScroll
         || !completeConfiguration || !addDomain || !editDomain || !deleteDomain
         || !selectMembers || !selectAllEligible || !selectUnassigned) {
         return 1;
@@ -305,6 +344,38 @@ int main(int argc, char** argv) {
     check(!panel.canActivateAssignmentPage(),
           QStringLiteral(
               "Domain assignment navigation stays unavailable without a semantic selection"));
+    check(!panel.setAssignmentTaskActive(true)
+              && !panel.assignmentTaskActive()
+              && typeControls->isVisibleTo(&panel)
+              && tabs->tabBar()->isVisible(),
+          QStringLiteral(
+              "an invalid task request preserves the complete Manager instead of stripping its exit routes"));
+
+    PackageDefinition packageWithEmptyType = package;
+    DomainTypeDefinition emptyType;
+    emptyType.id = QStringLiteral("isolation-domain");
+    emptyType.label = QStringLiteral("Isolation domains");
+    emptyType.appliesTo = {ElementKind::Router};
+    emptyType.cardinality = DomainCardinality::Multiple;
+    packageWithEmptyType.domainTypes.append(emptyType);
+    panel.setContext(&design, &resolved, &packageWithEmptyType,
+                     QStringLiteral("isolation-domain"));
+    typeSelector->setCurrentIndex(
+        typeSelector->findData(QStringLiteral("isolation-domain")));
+    panel.setSelection({router0});
+    tabs->setCurrentWidget(assignmentPage);
+    QApplication::processEvents();
+    check(taskStatus->text().contains(
+              QStringLiteral("No Domain instances exist"))
+              && applyAssignment->accessibleDescription().contains(
+                  QStringLiteral("Add a Domain instance")),
+          QStringLiteral(
+              "an empty Package-defined Domain type routes assignment back to instance creation"));
+    panel.setContext(&design, &resolved, &package,
+                     QStringLiteral("security-zone"));
+    panel.setSelection({});
+    tabs->setCurrentWidget(instancesPage);
+    QApplication::processEvents();
     typeSelector->setCurrentIndex(
         typeSelector->findData(QStringLiteral("fabric-tier")));
     panel.setSelection({endpoint});
@@ -315,13 +386,64 @@ int main(int argc, char** argv) {
           QStringLiteral(
               "an Endpoint remains assignable when another Package Domain type supports it"));
     tabs->setCurrentWidget(instancesPage);
-    panel.activateAssignmentPage();
+    check(panel.activateAssignmentPage(),
+          QStringLiteral("an eligible selection activates assignment"));
     QApplication::processEvents();
     check(tabs->currentWidget() == assignmentPage
               && panel.currentDomainType() == QStringLiteral("security-zone")
-              && multipleAssignment->isVisible(),
+              && multipleAssignment->isVisible()
+              && discardAssignment->accessibleDescription().contains(
+                  QStringLiteral("return to Domain instances")),
           QStringLiteral(
-              "assignment navigation selects the first compatible Package Domain type"));
+              "assignment navigation selects a compatible type and describes its ordinary Done route"));
+    int assignmentTaskExitRequests = 0;
+    panel.assignmentTaskExitRequested = [&assignmentTaskExitRequests] {
+        ++assignmentTaskExitRequests;
+    };
+    check(panel.setAssignmentTaskActive(true),
+          QStringLiteral("a valid selection starts focused assignment"));
+    QApplication::processEvents();
+    check(panel.assignmentTaskActive()
+              && assignmentTaskBar->isVisibleTo(&panel)
+              && assignmentTaskBar->property("finepaperTaskActive").toBool()
+              && !typeControls->isVisibleTo(&panel)
+              && !tabs->tabBar()->isVisible()
+              && discardAssignment->isVisibleTo(&panel)
+              && discardAssignment->isEnabled()
+              && discardAssignment->text() == QStringLiteral("Done")
+              && discardAssignment->accessibleDescription().contains(
+                  QStringLiteral("Finish Domain assignment"))
+              && fullyVisibleWithin(&panel, assignmentTaskBar)
+              && fullyVisibleWithin(
+                  assignmentTaskBar, applyAssignment)
+              && fullyVisibleWithin(
+                  assignmentTaskBar, discardAssignment)
+              && intersectsScrollViewport(
+                  contentScroll, multipleAssignment)
+              && contentScroll->viewport()->width()
+                  >= contentScroll->widget()->width()
+              && assignmentState->width()
+                  <= contentScroll->viewport()->width()
+              && taskStatus->width() <= assignmentTaskBar->width(),
+          QStringLiteral(
+              "an explicit assignment task keeps a stable, enabled Done route"));
+    discardAssignment->click();
+    QApplication::processEvents();
+    check(assignmentTaskExitRequests == 1
+              && tabs->currentWidget() == assignmentPage,
+          QStringLiteral(
+              "focused Done requests task exit without hardcoded tab routing"));
+    check(panel.setAssignmentTaskActive(false),
+          QStringLiteral("focused assignment can return to Manager mode"));
+    QApplication::processEvents();
+    check(typeControls->isVisibleTo(&panel) && tabs->tabBar()->isVisible(),
+          QStringLiteral(
+              "leaving focused assignment restores the Manager navigation"));
+    discardAssignment->click();
+    QApplication::processEvents();
+    check(tabs->currentWidget() == instancesPage,
+          QStringLiteral(
+              "ordinary Done returns to the stable Instances page identity"));
 
     panel.setSelection({link});
     tabs->setCurrentWidget(instancesPage);
@@ -329,8 +451,8 @@ int main(int argc, char** argv) {
     check(!panel.canActivateAssignmentPage(),
           QStringLiteral(
               "derived Router Links do not expose a dead-end Domain assignment route"));
-    panel.activateAssignmentPage();
-    check(tabs->currentWidget() == instancesPage,
+    check(!panel.activateAssignmentPage()
+              && tabs->currentWidget() == instancesPage,
           QStringLiteral(
               "an ineligible selection cannot force the assignment page open"));
     panel.setSelection({});
@@ -579,6 +701,18 @@ int main(int argc, char** argv) {
         QApplication::processEvents();
         check(applyAssignment->isEnabled(),
               QStringLiteral("resolving a partial value enables Apply"));
+        panel.setBusy(true);
+        QApplication::processEvents();
+        check(!applyAssignment->isEnabled()
+                  && applyAssignment->accessibleDescription().contains(
+                      QStringLiteral("current operation to finish")),
+              QStringLiteral(
+                  "a busy operation disables Apply with an operation-specific explanation"));
+        panel.setBusy(false);
+        QApplication::processEvents();
+        check(applyAssignment->isEnabled(),
+              QStringLiteral(
+                  "finishing the operation restores the accepted staged assignment"));
         zoneB->setCheckState(Qt::PartiallyChecked);
         QApplication::processEvents();
         check(!applyAssignment->isEnabled(),
@@ -628,11 +762,13 @@ int main(int argc, char** argv) {
           QStringLiteral("a selection change preserves the pending assignment target"));
     discardAssignment->click();
     QApplication::processEvents();
-    check(!discardAssignment->isEnabled()
+    check(discardAssignment->isEnabled()
+              && discardAssignment->text() == QStringLiteral("Done")
               && assignmentState->property("assignmentState").toString()
                   == QStringLiteral("common")
               && assignmentState->text().contains(QStringLiteral("1 of 1")),
-          QStringLiteral("Discard adopts the latest canvas selection and clears pending state"));
+          QStringLiteral(
+              "Discard adopts the latest selection and returns to a stable Done state"));
     check(completeConfiguration->isEnabled(),
           QStringLiteral("Discard restores the complete Domain configuration entry"));
     completeConfiguration->click();
@@ -791,10 +927,36 @@ int main(int argc, char** argv) {
     QApplication::processEvents();
     check(zoneB && applyAssignment->isEnabled()
               && !assignmentFeedback->isVisible()
-              && applyAssignment->accessibleDescription().isEmpty(),
+              && applyAssignment->accessibleDescription().contains(
+                  QStringLiteral("Apply the staged Domain assignments")),
           QStringLiteral("Apply enables when the same delta leaves every mixed-kind target within its own limits"));
     discardAssignment->click();
     QApplication::processEvents();
+    panel.setContext(&design, &resolved, &package,
+                     QStringLiteral("security-zone"));
+    QApplication::processEvents();
+
+    PackageDefinition invalidRulePackage = package;
+    auto invalidRuleType = std::find_if(
+        invalidRulePackage.domainTypes.begin(),
+        invalidRulePackage.domainTypes.end(),
+        [](const DomainTypeDefinition& type) {
+            return type.id == QStringLiteral("security-zone");
+        });
+    if (invalidRuleType != invalidRulePackage.domainTypes.end()) {
+        invalidRuleType->assignmentRules = {
+            DomainAssignmentRule{
+                ElementKind::Router, 2, qsizetype{1}}};
+    }
+    panel.setContext(&design, &resolved, &invalidRulePackage,
+                     QStringLiteral("security-zone"));
+    panel.setSelection({router0});
+    QApplication::processEvents();
+    check(!applyAssignment->isEnabled()
+              && applyAssignment->accessibleDescription().contains(
+                  QStringLiteral("invalid Domain assignment rule")),
+          QStringLiteral(
+              "an invalid Package rule disables Apply without blaming the selected Router"));
     panel.setContext(&design, &resolved, &package,
                      QStringLiteral("security-zone"));
     QApplication::processEvents();
@@ -823,6 +985,15 @@ int main(int argc, char** argv) {
                                              Qt::CaseInsensitive);
           }),
           QStringLiteral("the fixed Mesh boundary is not presented as Router CRUD"));
+
+    panel.setContext(nullptr, nullptr, nullptr, {});
+    panel.setSelection({});
+    tabs->setCurrentWidget(assignmentPage);
+    QApplication::processEvents();
+    check(applyAssignment->accessibleDescription().contains(
+              QStringLiteral("Open a design")),
+          QStringLiteral(
+              "a manually reached assignment page without context explains the design prerequisite"));
 
     if (failures == 0) {
         QTextStream(stdout) << "All Domain Manager panel tests passed" << Qt::endl;

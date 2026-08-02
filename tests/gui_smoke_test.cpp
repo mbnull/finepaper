@@ -61,6 +61,7 @@
 #include <QSize>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTemporaryDir>
@@ -6660,8 +6661,16 @@ int main(int argc, char** argv) {
     finepaper::RuntimeLocations domainLocations{
         QStringList{domainPackageRoot.path()}, outputRoot.path()};
     finepaper::FinepaperMainWindow domainWindow(domainLocations);
+    if (requestedWindowSize.isValid()) {
+        domainWindow.resize(requestedWindowSize);
+    }
     domainWindow.show();
     application.processEvents();
+    if (requestedWindowSize.isValid()
+        && domainWindow.size() != requestedWindowSize) {
+        domainWindow.resize(requestedWindowSize);
+        application.processEvents();
+    }
     check(domainWindow.openDesignFile(domainDesignPath),
           QStringLiteral("the Package-driven Domain design opens in the workbench"));
     application.processEvents();
@@ -6711,11 +6720,16 @@ int main(int argc, char** argv) {
         finepaper::workbench::domainManagerDockName);
     QAction* domainManagerToggle = domainWindow.findChild<QAction*>(
         finepaper::workbench::domainManagerToggleActionName);
-    if (domainManagerToggle && !domainManagerToggle->isChecked()) {
+    QAction* domainManagerNavigation = domainWindow.findChild<QAction*>(
+        finepaper::workbench::domainNavigationActionName);
+    if (domainCompact && domainManagerNavigation) {
+        domainManagerNavigation->trigger();
+        application.processEvents();
+    } else if (domainManagerToggle && !domainManagerToggle->isChecked()) {
         domainManagerToggle->trigger();
         application.processEvents();
     }
-    check(domainManagerDock && domainManagerToggle
+    check(domainManagerDock && domainManagerToggle && domainManagerNavigation
               && domainWindow.dockWidgetArea(domainManagerDock)
                   == Qt::RightDockWidgetArea
               && domainManagerDock->isVisible()
@@ -6736,6 +6750,8 @@ int main(int argc, char** argv) {
 
     auto* domainManagerType = domainWindow.findChild<QComboBox*>(
         QStringLiteral("finepaper.domainManager.typeSelector"));
+    auto* domainManagerTypeControls = domainWindow.findChild<QWidget*>(
+        QStringLiteral("finepaper.domainManager.typeControls"));
     auto* domainManagerInstances = domainWindow.findChild<QTableWidget*>(
         QStringLiteral("finepaper.domainManager.instanceView"));
     auto* domainManagerTabs = domainWindow.findChild<QTabWidget*>(
@@ -6750,6 +6766,16 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.applyAssignment"));
     auto* domainDiscardAssignment = domainWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.discardAssignment"));
+    auto* domainAssignmentTaskBar = domainWindow.findChild<QWidget*>(
+        QStringLiteral("finepaper.domainAssignmentTaskBar"));
+    auto* domainManagerScroll = domainWindow.findChild<QScrollArea*>(
+        QStringLiteral("finepaper.domainManagerScroll"));
+    auto* domainResultsDock = domainWindow.findChild<QDockWidget*>(
+        finepaper::workbench::resultsDockName);
+    auto* domainInspectorDock = domainWindow.findChild<QDockWidget*>(
+        finepaper::workbench::inspectorDockName);
+    QAction* domainCanvasFocusAction = domainWindow.findChild<QAction*>(
+        finepaper::workbench::canvasFocusActionName);
     auto* domainCompleteConfiguration = domainWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.completeConfiguration"));
     auto* domainSelectMembers = domainWindow.findChild<QPushButton*>(
@@ -6911,6 +6937,10 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.inspectorScroll"));
     QAction* domainInspectorNavigation = domainWindow.findChild<QAction*>(
         finepaper::workbench::inspectorNavigationActionName);
+    if (domainResultsDock) {
+        domainResultsDock->show();
+        application.processEvents();
+    }
     if (domainInspectorNavigation) {
         domainInspectorNavigation->trigger();
         application.processEvents();
@@ -6927,14 +6957,114 @@ int main(int argc, char** argv) {
         application.processEvents();
         application.processEvents();
     }
+    const bool compactDomainTaskLayout = !domainCompact
+        || (domainResultsDock && !domainResultsDock->isVisible()
+            && domainInspectorDock && domainInspectorDock->visibleRegion().isEmpty());
+    const bool domainTaskEndingVisible = domainAssignmentTaskBar
+        && domainAssignmentTaskBar->isVisibleTo(&domainWindow)
+        && domainApplyAssignment && domainDiscardAssignment
+        && widgetIsFullyVisibleWithin(
+            domainAssignmentTaskBar, domainApplyAssignment)
+        && widgetIsFullyVisibleWithin(
+            domainAssignmentTaskBar, domainDiscardAssignment)
+        && domainDiscardAssignment->isEnabled()
+        && domainDiscardAssignment->text() == QStringLiteral("Done");
+    captureSmokeScreenshot(
+        domainWindow, QStringLiteral("domain-assignment-task"), requestedTheme);
     check(editDomainAssignmentsWasVisible
               && domainManagerDock && domainManagerDock->isVisible()
               && domainManagerTabs
               && domainManagerTabs->currentWidget() == domainAssignmentPage
+              && domainManagerScroll && compactDomainTaskLayout
+              && domainTaskEndingVisible
+              && widgetIntersectsScrollViewport(
+                  domainManagerScroll, domainMultipleAssignment)
               && (focusIsWithin(domainMultipleAssignment)
                   || focusIsWithin(domainManagerType)),
           QStringLiteral(
-              "Router Inspector exposes a visible Domain-assignment task route and focuses its editor"));
+              "Router Inspector enters a readable Domain task with fixed endings and compact panel focus"));
+    if (domainDiscardAssignment) {
+        domainDiscardAssignment->click();
+        application.processEvents();
+        application.processEvents();
+    }
+    const bool domainTaskLayoutRestored = !domainCompact
+        || (domainResultsDock && domainResultsDock->isVisible()
+            && domainInspectorDock
+            && !domainInspectorDock->visibleRegion().isEmpty());
+    check(domainTaskLayoutRestored,
+          QStringLiteral(
+              "Done restores the Inspector and Results layout captured before the Domain task"));
+    if (editDomainAssignments) {
+        editDomainAssignments->click();
+        application.processEvents();
+        application.processEvents();
+    }
+    if (domainCanvasFocusAction) {
+        domainCanvasFocusAction->trigger();
+        application.processEvents();
+        application.processEvents();
+    }
+    const bool canvasFocusEndedDomainTask = domainCanvasFocusAction
+        && domainCanvasFocusAction->isChecked()
+        && domainManagerDock && !domainManagerDock->isVisible();
+    if (domainCanvasFocusAction && domainCanvasFocusAction->isChecked()) {
+        domainCanvasFocusAction->trigger();
+        application.processEvents();
+        application.processEvents();
+    }
+    if (domainManagerNavigation) {
+        domainManagerNavigation->trigger();
+        application.processEvents();
+    }
+    const bool canvasFocusClearedTaskPresentation = domainManagerDock
+        && domainManagerDock->isVisible()
+        && domainManagerTypeControls
+        && domainManagerTypeControls->isVisibleTo(&domainWindow)
+        && domainManagerTabs && domainManagerTabs->tabBar()->isVisible();
+    check(canvasFocusEndedDomainTask
+              && canvasFocusClearedTaskPresentation,
+          QStringLiteral(
+              "Canvas Focus ends Domain assignment before taking layout ownership"));
+    if (domainInspectorNavigation) {
+        domainInspectorNavigation->trigger();
+        application.processEvents();
+    }
+    if (editDomainAssignments) {
+        editDomainAssignments->click();
+        application.processEvents();
+        application.processEvents();
+    }
+    if (domainManagerDock) {
+        domainManagerDock->close();
+        application.processEvents();
+        application.processEvents();
+    }
+    const bool domainCloseRestoredLayout = !domainCompact
+        || (domainResultsDock && domainResultsDock->isVisible()
+            && domainInspectorDock
+            && !domainInspectorDock->visibleRegion().isEmpty());
+    if (domainManagerNavigation) {
+        domainManagerNavigation->trigger();
+        application.processEvents();
+    }
+    const bool domainCloseClearedTaskPresentation = domainManagerDock
+        && domainManagerDock->isVisible()
+        && domainManagerTypeControls
+        && domainManagerTypeControls->isVisibleTo(&domainWindow)
+        && domainManagerTabs && domainManagerTabs->tabBar()->isVisible();
+    check(domainCloseRestoredLayout && domainCloseClearedTaskPresentation,
+          QStringLiteral(
+              "closing a focused Domain Dock restores the prior layout and clears its stripped task presentation"));
+    if (domainInspectorNavigation) {
+        domainInspectorNavigation->trigger();
+        application.processEvents();
+    }
+    if (editDomainAssignments) {
+        editDomainAssignments->click();
+        application.processEvents();
+        application.processEvents();
+    }
     if (domainScene && domainLinkGraphics && domainRouterGraphics) {
         domainScene->clearSelection();
         domainLinkGraphics->setSelected(true);
@@ -6978,7 +7108,7 @@ int main(int argc, char** argv) {
         application.processEvents();
     }
     const bool pendingDraftRouteRemainsAvailable = editDomainAssignments
-        && editDomainAssignments->isVisibleTo(&domainWindow)
+        && !editDomainAssignments->isHidden()
         && domainDiscardAssignment && domainDiscardAssignment->isEnabled();
     if (domainDiscardAssignment) {
         domainDiscardAssignment->click();

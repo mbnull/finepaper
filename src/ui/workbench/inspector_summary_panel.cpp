@@ -130,7 +130,10 @@ InspectorSummaryPanel::InspectorSummaryPanel(QWidget* parent) : QWidget(parent) 
     m_reviewDiagnostics->setObjectName(
         QStringLiteral("finepaper.inspectorReviewDiagnostics"));
     actionLayout->addWidget(m_reviewDiagnostics);
-    rootLayout->addWidget(m_contextActions);
+    // Contextual task routes are the primary action for the current
+    // selection. Keep them before descriptive design metadata so they remain
+    // reachable in compact windows and at large system font sizes.
+    rootLayout->insertWidget(0, m_contextActions);
     rootLayout->addWidget(m_selectionContext);
 
     connect(m_editDomainAssignments, &QPushButton::clicked,

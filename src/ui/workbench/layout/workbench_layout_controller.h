@@ -84,6 +84,11 @@ public:
     [[nodiscard]] bool canvasFocusActive() const;
     bool enterCanvasFocus();
     bool leaveCanvasFocus();
+    [[nodiscard]] bool panelTaskFocusActive() const;
+    [[nodiscard]] std::optional<WorkbenchPanelRole> panelTaskFocusRole() const;
+    bool enterPanelTaskFocus(WorkbenchPanelRole role);
+    bool leavePanelTaskFocus();
+    void releasePanelTaskFocusOwnership();
     [[nodiscard]] QByteArray persistentWindowState() const;
     void beginShutdown();
 
@@ -109,6 +114,7 @@ private:
     [[nodiscard]] int readablePanelExtent(PanelState& state) const;
     [[nodiscard]] bool isContextRole(WorkbenchPanelRole role) const;
     void scheduleReevaluation();
+    void applyPanelTaskFocusVisibility();
     void applyResponsivePanelVisibility();
     void applyPanelVisibility(PanelState& state, bool visible);
     void syncPreferenceAction(PanelState& state);
@@ -122,6 +128,10 @@ private:
     PresentationCallback m_presentationCallback;
     QTimer m_reflowTimer;
     QByteArray m_canvasFocusRestoreState;
+    QByteArray m_panelTaskFocusRestoreState;
+    std::optional<WorkbenchPanelRole> m_panelTaskFocusRole = std::nullopt;
+    std::optional<WorkbenchPanelRole> m_panelTaskFocusRestoreCompactReveal =
+        std::nullopt;
     std::optional<WorkbenchPanelRole> m_compactReveal = std::nullopt;
     WorkbenchPanelRole m_compactPreferredPanel =
         WorkbenchPanelRole::Inspector;
@@ -131,6 +141,8 @@ private:
     bool m_started = false;
     bool m_applyingLayout = false;
     bool m_canvasFocusActive = false;
+    bool m_panelTaskFocusIsolated = false;
+    bool m_panelTaskFocusClosePending = false;
     bool m_shuttingDown = false;
 };
 

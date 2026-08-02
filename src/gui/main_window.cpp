@@ -392,6 +392,7 @@ FinepaperMainWindow::~FinepaperMainWindow() {
         m_domainManager->completeConfigurationRequested = {};
         m_domainManager->showDomainLayerRequested = {};
         m_domainManager->selectElementsRequested = {};
+        m_domainManager->assignmentTaskExitRequested = {};
     }
     if (m_domainConfigurationWorkspace) {
         m_domainConfigurationWorkspace->applyRequested = {};
@@ -500,6 +501,7 @@ void FinepaperMainWindow::resetWorkbenchLayout() {
         || !m_resultsDock) {
         return;
     }
+    endDomainAssignmentTask(false);
     if (m_workbenchLayoutController
         && m_workbenchLayoutController->canvasFocusActive()) {
         m_workbenchLayoutController->leaveCanvasFocus();
@@ -1205,19 +1207,26 @@ void FinepaperMainWindow::createDomainDock() {
         Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     ui::installWorkbenchDockTitleBar(m_domainDock);
 
-    auto* domainScroll = new QScrollArea(m_domainDock);
-    domainScroll->setObjectName(
-        QStringLiteral("finepaper.domainManagerScroll"));
-    domainScroll->setAccessibleName(QStringLiteral("Domain Manager content"));
-    domainScroll->setWidgetResizable(true);
-    domainScroll->setFrameShape(QFrame::NoFrame);
-    domainScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_domainManager = new DomainManagerPanel;
-    domainScroll->setWidget(m_domainManager);
-    m_domainDock->setWidget(domainScroll);
+    m_domainManager = new DomainManagerPanel(m_domainDock);
+    m_domainDock->setWidget(m_domainManager);
     addDockWidget(Qt::RightDockWidgetArea, m_domainDock);
     tabifyDockWidget(m_inspectorDock, m_domainDock);
     m_inspectorDock->raise();
+
+    connect(m_domainDock, &QDockWidget::visibilityChanged,
+            this, [this](bool visible) {
+                if (visible || !m_domainManager
+                    || !m_domainManager->assignmentTaskActive()) {
+                    return;
+                }
+                QTimer::singleShot(0, this, [this] {
+                    if (m_domainManager && m_domainDock
+                        && m_domainManager->assignmentTaskActive()
+                        && !m_domainDock->isVisible()) {
+                        endDomainAssignmentTask();
+                    }
+                });
+            });
 
     m_domainManager->validateAddDomain = [this](
         const DomainDefinition& domain) {
@@ -1303,6 +1312,9 @@ void FinepaperMainWindow::createDomainDock() {
         adoptDomainResult(
             result,
             QStringLiteral("Update %1 assignments").arg(domainType));
+        if (result.success) {
+            endDomainAssignmentTask();
+        }
     };
     m_domainManager->draftStateChanged = [this] {
         updateInspectorContextActions();
@@ -1333,6 +1345,9 @@ void FinepaperMainWindow::createDomainDock() {
         if (m_nodeEditor) {
             m_nodeEditor->selectElements(elements);
         }
+    };
+    m_domainManager->assignmentTaskExitRequested = [this] {
+        endDomainAssignmentTask();
     };
 }
 
@@ -5407,7 +5422,8 @@ void FinepaperMainWindow::activateWorkbenchPanel(
     case ui::WorkbenchPanelId::Domain:
         if (intent == ui::WorkbenchPanelIntent::EditSelection
             && m_domainManager) {
-            m_domainManager->activateAssignmentPage();
+            beginDomainAssignmentTask();
+            return;
         }
         break;
     case ui::WorkbenchPanelId::Results:
@@ -5420,6 +5436,56 @@ void FinepaperMainWindow::activateWorkbenchPanel(
     showWorkbenchPanel(dock);
     if (dock == m_resultsDock) {
         requestResultsDockReadabilityUpdate();
+    }
+}
+
+void FinepaperMainWindow::beginDomainAssignmentTask() {
+    if (!m_domainManager || !m_domainDock) {
+        return;
+    }
+    if (m_workbenchLayoutController
+        && m_workbenchLayoutController->canvasFocusActive()) {
+        setCanvasFocusMode(false);
+    }
+
+    if (!m_domainManager->setAssignmentTaskActive(true)) {
+        statusBar()->showMessage(
+            QStringLiteral(
+                "Select assignable Routers or Endpoints before starting Domain assignment."),
+            5000);
+        return;
+    }
+    const bool taskFocus = m_workbenchLayoutController
+        && m_workbenchLayoutController->enterPanelTaskFocus(
+            ui::WorkbenchPanelRole::Domain);
+    if (!taskFocus) {
+        showWorkbenchPanel(m_domainDock);
+    }
+    statusBar()->showMessage(
+        QStringLiteral(
+            "Domain assignment: review the selected nodes, then Apply or Done."),
+        5000);
+}
+
+void FinepaperMainWindow::endDomainAssignmentTask(bool restoreLayout) {
+    if (m_domainManager) {
+        (void)m_domainManager->setAssignmentTaskActive(false);
+    }
+    if (!m_workbenchLayoutController
+        || !m_workbenchLayoutController->panelTaskFocusActive()) {
+        return;
+    }
+    if (!restoreLayout) {
+        m_workbenchLayoutController->releasePanelTaskFocusOwnership();
+        return;
+    }
+    if (!m_workbenchLayoutController->leavePanelTaskFocus()) {
+        m_workbenchLayoutController->releasePanelTaskFocusOwnership();
+        resetWorkbenchLayout();
+        statusBar()->showMessage(
+            QStringLiteral(
+                "The previous panel layout could not be restored, so the workbench was reset."),
+            6000);
     }
 }
 
@@ -5443,6 +5509,14 @@ void FinepaperMainWindow::setCanvasFocusMode(bool enabled) {
     }
 
     if (enabled) {
+        if (m_domainManager
+            && m_domainManager->assignmentTaskActive()) {
+            endDomainAssignmentTask();
+        } else if (m_workbenchLayoutController->panelTaskFocusActive()
+                   && !m_workbenchLayoutController->leavePanelTaskFocus()) {
+            m_workbenchLayoutController->releasePanelTaskFocusOwnership();
+            resetWorkbenchLayout();
+        }
         const bool focusWasActive =
             m_workbenchLayoutController->canvasFocusActive();
         const QString restoreCenterViewId = focusWasActive
@@ -5880,6 +5954,7 @@ void FinepaperMainWindow::selectCenterView(const QString& id) {
 }
 
 void FinepaperMainWindow::beginDesignSession(const QString& designName) {
+    endDomainAssignmentTask();
     ++m_designSessionSerial;
     m_designSessionIdentity = QStringLiteral("design-session-%1")
         .arg(m_designSessionSerial);

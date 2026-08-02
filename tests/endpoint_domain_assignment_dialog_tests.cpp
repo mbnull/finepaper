@@ -226,6 +226,14 @@ void ambiguousRequiredChoicesGateAcceptance() {
     if (!accept || !power || !clock || !tag) {
         return;
     }
+    check(!power->accessibleName().isEmpty()
+              && !power->accessibleDescription().isEmpty()
+              && !clock->accessibleName().isEmpty()
+              && !clock->accessibleDescription().isEmpty()
+              && !tag->accessibleName().isEmpty()
+              && !tag->accessibleDescription().isEmpty(),
+          QStringLiteral(
+              "every Package-driven Domain editor announces its type and constraints"));
 
     check(!accept->isEnabled(),
           QStringLiteral("ambiguous required assignments disable acceptance"));

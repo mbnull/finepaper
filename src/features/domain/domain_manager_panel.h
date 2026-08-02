@@ -17,10 +17,13 @@ class QLabel;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
+class QScrollArea;
 class QTableWidget;
 class QTabWidget;
 
 namespace finepaper {
+
+class DomainAssignmentTaskBar;
 
 inline constexpr int domainManagerDomainIdRole = Qt::UserRole + 40;
 inline constexpr int domainManagerDomainTypeRole = Qt::UserRole + 41;
@@ -42,7 +45,11 @@ public:
     void setBusy(bool busy);
     void setDiagnostics(const QVector<Diagnostic>& diagnostics);
     [[nodiscard]] bool canActivateAssignmentPage() const;
-    void activateAssignmentPage();
+    [[nodiscard]] bool activateAssignmentPage();
+    [[nodiscard]] bool setAssignmentTaskActive(bool active);
+    [[nodiscard]] bool assignmentTaskActive() const {
+        return m_assignmentTaskActive;
+    }
     [[nodiscard]] QWidget* preferredFocusTarget();
     [[nodiscard]] QWidget* preferredAssignmentFocusTarget();
 
@@ -66,6 +73,7 @@ public:
     std::function<void()> completeConfigurationRequested;
     std::function<void(QString)> showDomainLayerRequested;
     std::function<void(QVector<ElementRef>)> selectElementsRequested;
+    std::function<void()> assignmentTaskExitRequested;
 
 private:
     [[nodiscard]] const DomainTypeDefinition* selectedType() const;
@@ -77,6 +85,7 @@ private:
     void refreshInstances();
     void refreshAssignment();
     void updateActionState();
+    void updateAssignmentTaskPresentation();
     void addDomain();
     void editDomain();
     void removeDomain();
@@ -103,14 +112,18 @@ private:
     bool m_busy = false;
     bool m_updating = false;
     bool m_assignmentEdited = false;
+    bool m_assignmentTaskActive = false;
     bool m_clearAssignmentStaged = false;
     bool m_selectionChangedWhileEditing = false;
 
     QLabel* m_status = nullptr;
+    QScrollArea* m_contentScroll = nullptr;
     QPushButton* m_completeConfiguration = nullptr;
+    QWidget* m_typeControls = nullptr;
     QComboBox* m_typeSelector = nullptr;
     QPushButton* m_showOnCanvas = nullptr;
     QTabWidget* m_tabs = nullptr;
+    QWidget* m_instancesPage = nullptr;
     QWidget* m_assignmentPage = nullptr;
     QTableWidget* m_instances = nullptr;
     QPushButton* m_addDomain = nullptr;
@@ -118,14 +131,14 @@ private:
     QPushButton* m_removeDomain = nullptr;
     QPushButton* m_selectDomainMembers = nullptr;
     QLabel* m_assignmentState = nullptr;
+    QWidget* m_selectionHelpers = nullptr;
     QPushButton* m_selectAllEligible = nullptr;
     QPushButton* m_selectUnassigned = nullptr;
     QComboBox* m_singleAssignment = nullptr;
     QListWidget* m_multipleAssignment = nullptr;
     QLabel* m_assignmentFeedback = nullptr;
-    QPushButton* m_applyAssignment = nullptr;
     QPushButton* m_clearAssignment = nullptr;
-    QPushButton* m_discardAssignment = nullptr;
+    DomainAssignmentTaskBar* m_assignmentTaskBar = nullptr;
     QLabel* m_diagnostics = nullptr;
 };
 

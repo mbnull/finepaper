@@ -98,9 +98,11 @@ void summaryUsesStablePlainTextWidgets() {
               && reviewDiagnostics->text()
                   == QStringLiteral("Review diagnostics")
               && panel.preferredFocusTarget() == editDomainAssignments
+              && editDomainAssignments->mapTo(&panel, QPoint{}).y()
+                  < designTitle->mapTo(&panel, QPoint{}).y()
               && editDomainRequests == 1 && reviewDiagnosticRequests == 1,
           QStringLiteral(
-              "selection summary exposes discoverable text routes with stable callbacks"));
+              "selection summary keeps text task routes before descriptive metadata with stable callbacks"));
     check(panel.minimumSizeHint().width() <= panel.width(),
           QStringLiteral("long summary text does not force a wider Inspector"));
 

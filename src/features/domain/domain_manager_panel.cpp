@@ -1,24 +1,32 @@
 #include "features/domain/domain_manager_panel.h"
 
+#include "features/domain/domain_assignment_task_bar.h"
 #include "features/domain/domain_instance_dialog.h"
 #include "features/domain/presentation/domain_text.h"
 #include "ui/common/focus_target.h"
+#include "ui/layouts/responsive_action_layout.h"
 #include "ui/theme/ui_tokens.h"
 
 #include <QAbstractItemView>
 #include <QBrush>
 #include <QComboBox>
 #include <QDialog>
+#include <QFrame>
 #include <QGridLayout>
-#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QLayout>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSignalBlocker>
+#include <QSizePolicy>
 #include <QTableWidget>
+#include <QTabBar>
 #include <QTabWidget>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -114,6 +122,16 @@ QString assignmentPatchFeedback(
     return QStringLiteral("Cannot apply this Domain assignment change.");
 }
 
+void allowHorizontalShrink(QWidget* widget) {
+    if (!widget) {
+        return;
+    }
+    widget->setMinimumWidth(0);
+    QSizePolicy policy = widget->sizePolicy();
+    policy.setHorizontalPolicy(QSizePolicy::Ignored);
+    widget->setSizePolicy(policy);
+}
+
 } // namespace
 
 DomainManagerPanel::DomainManagerPanel(QWidget* parent)
@@ -127,48 +145,76 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
         ui::UiMetrics::spacing8, ui::UiMetrics::spacing8,
         ui::UiMetrics::spacing8, ui::UiMetrics::spacing8);
 
-    m_status = new QLabel(QStringLiteral("Open a Package V2 design to edit Domains."));
+    m_contentScroll = new QScrollArea(this);
+    m_contentScroll->setObjectName(
+        QStringLiteral("finepaper.domainManagerScroll"));
+    m_contentScroll->setAccessibleName(QStringLiteral("Domain Manager content"));
+    m_contentScroll->setWidgetResizable(true);
+    m_contentScroll->setFrameShape(QFrame::NoFrame);
+    m_contentScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* content = new QWidget(m_contentScroll);
+    allowHorizontalShrink(content);
+    auto* contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(ui::UiMetrics::spacing8);
+    contentLayout->setSizeConstraint(QLayout::SetNoConstraint);
+    m_contentScroll->setWidget(content);
+    root->addWidget(m_contentScroll, 1);
+
+    m_status = new QLabel(QStringLiteral(
+        "Open a design to configure its Package-defined Domains."));
     m_status->setObjectName(QStringLiteral("finepaper.domainManager.status"));
     m_status->setAccessibleName(QStringLiteral("Domain Manager status"));
     m_status->setTextFormat(Qt::PlainText);
     m_status->setWordWrap(true);
     m_status->setTextInteractionFlags(
         Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-    root->addWidget(m_status);
+    allowHorizontalShrink(m_status);
+    contentLayout->addWidget(m_status);
 
     m_completeConfiguration = new QPushButton(
-        QStringLiteral("Open Domain Configuration workspace"));
+        QStringLiteral("Open full Domain configuration"));
     m_completeConfiguration->setObjectName(
         QStringLiteral("finepaper.domainManager.completeConfiguration"));
     m_completeConfiguration->setProperty(
         "finepaperRole", QStringLiteral("quiet"));
-    root->addWidget(m_completeConfiguration);
+    allowHorizontalShrink(m_completeConfiguration);
+    contentLayout->addWidget(m_completeConfiguration);
 
-    auto* typeRow = new QGridLayout;
-    auto* typeLabel = new QLabel(QStringLiteral("Domain type"));
+    m_typeControls = new QWidget(content);
+    m_typeControls->setObjectName(
+        QStringLiteral("finepaper.domainManager.typeControls"));
+    allowHorizontalShrink(m_typeControls);
+    auto* typeRow = new QGridLayout(m_typeControls);
+    typeRow->setContentsMargins(0, 0, 0, 0);
+    auto* typeLabel = new QLabel(
+        QStringLiteral("Domain type"), m_typeControls);
     typeRow->addWidget(typeLabel, 0, 0);
-    m_typeSelector = new QComboBox;
+    m_typeSelector = new QComboBox(m_typeControls);
     m_typeSelector->setObjectName(
         QStringLiteral("finepaper.domainManager.typeSelector"));
     m_typeSelector->setAccessibleName(QStringLiteral("Domain type"));
     typeLabel->setBuddy(m_typeSelector);
     typeRow->addWidget(m_typeSelector, 0, 1);
-    m_showOnCanvas = new QPushButton(QStringLiteral("Show on canvas"));
+    m_showOnCanvas = new QPushButton(
+        QStringLiteral("Show on canvas"), m_typeControls);
     m_showOnCanvas->setObjectName(
         QStringLiteral("finepaper.domainManager.showOnCanvas"));
     m_showOnCanvas->setProperty(
-        "finepaperRole", QStringLiteral("primary"));
+        "finepaperRole", QStringLiteral("quiet"));
     typeRow->addWidget(m_showOnCanvas, 1, 0, 1, 2);
     typeRow->setColumnStretch(1, 1);
-    root->addLayout(typeRow);
+    contentLayout->addWidget(m_typeControls);
 
     m_tabs = new QTabWidget;
     m_tabs->setObjectName(QStringLiteral("finepaper.domainManager.tabs"));
+    allowHorizontalShrink(m_tabs);
 
-    auto* instancesPage = new QWidget;
-    instancesPage->setObjectName(
+    m_instancesPage = new QWidget;
+    m_instancesPage->setObjectName(
         QStringLiteral("finepaper.domainManager.instancesPage"));
-    auto* instancesLayout = new QVBoxLayout(instancesPage);
+    allowHorizontalShrink(m_instancesPage);
+    auto* instancesLayout = new QVBoxLayout(m_instancesPage);
     instancesLayout->setContentsMargins(
         0, ui::UiMetrics::spacing8, 0, 0);
     m_instances = new QTableWidget;
@@ -186,7 +232,7 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     m_instances->verticalHeader()->hide();
     m_instances->horizontalHeader()->setStretchLastSection(true);
     instancesLayout->addWidget(m_instances, 1);
-    auto* instanceButtons = new QGridLayout;
+    auto* instanceButtons = new ui::ResponsiveActionLayout;
     m_addDomain = new QPushButton(QStringLiteral("Add…"));
     m_addDomain->setObjectName(
         QStringLiteral("finepaper.domainManager.addDomain"));
@@ -203,23 +249,26 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
         QStringLiteral("finepaper.domainManager.selectMembers"));
     m_selectDomainMembers->setToolTip(
         QStringLiteral("Select every Router or Endpoint assigned to this Domain instance."));
-    instanceButtons->addWidget(m_addDomain, 0, 0);
-    instanceButtons->addWidget(m_editDomain, 0, 1);
-    instanceButtons->addWidget(m_removeDomain, 0, 2);
-    instanceButtons->addWidget(m_selectDomainMembers, 1, 0, 1, 3);
-    instanceButtons->setColumnStretch(0, 1);
-    instanceButtons->setColumnStretch(1, 1);
-    instanceButtons->setColumnStretch(2, 1);
+    instanceButtons->addWidget(m_addDomain);
+    instanceButtons->addWidget(m_editDomain);
+    instanceButtons->addWidget(m_removeDomain);
+    instanceButtons->addWidget(m_selectDomainMembers);
     instancesLayout->addLayout(instanceButtons);
-    m_tabs->addTab(instancesPage, QStringLiteral("Instances / Legend"));
+    m_tabs->addTab(m_instancesPage, QStringLiteral("Instances"));
 
     m_assignmentPage = new QWidget;
     m_assignmentPage->setObjectName(
         QStringLiteral("finepaper.domainManager.assignmentPage"));
+    allowHorizontalShrink(m_assignmentPage);
     auto* assignmentLayout = new QVBoxLayout(m_assignmentPage);
     assignmentLayout->setContentsMargins(
         0, ui::UiMetrics::spacing8, 0, 0);
-    auto* selectionButtons = new QHBoxLayout;
+    m_selectionHelpers = new QWidget(m_assignmentPage);
+    m_selectionHelpers->setObjectName(
+        QStringLiteral("finepaper.domainManager.selectionHelpers"));
+    allowHorizontalShrink(m_selectionHelpers);
+    auto* selectionButtons = new ui::ResponsiveActionLayout(
+        m_selectionHelpers);
     m_selectAllEligible = new QPushButton(QStringLiteral("Select all eligible"));
     m_selectAllEligible->setObjectName(
         QStringLiteral("finepaper.domainManager.selectAllEligible"));
@@ -232,16 +281,17 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
         QStringLiteral("Select applicable Routers and Endpoints with no assignment for this Domain type."));
     selectionButtons->addWidget(m_selectAllEligible);
     selectionButtons->addWidget(m_selectUnassigned);
-    selectionButtons->addStretch();
-    assignmentLayout->addLayout(selectionButtons);
+    assignmentLayout->addWidget(m_selectionHelpers);
     m_assignmentState = new QLabel;
     m_assignmentState->setObjectName(
         QStringLiteral("finepaper.domainManager.assignmentState"));
     m_assignmentState->setWordWrap(true);
+    allowHorizontalShrink(m_assignmentState);
     assignmentLayout->addWidget(m_assignmentState);
     m_singleAssignment = new QComboBox;
     m_singleAssignment->setObjectName(
         QStringLiteral("finepaper.domainManager.assignmentEditor"));
+    allowHorizontalShrink(m_singleAssignment);
     assignmentLayout->addWidget(m_singleAssignment);
     m_multipleAssignment = new QListWidget;
     m_multipleAssignment->setObjectName(
@@ -249,6 +299,7 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     m_multipleAssignment->setAccessibleName(
         QStringLiteral("Domain assignments for the current selection"));
     m_multipleAssignment->setAlternatingRowColors(true);
+    allowHorizontalShrink(m_multipleAssignment);
     assignmentLayout->addWidget(m_multipleAssignment, 1);
     m_assignmentFeedback = new QLabel;
     m_assignmentFeedback->setObjectName(
@@ -257,38 +308,32 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
         QStringLiteral("Domain assignment constraint feedback"));
     m_assignmentFeedback->setTextFormat(Qt::PlainText);
     m_assignmentFeedback->setWordWrap(true);
+    allowHorizontalShrink(m_assignmentFeedback);
     m_assignmentFeedback->hide();
     assignmentLayout->addWidget(m_assignmentFeedback);
-    auto* assignmentButtons = new QGridLayout;
-    m_applyAssignment = new QPushButton(QStringLiteral("Apply changes"));
-    m_applyAssignment->setObjectName(
-        QStringLiteral("finepaper.domainManager.applyAssignment"));
-    m_applyAssignment->setProperty(
-        "finepaperRole", QStringLiteral("primary"));
-    m_clearAssignment = new QPushButton(QStringLiteral("Clear assignment"));
+    m_clearAssignment = new QPushButton(
+        QStringLiteral("Remove assignments"));
     m_clearAssignment->setObjectName(
         QStringLiteral("finepaper.domainManager.clearAssignment"));
-    m_discardAssignment = new QPushButton(QStringLiteral("Discard changes"));
-    m_discardAssignment->setObjectName(
-        QStringLiteral("finepaper.domainManager.discardAssignment"));
-    m_discardAssignment->setProperty(
+    m_clearAssignment->setProperty(
         "finepaperRole", QStringLiteral("quiet"));
-    assignmentButtons->addWidget(m_applyAssignment, 0, 0, 1, 2);
-    assignmentButtons->addWidget(m_clearAssignment, 1, 0);
-    assignmentButtons->addWidget(m_discardAssignment, 1, 1);
-    assignmentButtons->setColumnStretch(1, 1);
-    assignmentLayout->addLayout(assignmentButtons);
+    allowHorizontalShrink(m_clearAssignment);
+    assignmentLayout->addWidget(m_clearAssignment);
     m_tabs->addTab(m_assignmentPage, QStringLiteral("Assign selection"));
 
-    root->addWidget(m_tabs, 1);
+    contentLayout->addWidget(m_tabs, 1);
 
     m_diagnostics = new QLabel;
     m_diagnostics->setObjectName(
         QStringLiteral("finepaper.domainManager.diagnostics"));
     m_diagnostics->setWordWrap(true);
     m_diagnostics->setTextFormat(Qt::RichText);
+    allowHorizontalShrink(m_diagnostics);
     m_diagnostics->hide();
-    root->addWidget(m_diagnostics);
+    contentLayout->addWidget(m_diagnostics);
+
+    m_assignmentTaskBar = new DomainAssignmentTaskBar(this);
+    root->addWidget(m_assignmentTaskBar);
 
     connect(m_typeSelector, &QComboBox::currentIndexChanged, this, [this] {
         if (!m_updating) {
@@ -329,12 +374,25 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
             this, [this](QListWidgetItem* item) {
                 handleAssignmentItemChanged(item);
             });
-    connect(m_applyAssignment, &QPushButton::clicked,
-            this, [this] { applyAssignment(); });
     connect(m_clearAssignment, &QPushButton::clicked,
             this, [this] { clearAssignment(); });
-    connect(m_discardAssignment, &QPushButton::clicked,
-            this, [this] { discardAssignment(); });
+    m_assignmentTaskBar->applyRequested = [this] {
+        applyAssignment();
+    };
+    m_assignmentTaskBar->discardRequested = [this] {
+        const bool hadPendingChanges = m_assignmentEdited;
+        if (hadPendingChanges) {
+            discardAssignment();
+        }
+        if (m_assignmentTaskActive && assignmentTaskExitRequested) {
+            assignmentTaskExitRequested();
+        } else if (!m_assignmentTaskActive && !hadPendingChanges
+                   && m_tabs && m_instancesPage) {
+            m_tabs->setCurrentWidget(m_instancesPage);
+        }
+    };
+    connect(m_tabs, &QTabWidget::currentChanged,
+            this, [this](int) { updateAssignmentTaskPresentation(); });
 
     setContext(nullptr, nullptr, nullptr, {});
 }
@@ -372,11 +430,9 @@ void DomainManagerPanel::setContext(const NocDesign* design,
             "This Package explicitly declares no Domain types."));
     } else {
         m_status->setText(QStringLiteral(
-            "Use the quick tabs for common instance/selection edits, or switch "
-            "to the persistent Domain Configuration workspace for memberships, relations, default "
-            "crossing policies, and edge overrides. Use the selection helpers "
-            "or the canvas Select mode for bulk assignment. Routers and Router "
-            "Links remain fixed projections of the Mesh."));
+            "Assign selected Routers or Endpoints here. Use full Domain "
+            "configuration for relationships and crossing policies; Routers "
+            "remain fixed projections of the Mesh."));
     }
     refreshCurrentType();
 }
@@ -430,12 +486,12 @@ bool DomainManagerPanel::canActivateAssignmentPage() const {
         || assignableDomainTypeForSelection().has_value();
 }
 
-void DomainManagerPanel::activateAssignmentPage() {
+bool DomainManagerPanel::activateAssignmentPage() {
     if (!m_assignmentEdited) {
         const std::optional<QString> assignableType =
             assignableDomainTypeForSelection();
         if (!assignableType) {
-            return;
+            return false;
         }
         const int typeIndex = m_typeSelector->findData(*assignableType);
         if (typeIndex >= 0
@@ -446,6 +502,46 @@ void DomainManagerPanel::activateAssignmentPage() {
     if (m_tabs && m_assignmentPage) {
         m_tabs->setCurrentWidget(m_assignmentPage);
     }
+    if (!m_tabs || m_tabs->currentWidget() != m_assignmentPage) {
+        return false;
+    }
+    QTimer::singleShot(0, this, [this] {
+        if (!m_contentScroll || !m_tabs
+            || m_tabs->currentWidget() != m_assignmentPage) {
+            return;
+        }
+        if (m_assignmentTaskActive) {
+            m_contentScroll->verticalScrollBar()->setValue(0);
+            return;
+        }
+        QWidget* editor = m_singleAssignment->isVisible()
+            ? static_cast<QWidget*>(m_singleAssignment)
+            : static_cast<QWidget*>(m_multipleAssignment);
+        m_contentScroll->ensureWidgetVisible(
+            editor, ui::UiMetrics::spacing12, ui::UiMetrics::spacing12);
+    });
+    return true;
+}
+
+bool DomainManagerPanel::setAssignmentTaskActive(bool active) {
+    if (m_assignmentTaskActive == active) {
+        return true;
+    }
+    if (active) {
+        if (!activateAssignmentPage()) {
+            return false;
+        }
+    }
+    m_assignmentTaskActive = active;
+    m_status->setVisible(!active);
+    m_completeConfiguration->setVisible(!active);
+    m_typeControls->setVisible(!active);
+    m_selectionHelpers->setVisible(!active);
+    if (m_tabs && m_tabs->tabBar()) {
+        m_tabs->tabBar()->setVisible(!active);
+    }
+    updateAssignmentTaskPresentation();
+    return true;
 }
 
 QWidget* DomainManagerPanel::preferredFocusTarget() {
@@ -461,8 +557,10 @@ QWidget* DomainManagerPanel::preferredFocusTarget() {
 QWidget* DomainManagerPanel::preferredAssignmentFocusTarget() {
     return ui::firstAvailableFocusTarget(
         this,
-        {m_applyAssignment, m_singleAssignment, m_multipleAssignment,
-         m_typeSelector, m_discardAssignment, m_completeConfiguration});
+        {m_singleAssignment, m_multipleAssignment,
+         m_assignmentTaskBar
+             ? m_assignmentTaskBar->preferredFocusTarget() : nullptr,
+         m_typeSelector, m_completeConfiguration});
 }
 
 void DomainManagerPanel::discardPendingAssignmentChanges() {
@@ -827,6 +925,21 @@ void DomainManagerPanel::updateActionState() {
         && m_assignment.assignmentRulesAreValid();
     m_singleAssignment->setEnabled(eligible && !m_clearAssignmentStaged);
     m_multipleAssignment->setEnabled(eligible && !m_clearAssignmentStaged);
+    m_clearAssignment->setEnabled(
+        eligible && m_assignment.permitsClearing()
+        && m_assignment.state != DomainAssignmentAggregateState::Unassigned
+        && !m_assignmentEdited);
+
+    updateAssignmentTaskPresentation();
+}
+
+void DomainManagerPanel::updateAssignmentTaskPresentation() {
+    const bool editable = !m_busy && m_design && m_package
+        && formatVersionSupportsDomains(m_design->formatVersion)
+        && formatVersionSupportsDomains(m_package->formatVersion)
+        && selectedType();
+    const bool eligible = editable && m_assignment.eligibleElements > 0
+        && m_assignment.assignmentRulesAreValid();
     const std::optional<DomainAssignmentPatch> stagedPatch =
         stagedAssignmentPatch();
     const DomainAssignmentPatchEvaluation patchEvaluation = stagedPatch
@@ -836,17 +949,92 @@ void DomainManagerPanel::updateActionState() {
         ? assignmentPatchFeedback(patchEvaluation) : QString();
     m_assignmentFeedback->setText(patchFeedback);
     m_assignmentFeedback->setVisible(!patchFeedback.isEmpty());
-    m_applyAssignment->setToolTip(patchFeedback);
-    m_applyAssignment->setAccessibleDescription(patchFeedback);
-    m_applyAssignment->setEnabled(
-        eligible && m_assignmentEdited && stagedPatch
-        && patchEvaluation.accepted);
-    m_clearAssignment->setEnabled(
-        eligible && m_assignment.permitsClearing()
-        && m_assignment.state != DomainAssignmentAggregateState::Unassigned
-        && !m_assignmentEdited);
-    m_discardAssignment->setEnabled(m_assignmentEdited);
-    m_discardAssignment->setVisible(m_assignmentEdited);
+    const bool applyReady = eligible && m_assignmentEdited && stagedPatch
+        && patchEvaluation.accepted;
+
+    const bool assignmentPageCurrent = m_tabs
+        && m_tabs->currentWidget() == m_assignmentPage;
+    DomainAssignmentTaskBarState taskState;
+    taskState.taskActive = assignmentPageCurrent;
+    if (const DomainTypeDefinition* type = selectedType()) {
+        const QString taskType = type->label.trimmed().isEmpty()
+            ? type->id : type->label.trimmed();
+        taskState.title = QStringLiteral("Assign %1").arg(taskType);
+    } else {
+        taskState.title = QStringLiteral("Domain assignment");
+    }
+    if (m_busy) {
+        taskState.status = QStringLiteral(
+            "Domain editing is unavailable while another operation is running.");
+    } else if (m_assignmentEdited && !patchFeedback.isEmpty()) {
+        taskState.status = patchFeedback;
+    } else if (m_assignmentEdited && m_selectionChangedWhileEditing) {
+        taskState.status = QStringLiteral(
+            "Changes still target the original %1 eligible item(s).")
+                               .arg(m_assignment.eligibleElements);
+    } else if (m_assignmentEdited) {
+        taskState.status = QStringLiteral(
+            "Changes are ready for %1 eligible item(s).")
+                               .arg(m_assignment.eligibleElements);
+    } else if (m_assignment.domainIds.isEmpty()
+               && m_assignment.eligibleElements > 0) {
+        taskState.status = QStringLiteral(
+            "No Domain instances exist for this type. Add one on Instances before assigning.");
+    } else if (eligible) {
+        taskState.status = QStringLiteral(
+            "%1 eligible item(s). Choose assignments, then apply.")
+                               .arg(m_assignment.eligibleElements);
+    } else {
+        taskState.status = m_assignmentState->text().section(
+            QLatin1Char('\n'), 0, 0);
+    }
+    taskState.applyText = QStringLiteral("Apply changes");
+    taskState.discardText = m_assignmentEdited
+        ? QStringLiteral("Discard changes")
+        : QStringLiteral("Done");
+    if (m_assignmentEdited) {
+        taskState.discardAccessibleDescription = QStringLiteral(
+            "Discard the staged Domain assignment changes without applying them.");
+    } else if (m_assignmentTaskActive) {
+        taskState.discardAccessibleDescription = QStringLiteral(
+            "Finish Domain assignment and return to the previous workbench layout.");
+    } else {
+        taskState.discardAccessibleDescription = QStringLiteral(
+            "Finish Domain assignment and return to Domain instances.");
+    }
+    taskState.applyEnabled = applyReady;
+    taskState.discardEnabled = assignmentPageCurrent;
+    if (!applyReady) {
+        if (m_busy) {
+            taskState.applyUnavailableReason = QStringLiteral(
+                "Wait for the current operation to finish before applying Domain assignments.");
+        } else if (!patchFeedback.isEmpty()) {
+            taskState.applyUnavailableReason = patchFeedback;
+        } else if (!m_design || !m_package || !selectedType()) {
+            taskState.applyUnavailableReason = QStringLiteral(
+                "Open a design with a Package-defined Domain type before applying assignments.");
+        } else if (m_assignment.eligibleElements > 0
+                   && !m_assignment.assignmentRulesAreValid()) {
+            taskState.applyUnavailableReason = QStringLiteral(
+                "The Package defines an invalid Domain assignment rule; repair the Package before applying changes.");
+        } else if (m_assignment.eligibleElements > 0
+                   && m_assignment.domainIds.isEmpty()) {
+            taskState.applyUnavailableReason = QStringLiteral(
+                "Add a Domain instance on Instances before applying assignments.");
+        } else if (!eligible) {
+            taskState.applyUnavailableReason = QStringLiteral(
+                "Select assignable Routers or Endpoints first.");
+        } else {
+            taskState.applyUnavailableReason = QStringLiteral(
+                "Change at least one assignment before applying.");
+        }
+    }
+    if (!taskState.discardEnabled) {
+        taskState.discardUnavailableReason = QStringLiteral(
+            "Open this assignment task from the Inspector or stage a change first.");
+    }
+    m_assignmentTaskBar->setState(taskState);
+    m_assignmentTaskBar->setVisible(assignmentPageCurrent);
 }
 
 void DomainManagerPanel::addDomain() {

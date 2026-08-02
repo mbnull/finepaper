@@ -118,6 +118,16 @@ WorkbenchLayoutController::WorkbenchLayoutController(
                     });
         }
     }
+    for (QDockWidget* secondaryPanel : std::as_const(m_secondaryPanels)) {
+        const bool alreadyObserved = std::any_of(
+            m_sidePanels.cbegin(), m_sidePanels.cend(),
+            [secondaryPanel](const PanelState& state) {
+                return state.binding.dock == secondaryPanel;
+            });
+        if (secondaryPanel && !alreadyObserved) {
+            secondaryPanel->installEventFilter(this);
+        }
+    }
 
     if (m_window) {
         m_window->installEventFilter(this);
@@ -184,7 +194,9 @@ void WorkbenchLayoutController::reevaluateNow() {
     m_window->setProperty(
         workbench::workbenchOnePanelWidthProperty,
         requirements.onePanelWidth);
-    if (!m_canvasFocusActive) {
+    if (!m_canvasFocusActive && panelTaskFocusActive()) {
+        applyPanelTaskFocusVisibility();
+    } else if (!m_canvasFocusActive) {
         applyResponsivePanelVisibility();
     }
 }
@@ -213,7 +225,7 @@ void WorkbenchLayoutController::setCompactPreferredPanel(
     m_compactPreferredPanel = role;
     setCompactReveal(std::nullopt);
     scheduleReevaluation();
-    if (m_started && !m_canvasFocusActive) {
+    if (m_started && !m_canvasFocusActive && !panelTaskFocusActive()) {
         applyResponsivePanelVisibility();
     }
 }
@@ -237,7 +249,7 @@ void WorkbenchLayoutController::setUserPanelVisible(
         }
     }
     syncPreferenceAction(*state);
-    if (!m_canvasFocusActive) {
+    if (!m_canvasFocusActive && !panelTaskFocusActive()) {
         applyResponsivePanelVisibility();
     }
 }
@@ -255,7 +267,7 @@ void WorkbenchLayoutController::revealPanel(WorkbenchPanelRole role) {
         m_compactRevealTransitionPending = true;
     }
     syncPreferenceAction(*state);
-    if (!m_canvasFocusActive) {
+    if (!m_canvasFocusActive && !panelTaskFocusActive()) {
         applyResponsivePanelVisibility();
     }
     if (state->binding.dock) {
@@ -324,7 +336,7 @@ bool WorkbenchLayoutController::enterCanvasFocus() {
     if (m_canvasFocusActive) {
         return true;
     }
-    if (!m_window) {
+    if (!m_window || panelTaskFocusActive()) {
         return false;
     }
 
@@ -367,9 +379,82 @@ bool WorkbenchLayoutController::leaveCanvasFocus() {
     return restored;
 }
 
+bool WorkbenchLayoutController::panelTaskFocusActive() const {
+    return m_panelTaskFocusRole.has_value()
+        && !m_panelTaskFocusRestoreState.isEmpty();
+}
+
+std::optional<WorkbenchPanelRole>
+WorkbenchLayoutController::panelTaskFocusRole() const {
+    return panelTaskFocusActive()
+        ? m_panelTaskFocusRole : std::nullopt;
+}
+
+bool WorkbenchLayoutController::enterPanelTaskFocus(
+    WorkbenchPanelRole role) {
+    PanelState* target = panel(role);
+    if (!m_window || !target || !target->binding.dock
+        || m_canvasFocusActive) {
+        return false;
+    }
+    if (panelTaskFocusActive()) {
+        return m_panelTaskFocusRole == role;
+    }
+
+    const QByteArray restoreState = m_window->saveState();
+    if (restoreState.isEmpty()) {
+        return false;
+    }
+
+    m_panelTaskFocusRestoreState = restoreState;
+    m_panelTaskFocusRole = role;
+    m_panelTaskFocusRestoreCompactReveal = m_compactReveal;
+    setCompactReveal(role);
+    m_panelTaskFocusIsolated = false;
+    applyPanelTaskFocusVisibility();
+    return true;
+}
+
+bool WorkbenchLayoutController::leavePanelTaskFocus() {
+    if (!panelTaskFocusActive()) {
+        releasePanelTaskFocusOwnership();
+        return true;
+    }
+
+    const QByteArray restoreState = m_panelTaskFocusRestoreState;
+    const std::optional<WorkbenchPanelRole> restoreCompactReveal =
+        m_panelTaskFocusRestoreCompactReveal;
+    releasePanelTaskFocusOwnership();
+    setCompactReveal(restoreCompactReveal);
+    if (!m_window || restoreState.isEmpty()) {
+        return false;
+    }
+
+    bool restored = false;
+    {
+        const QScopedValueRollback applying(m_applyingLayout, true);
+        restored = m_window->restoreState(restoreState);
+    }
+    if (restored) {
+        reevaluateNow();
+    }
+    return restored;
+}
+
+void WorkbenchLayoutController::releasePanelTaskFocusOwnership() {
+    m_panelTaskFocusRestoreState.clear();
+    m_panelTaskFocusRole = std::nullopt;
+    m_panelTaskFocusRestoreCompactReveal = std::nullopt;
+    m_panelTaskFocusIsolated = false;
+    m_panelTaskFocusClosePending = false;
+}
+
 QByteArray WorkbenchLayoutController::persistentWindowState() const {
     if (m_canvasFocusActive && !m_canvasFocusRestoreState.isEmpty()) {
         return m_canvasFocusRestoreState;
+    }
+    if (panelTaskFocusActive()) {
+        return m_panelTaskFocusRestoreState;
     }
     return m_window ? m_window->saveState() : QByteArray{};
 }
@@ -384,8 +469,25 @@ bool WorkbenchLayoutController::eventFilter(QObject* watched, QEvent* event) {
         return QObject::eventFilter(watched, event);
     }
 
+    QDockWidget* watchedDock = qobject_cast<QDockWidget*>(watched);
+    const bool watchedSecondaryPanel = watchedDock
+        && m_secondaryPanels.contains(watchedDock);
     if (!m_applyingLayout && !m_shuttingDown
-        && event->type() == QEvent::Close) {
+        && watchedSecondaryPanel && event->type() == QEvent::Close) {
+        const PanelState* focusedPanel = panelTaskFocusActive()
+            ? panel(*m_panelTaskFocusRole) : nullptr;
+        const bool closingFocusedTaskPanel = focusedPanel
+            && watchedDock == focusedPanel->binding.dock;
+        if (panelTaskFocusActive()) {
+            if (closingFocusedTaskPanel) {
+                m_panelTaskFocusClosePending = true;
+                QTimer::singleShot(0, this, [this] {
+                    m_panelTaskFocusClosePending = false;
+                });
+            } else {
+                releasePanelTaskFocusOwnership();
+            }
+        }
         for (PanelState& state : m_sidePanels) {
             if (watched == state.binding.dock) {
                 state.userVisible = false;
@@ -393,6 +495,16 @@ bool WorkbenchLayoutController::eventFilter(QObject* watched, QEvent* event) {
                 syncPreferenceAction(state);
                 break;
             }
+        }
+    }
+
+    if (!m_applyingLayout && !m_shuttingDown
+        && watchedSecondaryPanel && panelTaskFocusActive()
+        && !m_panelTaskFocusClosePending
+        && event->type() == QEvent::Show) {
+        const PanelState* focusedPanel = panel(*m_panelTaskFocusRole);
+        if (!focusedPanel || watchedDock != focusedPanel->binding.dock) {
+            releasePanelTaskFocusOwnership();
         }
     }
 
@@ -542,8 +654,44 @@ void WorkbenchLayoutController::scheduleReevaluation() {
     }
 }
 
+void WorkbenchLayoutController::applyPanelTaskFocusVisibility() {
+    if (!panelTaskFocusActive() || !m_window
+        || m_applyingLayout || m_shuttingDown) {
+        return;
+    }
+    PanelState* target = panel(*m_panelTaskFocusRole);
+    if (!target || !target->binding.dock) {
+        return;
+    }
+
+    const QScopedValueRollback applying(m_applyingLayout, true);
+    if (m_widthMode == WorkbenchWidthMode::Wide) {
+        if (m_panelTaskFocusIsolated
+            && m_window->restoreState(m_panelTaskFocusRestoreState)) {
+            m_panelTaskFocusIsolated = false;
+        }
+        target->binding.dock->show();
+        target->binding.dock->raise();
+        return;
+    }
+
+    if (!m_panelTaskFocusIsolated) {
+        for (QDockWidget* secondaryPanel : std::as_const(m_secondaryPanels)) {
+            if (!secondaryPanel || secondaryPanel == target->binding.dock
+                || secondaryPanel->isFloating()) {
+                continue;
+            }
+            secondaryPanel->hide();
+        }
+        m_panelTaskFocusIsolated = true;
+    }
+    target->binding.dock->show();
+    target->binding.dock->raise();
+}
+
 void WorkbenchLayoutController::applyResponsivePanelVisibility() {
-    if (m_applyingLayout || m_canvasFocusActive || m_shuttingDown) {
+    if (m_applyingLayout || m_canvasFocusActive || panelTaskFocusActive()
+        || m_shuttingDown) {
         return;
     }
 

@@ -315,6 +315,7 @@ target("finepaper-domain-manager-panel-tests")
     set_default(false)
     add_deps("finepaper-application")
     add_files("tests/domain_manager_panel_tests.cpp")
+    add_files("src/features/domain/domain_assignment_task_bar.cpp")
     add_files("src/features/domain/domain_instance_dialog.cpp")
     add_files("src/features/domain/domain_manager_panel.cpp")
     add_files("src/features/domain/domain_manager_projection.cpp")
@@ -322,6 +323,29 @@ target("finepaper-domain-manager-panel-tests")
     add_files("src/features/domain/domain_property_form.cpp")
     add_files("src/features/domain/presentation/domain_text.cpp")
     add_files("src/ui/common/schema_value_editor.cpp")
+    add_files("src/ui/layouts/responsive_action_layout.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+    add_tests("minimum-maximum-font", {
+        trim_output = true,
+        runenvs = {
+            QT_QPA_PLATFORM = "offscreen",
+            FINEPAPER_DOMAIN_MANAGER_FONT_SCALE = "2.0"
+        }
+    })
+
+target("finepaper-domain-assignment-task-bar-tests")
+    add_rules("qt.widgetapp")
+    add_frameworks("QtTest")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_files("tests/domain_assignment_task_bar_tests.cpp")
+    add_files("src/features/domain/domain_assignment_task_bar.cpp")
+    add_files("src/ui/layouts/responsive_action_layout.cpp")
     add_includedirs("src")
     add_tests("default", {
         trim_output = true,
@@ -543,6 +567,7 @@ target("finepaper-gui-smoke")
     add_files("src/features/topology/endpoint_draft_task_bar.cpp")
     add_files("src/features/domain/domain_configuration_dialog.cpp")
     add_files("src/features/domain/domain_configuration_workspace.cpp")
+    add_files("src/features/domain/domain_assignment_task_bar.cpp")
     add_files("src/features/domain/domain_instance_dialog.cpp")
     add_files("src/features/domain/domain_manager_panel.cpp")
     add_files("src/features/domain/domain_manager_projection.cpp")

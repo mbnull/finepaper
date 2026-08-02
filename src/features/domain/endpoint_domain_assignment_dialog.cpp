@@ -223,6 +223,10 @@ EndpointDomainAssignmentEditor::EndpointDomainAssignmentEditor(
             editor.single->setObjectName(
                 editorObjectName(group.domainType, QStringLiteral("single")));
             editor.single->setProperty("finepaper.domainType", group.domainType);
+            editor.single->setAccessibleName(
+                QStringLiteral("%1 assignment").arg(group.domainTypeLabel));
+            editor.single->setAccessibleDescription(requirement);
+            description->setBuddy(editor.single);
             editor.single->addItem(
                 group.assignmentRule.requiresAssignment()
                     ? QStringLiteral("Choose a Domain…")
@@ -257,6 +261,10 @@ EndpointDomainAssignmentEditor::EndpointDomainAssignmentEditor(
             editor.multiple->setObjectName(
                 editorObjectName(group.domainType, QStringLiteral("multiple")));
             editor.multiple->setProperty("finepaper.domainType", group.domainType);
+            editor.multiple->setAccessibleName(
+                QStringLiteral("%1 assignments").arg(group.domainTypeLabel));
+            editor.multiple->setAccessibleDescription(requirement);
+            description->setBuddy(editor.multiple);
             editor.multiple->setSelectionMode(QAbstractItemView::NoSelection);
             editor.multiple->setMinimumHeight(96);
             const QSet<QString> selected(

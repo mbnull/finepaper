@@ -300,6 +300,123 @@ void verifyControllerIntentAndFocus() {
               && harness.results->isVisible(),
           QStringLiteral("leaving Canvas Focus reapplies current Wide user intent"));
 
+    const QByteArray preTaskLayout = harness.window.saveState();
+    check(harness.controller->enterPanelTaskFocus(
+              WorkbenchPanelRole::Domain),
+          QStringLiteral("a panel task captures the current workbench layout"));
+    settleEvents();
+    check(harness.controller->panelTaskFocusActive()
+              && harness.controller->panelTaskFocusRole()
+                  == WorkbenchPanelRole::Domain
+              && harness.domain->isVisible()
+              && harness.package->isVisible()
+              && harness.inspector->isVisible()
+              && harness.results->isVisible()
+              && harness.controller->persistentWindowState()
+                  == preTaskLayout,
+          QStringLiteral(
+              "a Wide panel task preserves the readable workbench while owning a transient layout snapshot"));
+    harness.resizeWidth((std::max)(320, currentOneWidth - 1));
+    settleEvents();
+    check(harness.controller->panelTaskFocusActive()
+              && harness.domain->isVisible()
+              && !harness.package->isVisible()
+              && !harness.inspector->isVisible()
+              && !harness.results->isVisible(),
+          QStringLiteral(
+              "resizing an active Wide task into Canvas-only keeps the Domain task visible and isolated"));
+    harness.resizeWidth(fullWidth + 160);
+    settleEvents();
+    check(harness.controller->panelTaskFocusActive()
+              && harness.domain->isVisible()
+              && harness.package->isVisible()
+              && harness.inspector->isVisible()
+              && harness.results->isVisible(),
+          QStringLiteral(
+              "widening an active task restores its captured multi-panel workbench without ending the task"));
+    check(harness.controller->leavePanelTaskFocus(),
+          QStringLiteral("finishing a panel task restores its layout snapshot"));
+    settleEvents();
+    check(!harness.controller->panelTaskFocusActive()
+              && harness.package->isVisible()
+              && harness.inspector->isVisible()
+              && harness.results->isVisible(),
+          QStringLiteral(
+              "panel task completion restores every previously visible panel"));
+
+    check(harness.controller->enterPanelTaskFocus(
+              WorkbenchPanelRole::Domain),
+          QStringLiteral(
+              "a focused panel task can observe its Dock close command"));
+    harness.domain->close();
+    settleEvents();
+    check(harness.controller->panelTaskFocusActive(),
+          QStringLiteral(
+              "closing the focused Dock retains its captured layout until the task owner finishes"));
+    check(harness.controller->leavePanelTaskFocus(),
+          QStringLiteral(
+              "the task owner restores the captured layout after its focused Dock closes"));
+    settleEvents();
+    check(!harness.controller->panelTaskFocusActive()
+              && harness.package->isVisible()
+              && harness.inspector->isVisible()
+              && harness.results->isVisible(),
+          QStringLiteral(
+              "focused Dock close restores the other panels without stale task focus"));
+    harness.controller->setUserPanelVisible(
+        WorkbenchPanelRole::Domain, true);
+    settleEvents();
+
+    harness.results->hide();
+    settleEvents();
+    check(harness.controller->enterPanelTaskFocus(
+              WorkbenchPanelRole::Domain),
+          QStringLiteral("a second panel task can acquire layout ownership"));
+    harness.results->show();
+    settleEvents();
+    check(!harness.controller->panelTaskFocusActive()
+              && harness.results->isVisible(),
+          QStringLiteral(
+              "manually reopening another panel releases automatic restore ownership"));
+    check(harness.controller->leavePanelTaskFocus()
+              && harness.results->isVisible(),
+          QStringLiteral(
+              "finishing after a manual layout change does not overwrite user intent"));
+
+    harness.resizeWidth((std::max)(320, currentOneWidth - 1));
+    harness.controller->revealPanel(WorkbenchPanelRole::Inspector);
+    harness.results->show();
+    settleEvents();
+    check(harness.controller->widthMode() == WorkbenchWidthMode::CanvasOnly
+              && harness.inspector->isVisible()
+              && harness.results->isVisible()
+              && harness.controller->enterPanelTaskFocus(
+                  WorkbenchPanelRole::Domain),
+          QStringLiteral(
+              "a Canvas-only explicit Inspector route can hand layout ownership to a Domain task"));
+    harness.controller->revealPanel(WorkbenchPanelRole::Inspector);
+    settleEvents();
+    check(!harness.controller->panelTaskFocusActive()
+              && harness.inspector->isVisible(),
+          QStringLiteral(
+              "manual Canvas-only navigation keeps the newly revealed panel after releasing task ownership"));
+    harness.results->show();
+    settleEvents();
+    check(harness.controller->enterPanelTaskFocus(
+              WorkbenchPanelRole::Domain),
+          QStringLiteral(
+              "a restored Canvas-only Inspector route can start another Domain task"));
+    check(harness.controller->leavePanelTaskFocus(),
+          QStringLiteral(
+              "the Canvas-only Domain task restores its captured explicit route"));
+    settleEvents();
+    check(harness.inspector->isVisible()
+              && harness.domain->visibleRegion().isEmpty()
+              && harness.results->isVisible(),
+          QStringLiteral(
+              "Canvas-only task completion restores the previous Inspector reveal and Results"));
+    harness.resizeWidth(fullWidth + 160);
+
     harness.package->close();
     settleEvents();
     check(!harness.controller->userPanelVisible(

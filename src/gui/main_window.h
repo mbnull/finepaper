@@ -243,6 +243,8 @@ private:
     void activateWorkbenchPanel(
         ui::WorkbenchPanelId id,
         ui::WorkbenchPanelIntent intent);
+    void beginDomainAssignmentTask();
+    void endDomainAssignmentTask(bool restoreLayout = true);
     [[nodiscard]] std::optional<ui::WorkbenchPanelRole>
         panelRole(QDockWidget* dock) const;
     void setCanvasFocusMode(bool enabled);
