@@ -3,6 +3,7 @@
 #include "application/endpoint_domain_assignment.h"
 #include "features/domain/presentation/domain_text.h"
 #include "features/topology/animated_graphics_view.h"
+#include "features/topology/endpoint_draft_task_bar.h"
 #include "features/topology/noc_editor_style.h"
 #include "ui/theme/ui_tokens.h"
 #include "ui/workbench/workbench_config.h"
@@ -22,6 +23,7 @@
 
 #include <QApplication>
 #include <QBrush>
+#include <QCollator>
 #include <QDragEnterEvent>
 #include <QContextMenuEvent>
 #include <QDebug>
@@ -32,7 +34,6 @@
 #include <QGraphicsPathItem>
 #include <QHash>
 #include <QKeyEvent>
-#include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
@@ -76,6 +77,7 @@ constexpr qreal kRouterAttachmentCenterGapBottom = 26.0;
 constexpr qreal kRouterAttachmentBottomInset = 26.0;
 constexpr int kRouterAttachmentAggregateHorizontalPadding = 28;
 constexpr qsizetype kRouterAttachmentAggregateCacheCapacity = 64;
+constexpr qsizetype kMaximumEndpointDraftRouterMenuTargets = 24;
 constexpr int kExpandedRouterSizeDelta = 32;
 
 constexpr qreal squared(qreal value) {
@@ -1081,19 +1083,24 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    m_endpointCanvasDraftNotice = new QLabel(this);
-    m_endpointCanvasDraftNotice->setObjectName(
-        QStringLiteral("finepaper.endpointCanvasDraftNotice"));
-    m_endpointCanvasDraftNotice->setAccessibleName(
-        QStringLiteral("Unresolved Endpoint drafts"));
-    m_endpointCanvasDraftNotice->setProperty(
-        "finepaperRole", QStringLiteral("warning"));
-    m_endpointCanvasDraftNotice->setTextFormat(Qt::PlainText);
-    m_endpointCanvasDraftNotice->setWordWrap(true);
-    m_endpointCanvasDraftNotice->setMargin(ui::UiMetrics::spacing8);
-    m_endpointCanvasDraftNotice->hide();
-    layout->addWidget(m_endpointCanvasDraftNotice);
+    m_endpointDraftTaskBar = new EndpointDraftTaskBar(this);
+    m_endpointDraftRouterMenu = new QMenu(
+        QStringLiteral("Connect Endpoint draft"), m_endpointDraftTaskBar);
+    m_endpointDraftRouterMenu->setObjectName(
+        QStringLiteral("finepaper.endpointDraftRouterMenu"));
+    m_endpointDraftRouterMenu->setToolTipsVisible(true);
+    m_endpointDraftTaskBar->setConnectMenu(m_endpointDraftRouterMenu);
+    m_endpointDraftTaskBar->reviewRequested = [this] {
+        reviewEndpointCanvasDrafts();
+    };
+    m_endpointDraftTaskBar->discardRequested = [this] {
+        discardEndpointCanvasDraftsFromTaskBar();
+    };
+    connect(m_endpointDraftRouterMenu, &QMenu::aboutToShow,
+            this, &NocNodeEditor::rebuildEndpointDraftRouterMenu);
+    layout->addWidget(m_endpointDraftTaskBar);
     layout->addWidget(m_view);
+    updateEndpointDraftTaskBar();
 
     auto& graphModel = static_cast<NocGraphModel&>(*m_graphModel);
     graphModel.userConnectionPossible = [this](const QtNodes::ConnectionId& connection) {
@@ -1388,6 +1395,7 @@ void NocNodeEditor::setEditingEnabled(bool enabled) {
             node->setFlag(QGraphicsItem::ItemIsMovable, movable);
         }
     }
+    updateEndpointDraftTaskBar();
 }
 
 bool NocNodeEditor::editingEnabled() const {
@@ -1443,6 +1451,35 @@ void NocNodeEditor::focusCanvas(Qt::FocusReason reason) {
     if (m_view) {
         m_view->setFocus(reason);
     }
+}
+
+void NocNodeEditor::reviewEndpointCanvasDrafts() {
+    if (!m_view || m_endpointCanvasDraftState.empty()) {
+        return;
+    }
+    SelectionIdentity selection;
+    if (const std::optional<SelectionIdentity> selected =
+            selectedEndpointCanvasDraft()) {
+        selection = *selected;
+    } else {
+        selection = {
+            NocEditorSelection::Kind::PendingEndpoint,
+            m_endpointCanvasDraftState.items().front().id.value};
+    }
+    m_selectedItems = {selection};
+    restoreSelection();
+    if (m_scene) {
+        if (const std::optional<QtNodes::NodeId> node =
+                nodeIdForSelection(selection)) {
+            if (auto* graphics = m_scene->nodeGraphicsObject(*node)) {
+                m_view->ensureVisible(
+                    graphics,
+                    ui::UiMetrics::spacing24,
+                    ui::UiMetrics::spacing24);
+            }
+        }
+    }
+    m_view->setFocus(Qt::ShortcutFocusReason);
 }
 
 bool NocNodeEditor::setRouterVisualPosition(const QString& routerId, QPointF position) {
@@ -1598,6 +1635,182 @@ void NocNodeEditor::rebuildEndpointCanvasDraftState() {
     m_endpointCanvasDraftState = EndpointCanvasDraftState{std::move(drafts)};
 }
 
+void NocNodeEditor::rebuildEndpointDraftRouterIndex() {
+    m_endpointDraftRouterSpatialIndex.clear();
+    m_endpointDraftRouterSpatialRoot = -1;
+    m_availableEndpointDraftRouterCount = 0;
+    m_endpointDraftRouterRejectionCounts.clear();
+    if (!m_design || m_pendingEndpoints.isEmpty()) {
+        return;
+    }
+
+    QVector<EndpointDraftRouterTarget> availableTargets;
+    availableTargets.reserve(m_routerNodes.size());
+    for (auto routerNode = m_routerNodes.cbegin();
+         routerNode != m_routerNodes.cend(); ++routerNode) {
+        const auto metadata = m_metadata.constFind(routerNode.value());
+        if (metadata == m_metadata.constEnd() || !metadata->router) {
+            continue;
+        }
+        const attachment::SlotResolution availability =
+            attachment::resolveSlot(
+                *m_design,
+                m_attachmentIndex,
+                NocAttachmentTarget{*metadata->router, std::nullopt},
+                {},
+                attachment::SlotResolutionDetail::ValidateOnly);
+        if (availability.kind
+            == attachment::SlotResolutionKind::Rejected) {
+            ++m_endpointDraftRouterRejectionCounts[
+                static_cast<int>(availability.rejection)];
+            continue;
+        }
+
+        QPointF scenePosition = metadata->projectedPosition;
+        if (m_scene) {
+            if (auto* graphics =
+                    m_scene->nodeGraphicsObject(routerNode.value())) {
+                scenePosition = graphics->sceneBoundingRect().center();
+            }
+        }
+        availableTargets.append({
+            routerNode.key(), *metadata->router, scenePosition});
+    }
+    m_availableEndpointDraftRouterCount = availableTargets.size();
+    if (availableTargets.isEmpty()) {
+        return;
+    }
+
+    m_endpointDraftRouterSpatialIndex.reserve(availableTargets.size());
+    const auto buildIndex = [this, &availableTargets](
+                                auto&& self,
+                                qsizetype begin,
+                                qsizetype end,
+                                bool splitOnX) -> int {
+        if (begin >= end) {
+            return -1;
+        }
+        const qsizetype middle = begin + (end - begin) / 2;
+        const auto orderedBefore = [splitOnX](
+                                       const EndpointDraftRouterTarget& left,
+                                       const EndpointDraftRouterTarget& right) {
+            const qreal leftPrimary = splitOnX
+                ? left.scenePosition.x() : left.scenePosition.y();
+            const qreal rightPrimary = splitOnX
+                ? right.scenePosition.x() : right.scenePosition.y();
+            if (leftPrimary != rightPrimary) {
+                return leftPrimary < rightPrimary;
+            }
+            const qreal leftSecondary = splitOnX
+                ? left.scenePosition.y() : left.scenePosition.x();
+            const qreal rightSecondary = splitOnX
+                ? right.scenePosition.y() : right.scenePosition.x();
+            return leftSecondary != rightSecondary
+                ? leftSecondary < rightSecondary
+                : left.id < right.id;
+        };
+        std::nth_element(
+            availableTargets.begin() + begin,
+            availableTargets.begin() + middle,
+            availableTargets.begin() + end,
+            orderedBefore);
+
+        const int nodeIndex = m_endpointDraftRouterSpatialIndex.size();
+        m_endpointDraftRouterSpatialIndex.append({
+            availableTargets.at(middle), -1, -1, splitOnX});
+        const int lesser = self(
+            self, begin, middle, !splitOnX);
+        const int greater = self(
+            self, middle + 1, end, !splitOnX);
+        m_endpointDraftRouterSpatialIndex[nodeIndex].lesserChild = lesser;
+        m_endpointDraftRouterSpatialIndex[nodeIndex].greaterChild = greater;
+        return nodeIndex;
+    };
+    m_endpointDraftRouterSpatialRoot = buildIndex(
+        buildIndex, 0, availableTargets.size(), true);
+}
+
+QVector<NocNodeEditor::EndpointDraftRouterTarget>
+NocNodeEditor::nearestEndpointDraftRouterTargets(
+    QPointF scenePosition, qsizetype limit) const {
+    if (limit <= 0 || m_endpointDraftRouterSpatialRoot < 0) {
+        return {};
+    }
+
+    struct RankedTarget final {
+        EndpointDraftRouterTarget target;
+        qreal squaredDistance = 0.0;
+    };
+    QVector<RankedTarget> nearest;
+    nearest.reserve((std::min)(
+        limit, m_availableEndpointDraftRouterCount));
+    const auto rankedBefore = [](const RankedTarget& left,
+                                 const RankedTarget& right) {
+        return left.squaredDistance != right.squaredDistance
+            ? left.squaredDistance < right.squaredDistance
+            : left.target.id < right.target.id;
+    };
+    const auto considerTarget = [&](const EndpointDraftRouterTarget& target) {
+        RankedTarget ranked = {
+            target, squaredDistance(scenePosition, target.scenePosition)};
+        const auto insertion = std::lower_bound(
+            nearest.cbegin(), nearest.cend(), ranked, rankedBefore);
+        nearest.insert(insertion, std::move(ranked));
+        if (nearest.size() > limit) {
+            nearest.removeLast();
+        }
+    };
+
+    const auto visit = [this, scenePosition, limit,
+                        &nearest, &considerTarget](
+                           auto&& self, int nodeIndex) -> void {
+        if (nodeIndex < 0) {
+            return;
+        }
+        const EndpointDraftRouterSpatialNode& node =
+            m_endpointDraftRouterSpatialIndex.at(nodeIndex);
+        considerTarget(node.target);
+
+        const qreal delta = node.splitOnX
+            ? scenePosition.x() - node.target.scenePosition.x()
+            : scenePosition.y() - node.target.scenePosition.y();
+        const int nearChild = delta < 0.0
+            ? node.lesserChild : node.greaterChild;
+        const int farChild = delta < 0.0
+            ? node.greaterChild : node.lesserChild;
+        self(self, nearChild);
+        if (nearest.size() < limit
+            || squared(delta) <= nearest.constLast().squaredDistance) {
+            self(self, farChild);
+        }
+    };
+    visit(visit, m_endpointDraftRouterSpatialRoot);
+
+    QCollator naturalOrder;
+    naturalOrder.setCaseSensitivity(Qt::CaseInsensitive);
+    naturalOrder.setNumericMode(true);
+    std::sort(
+        nearest.begin(), nearest.end(),
+        [&naturalOrder](const RankedTarget& left,
+                        const RankedTarget& right) {
+            if (left.squaredDistance != right.squaredDistance) {
+                return left.squaredDistance < right.squaredDistance;
+            }
+            const int naturalComparison = naturalOrder.compare(
+                left.target.id, right.target.id);
+            return naturalComparison != 0
+                ? naturalComparison < 0
+                : left.target.id < right.target.id;
+        });
+
+    QVector<EndpointDraftRouterTarget> targets;
+    targets.reserve(nearest.size());
+    for (RankedTarget& ranked : nearest) {
+        targets.append(std::move(ranked.target));
+    }
+    return targets;
+}
+
 void NocNodeEditor::rebuildGraph(bool zoomToContents) {
     discardTransientProjectionHistory();
     ++m_graphRevision;
@@ -1611,6 +1824,10 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
     m_metadata.clear();
     m_pendingEndpointNodes.clear();
     m_routerNodes.clear();
+    m_endpointDraftRouterSpatialIndex.clear();
+    m_endpointDraftRouterSpatialRoot = -1;
+    m_availableEndpointDraftRouterCount = 0;
+    m_endpointDraftRouterRejectionCounts.clear();
     m_elementNodes.clear();
     m_elementConnections.clear();
 
@@ -1774,6 +1991,7 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
     }
 
     graphModel.endProjectionMutation();
+    rebuildEndpointDraftRouterIndex();
     for (auto iterator = m_metadata.constBegin(); iterator != m_metadata.constEnd(); ++iterator) {
         if (auto* node = m_scene->nodeGraphicsObject(iterator.key())) {
             const bool movable = iterator->kind == NocEditorSelection::Kind::Router
@@ -1804,6 +2022,7 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
     }
     applyDomainPresentation();
     restoreSelection();
+    updateEndpointDraftTaskBar();
 
     if (zoomToContents) {
         deferForCurrentGraph([this] { zoomToFit(); });
@@ -2096,6 +2315,7 @@ void NocNodeEditor::handleSceneSelectionChanged() {
         }
     }
     deferForCurrentGraph([this] { applyNodeStacking(); });
+    updateEndpointDraftTaskBar();
     emitSelectionChanged();
 }
 
@@ -3554,22 +3774,303 @@ void NocNodeEditor::clearEndpointCanvasDrafts() {
 
 void NocNodeEditor::notifyEndpointCanvasDraftStateChanged() {
     rebuildEndpointCanvasDraftState();
-    updateEndpointCanvasDraftNotice();
+    updateEndpointDraftTaskBar();
     updateCanvasAccessibleDescription();
     if (endpointCanvasDraftStateChanged) {
         endpointCanvasDraftStateChanged();
     }
 }
 
-void NocNodeEditor::updateEndpointCanvasDraftNotice() {
-    if (!m_endpointCanvasDraftNotice) {
+std::optional<NocNodeEditor::SelectionIdentity>
+NocNodeEditor::selectedEndpointCanvasDraft() const {
+    if (m_selectedItems.size() != 1
+        || m_selectedItems.front().kind
+            != NocEditorSelection::Kind::PendingEndpoint) {
+        return std::nullopt;
+    }
+    const SelectionIdentity selection = m_selectedItems.front();
+    return m_pendingEndpoints.contains(selection.id)
+        ? std::optional<SelectionIdentity>{selection}
+        : std::nullopt;
+}
+
+void NocNodeEditor::updateEndpointDraftTaskBar() {
+    if (!m_endpointDraftTaskBar) {
         return;
     }
-    const QString text = endpoint_canvas_draft_text::notice(
-        endpointCanvasDraftState());
-    m_endpointCanvasDraftNotice->setText(text);
-    m_endpointCanvasDraftNotice->setAccessibleDescription(text);
-    m_endpointCanvasDraftNotice->setVisible(!text.isEmpty());
+    const EndpointCanvasDraftState& drafts = endpointCanvasDraftState();
+    const std::optional<SelectionIdentity> selected =
+        selectedEndpointCanvasDraft();
+    const PendingEndpoint* selectedDraft = nullptr;
+    if (selected) {
+        const auto draft = m_pendingEndpoints.constFind(selected->id);
+        if (draft != m_pendingEndpoints.constEnd()) {
+            selectedDraft = &*draft;
+        }
+    }
+
+    EndpointDraftTaskBarState state;
+    state.visible = !drafts.empty();
+    state.title = endpoint_canvas_draft_text::taskTitle(drafts);
+    state.guidance = endpoint_canvas_draft_text::notice(drafts);
+    state.reviewText = endpoint_canvas_draft_text::reviewAction(drafts);
+    state.connectText = selectedDraft && selectedDraft->detached
+        ? QStringLiteral("Reconnect…")
+        : QStringLiteral("Connect…");
+    state.discardText = endpoint_canvas_draft_text::discardAction(drafts);
+    state.reviewEnabled = state.visible;
+    state.connectEnabled = selectedDraft && m_editingEnabled
+        && !m_routerNodes.isEmpty();
+    state.discardEnabled = m_editingEnabled
+        || (state.visible && drafts.detachedCount() == 0);
+    state.deletesDetachedEndpoints = drafts.detachedCount() > 0;
+    if (!m_editingEnabled) {
+        state.connectUnavailableReason = QStringLiteral(
+            "Endpoint connections are unavailable while the design is read-only.");
+    } else if (!selectedDraft) {
+        state.connectUnavailableReason = QStringLiteral(
+            "Review an Endpoint draft before choosing a Router.");
+    } else if (m_routerNodes.isEmpty()) {
+        state.connectUnavailableReason = QStringLiteral(
+            "The current design contains no Router connection targets.");
+    }
+    if (!state.discardEnabled) {
+        state.discardUnavailableReason = QStringLiteral(
+            "Disconnected Endpoints cannot be deleted while the design is read-only. "
+            "Reload the exact Package, then retry.");
+    }
+    m_endpointDraftTaskBar->setState(state);
+}
+
+void NocNodeEditor::rebuildEndpointDraftRouterMenu() {
+    if (!m_endpointDraftRouterMenu) {
+        return;
+    }
+    m_endpointDraftRouterMenu->clear();
+    const std::optional<SelectionIdentity> selected =
+        selectedEndpointCanvasDraft();
+    const auto selectedDraft = selected
+        ? m_pendingEndpoints.constFind(selected->id)
+        : m_pendingEndpoints.constEnd();
+    if (!selected || selectedDraft == m_pendingEndpoints.constEnd()) {
+        QAction* review = m_endpointDraftRouterMenu->addAction(
+            QStringLiteral("Review an Endpoint draft first"));
+        review->setEnabled(false);
+        return;
+    }
+
+    const QVector<EndpointDraftRouterTarget> targets =
+        nearestEndpointDraftRouterTargets(
+            selectedDraft->scenePosition,
+            kMaximumEndpointDraftRouterMenuTargets);
+    if (!targets.isEmpty()) {
+        m_endpointDraftRouterMenu->addSection(
+            QStringLiteral("Available Routers — nearest first"));
+    }
+    for (const EndpointDraftRouterTarget& target : targets) {
+        QAction* action = m_endpointDraftRouterMenu->addAction(
+            QStringLiteral("Router ") + target.id);
+        const RouterPosition router = target.router;
+        connect(action, &QAction::triggered, this, [this, router] {
+            connectSelectedEndpointCanvasDraft(router);
+        });
+    }
+    if (m_availableEndpointDraftRouterCount > targets.size()) {
+        QAction* summary = m_endpointDraftRouterMenu->addAction(
+            QStringLiteral("Showing %1 nearest of %2 available Routers")
+                .arg(QString::number(targets.size()),
+                     QString::number(
+                         m_availableEndpointDraftRouterCount)));
+        summary->setEnabled(false);
+        summary->setToolTip(QStringLiteral(
+            "Drag the Endpoint directly to any Router that is not listed."));
+    }
+    if (targets.isEmpty()) {
+        m_endpointDraftRouterMenu->addSection(
+            QStringLiteral("Why no Router is available"));
+        auto rejections = m_endpointDraftRouterRejectionCounts.keys();
+        std::sort(rejections.begin(), rejections.end());
+        for (const int rejectionValue : std::as_const(rejections)) {
+            const auto rejection = static_cast<attachment::Rejection>(
+                rejectionValue);
+            const qsizetype count =
+                m_endpointDraftRouterRejectionCounts.value(rejectionValue);
+            const QString reason = attachment::rejectionMessage(rejection);
+            QAction* unavailable = m_endpointDraftRouterMenu->addAction(
+                QStringLiteral("%1 — %2 %3")
+                    .arg(reason,
+                         QString::number(count),
+                         count == 1 ? QStringLiteral("Router")
+                                    : QStringLiteral("Routers")));
+            unavailable->setEnabled(false);
+            unavailable->setToolTip(reason);
+        }
+        if (m_endpointDraftRouterRejectionCounts.isEmpty()) {
+            QAction* unavailable = m_endpointDraftRouterMenu->addAction(
+                QStringLiteral("The design contains no Router targets"));
+            unavailable->setEnabled(false);
+        }
+    }
+}
+
+bool NocNodeEditor::connectSelectedEndpointCanvasDraft(
+    RouterPosition router) {
+    const std::optional<SelectionIdentity> selected =
+        selectedEndpointCanvasDraft();
+    const std::optional<QtNodes::NodeId> node = selected
+        ? nodeIdForSelection(*selected) : std::nullopt;
+    if (!node
+        || !attachNodeToRouter(
+            *node, NocAttachmentTarget{router, std::nullopt})) {
+        return false;
+    }
+    if (!m_endpointCanvasDraftState.empty()) {
+        QTimer::singleShot(0, this, [this] {
+            reviewEndpointCanvasDrafts();
+        });
+    }
+    return true;
+}
+
+void NocNodeEditor::discardEndpointCanvasDraftsFromTaskBar() {
+    const EndpointCanvasDraftState state = endpointCanvasDraftState();
+    if (state.empty()) {
+        return;
+    }
+
+    const auto discardRejection = [this]
+        -> std::optional<attachment::Rejection> {
+        for (const PendingEndpoint& pending
+             : std::as_const(m_pendingEndpoints)) {
+            // Pending-new drafts are local canvas state and remain safe to
+            // discard if the exact Package disappears. Detached drafts own a
+            // durable Endpoint lifecycle and still require semantic editing.
+            if (!pending.detached) {
+                continue;
+            }
+            attachment::EndpointSubject subject;
+            subject.lifecycle = attachment::EndpointLifecycle::Detached;
+            subject.endpointId = pending.detached->endpoint.id;
+            subject.durableAttachment =
+                pending.detached->endpoint.attachment;
+            const attachment::TransitionPlan plan =
+                attachment::decideTransition(
+                    m_editingEnabled,
+                    m_attachmentPolicy,
+                    {subject,
+                     attachment::TransitionIntent::Delete,
+                     std::nullopt});
+            if (!plan.decision.allowed) {
+                return plan.decision.rejection;
+            }
+        }
+        return std::nullopt;
+    };
+    if (const std::optional<attachment::Rejection> rejection =
+            discardRejection()) {
+        reportAttachmentRejection(*rejection);
+        return;
+    }
+
+    const QString confirmedSessionToken = m_documentSessionToken;
+    const QVector<EndpointCanvasDraftInfo> confirmedDrafts = state.items();
+
+    QMessageBox confirmation(
+        QMessageBox::NoIcon,
+        state.detachedCount() > 0
+            ? QStringLiteral("Delete disconnected Endpoints?")
+            : QStringLiteral("Discard Endpoint drafts?"),
+        endpoint_canvas_draft_text::taskDiscardConfirmation(state),
+        QMessageBox::Yes | QMessageBox::Cancel,
+        this);
+    confirmation.setObjectName(
+        QStringLiteral("finepaper.discardEndpointDraftsConfirmation"));
+    confirmation.setTextFormat(Qt::PlainText);
+    confirmation.setDefaultButton(QMessageBox::Cancel);
+    confirmation.setEscapeButton(QMessageBox::Cancel);
+    if (QPushButton* discard = qobject_cast<QPushButton*>(
+            confirmation.button(QMessageBox::Yes))) {
+        discard->setText(
+            state.detachedCount() > 0
+                ? QStringLiteral("Delete and Discard")
+                : state.size() == 1
+                ? QStringLiteral("Discard Draft")
+                : QStringLiteral("Discard Drafts"));
+        discard->setProperty("finepaperRole", QStringLiteral("danger"));
+    }
+    if (confirmation.exec() != QMessageBox::Yes) {
+        return;
+    }
+
+    const EndpointCanvasDraftState currentState =
+        endpointCanvasDraftState();
+    const auto sameAttachment = [](
+                                    const std::optional<EndpointAttachment>& left,
+                                    const std::optional<EndpointAttachment>& right) {
+        if (left.has_value() != right.has_value()) {
+            return false;
+        }
+        return !left || (left->router == right->router
+                         && left->slot == right->slot);
+    };
+    const bool sameDrafts =
+        currentState.items().size() == confirmedDrafts.size()
+        && std::equal(
+            currentState.items().cbegin(),
+            currentState.items().cend(),
+            confirmedDrafts.cbegin(),
+            [&sameAttachment](const EndpointCanvasDraftInfo& current,
+                              const EndpointCanvasDraftInfo& confirmed) {
+                return current.id == confirmed.id
+                    && current.lifecycle == confirmed.lifecycle
+                    && current.endpointType == confirmed.endpointType
+                    && current.endpointTypeLabel
+                        == confirmed.endpointTypeLabel
+                    && current.endpointId == confirmed.endpointId
+                    && sameAttachment(
+                        current.previousAttachment,
+                        confirmed.previousAttachment);
+            });
+    if (m_documentSessionToken != confirmedSessionToken
+        || !sameDrafts) {
+        reportAttachmentRejection(
+            attachment::Rejection::InvalidTransition);
+        return;
+    }
+    if (const std::optional<attachment::Rejection> rejection =
+            discardRejection()) {
+        reportAttachmentRejection(*rejection);
+        return;
+    }
+
+    QSet<QString> confirmedDraftIds;
+    confirmedDraftIds.reserve(confirmedDrafts.size());
+    for (const EndpointCanvasDraftInfo& draft : confirmedDrafts) {
+        confirmedDraftIds.insert(draft.id.value);
+        m_pendingEndpoints.remove(draft.id.value);
+    }
+    const QStringList detachedEndpointIds = state.detachedEndpointIds();
+    m_selectedItems.erase(
+        std::remove_if(
+            m_selectedItems.begin(), m_selectedItems.end(),
+            [&confirmedDraftIds](const SelectionIdentity& selection) {
+                return selection.kind
+                        == NocEditorSelection::Kind::PendingEndpoint
+                    && confirmedDraftIds.contains(selection.id);
+            }),
+        m_selectedItems.end());
+    notifyEndpointCanvasDraftStateChanged();
+    for (const QString& endpointId : detachedEndpointIds) {
+        if (m_documentSessionToken != confirmedSessionToken) {
+            break;
+        }
+        if (detachedEndpointDeletionRequested) {
+            detachedEndpointDeletionRequested(endpointId);
+        }
+    }
+    if (m_documentSessionToken == confirmedSessionToken) {
+        rebuildGraph(false);
+    }
 }
 
 std::optional<QtNodes::NodeId> NocNodeEditor::routerNodeAt(

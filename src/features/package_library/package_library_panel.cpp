@@ -687,11 +687,15 @@ void PackageLibraryPanel::updateInterlocks() {
 
     const bool packageActionsBlocked =
         m_state.interlocks.operationBusy
-        || m_state.interlocks.cleanupUnresolved;
+        || m_state.interlocks.cleanupUnresolved
+        || m_state.interlocks.endpointDraftsUnresolved;
     m_installPackage->setEnabled(!packageActionsBlocked);
     m_reloadPackages->setEnabled(!packageActionsBlocked);
     const QString blockedReason = m_state.interlocks.cleanupUnresolved
-        ? m_state.interlocks.cleanupBlockedReason : QString();
+        ? m_state.interlocks.cleanupBlockedReason
+        : m_state.interlocks.endpointDraftsUnresolved
+        ? m_state.interlocks.endpointDraftBlockedReason
+        : QString();
     m_installPackage->setToolTip(blockedReason);
     m_reloadPackages->setToolTip(blockedReason);
 }

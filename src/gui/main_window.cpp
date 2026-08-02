@@ -798,6 +798,7 @@ void FinepaperMainWindow::createCentralViews() {
         discardEndpointLifecycleDrafts(endpointId);
     };
     m_nodeEditor->endpointCanvasDraftStateChanged = [this] {
+        updateEndpointDraftTaskFocus();
         updateUiState();
     };
     m_nodeEditor->attachmentRejected = [this](
@@ -2256,6 +2257,10 @@ void FinepaperMainWindow::reloadPackages() {
     if (m_operationBusy || m_processCleanupUnresolved) {
         return;
     }
+    if (!ensureEndpointCanvasDraftsResolved(
+            QStringLiteral("Reload Packages"))) {
+        return;
+    }
     FinepaperApplication candidateApplication = m_application;
     const PackageCatalogReloadResult reload =
         candidateApplication.reloadPackages(m_locations.packageRoots);
@@ -2372,6 +2377,10 @@ void FinepaperMainWindow::installPackage() {
 bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
     if (m_operationBusy || m_processCleanupUnresolved
         || directory.trimmed().isEmpty()) {
+        return false;
+    }
+    if (!ensureEndpointCanvasDraftsResolved(
+            QStringLiteral("Install Package"))) {
         return false;
     }
     const PackageLoadResult package = loadPackage(directory);
@@ -2602,10 +2611,17 @@ void FinepaperMainWindow::refreshPackageLibraryView() {
     PackageLibraryViewState state;
     state.interlocks.operationBusy = m_operationBusy;
     state.interlocks.cleanupUnresolved = m_processCleanupUnresolved;
+    const EndpointCanvasDraftState endpointDrafts = m_nodeEditor
+        ? m_nodeEditor->endpointCanvasDraftState()
+        : EndpointCanvasDraftState{};
+    state.interlocks.endpointDraftsUnresolved = !endpointDrafts.empty();
     state.interlocks.cleanupBlockedReason = QStringLiteral(
         "Unavailable because Finepaper could not verify that a previous "
         "Package process stopped. Confirm or terminate it outside Finepaper, "
         "then save your work and restart before changing Packages.");
+    state.interlocks.endpointDraftBlockedReason =
+        endpoint_canvas_draft_text::operationUnavailableHint(
+            endpointDrafts, QStringLiteral("Package maintenance"));
 
     QHash<QString, const PackageDefinition*> packagesByKey;
     packagesByKey.reserve(m_application.packages().size());
@@ -2890,12 +2906,22 @@ void FinepaperMainWindow::updateUiState() {
          && m_domainManager->hasPendingAssignmentChanges())
         || (m_domainConfigurationWorkspace
             && m_domainConfigurationWorkspace->hasPendingChanges());
-    const bool hasEndpointCanvasDrafts = m_nodeEditor
-        && !m_nodeEditor->endpointCanvasDraftState().empty();
+    const EndpointCanvasDraftState endpointCanvasDraftState = m_nodeEditor
+        ? m_nodeEditor->endpointCanvasDraftState()
+        : EndpointCanvasDraftState{};
+    const bool hasEndpointCanvasDrafts = !endpointCanvasDraftState.empty();
     const bool hasPendingDrafts = hasInspectorDrafts || hasDomainDrafts
         || hasEndpointCanvasDrafts;
     const bool hasParameterDraft = m_parameterDraft
         && m_parameterDraft->designIdentity == m_designSessionIdentity;
+    const auto endpointDraftOperationHint =
+        [&endpointCanvasDraftState, hasEndpointCanvasDrafts](
+            const QString& operation) {
+            return hasEndpointCanvasDrafts
+                ? endpoint_canvas_draft_text::operationUnavailableHint(
+                      endpointCanvasDraftState, operation)
+                : QString();
+        };
     setWindowModified(m_dirty || hasPendingDrafts);
 
     if (m_newAction) {
@@ -2905,35 +2931,60 @@ void FinepaperMainWindow::updateUiState() {
         m_openAction->setEnabled(!m_operationBusy);
     }
     if (m_installAction) {
-        m_installAction->setEnabled(!packageActionsBlocked);
-        m_installAction->setToolTip(
-            m_processCleanupUnresolved ? cleanupBlockedHint : QString());
+        m_installAction->setEnabled(
+            !packageActionsBlocked && !hasEndpointCanvasDrafts);
+        const QString installHint = hasEndpointCanvasDrafts
+            ? endpointDraftOperationHint(
+                  QStringLiteral("Install Package"))
+            : m_processCleanupUnresolved ? cleanupBlockedHint : QString();
+        m_installAction->setToolTip(installHint);
+        m_installAction->setStatusTip(installHint);
     }
     if (m_reloadAction) {
-        m_reloadAction->setEnabled(!packageActionsBlocked);
-        m_reloadAction->setToolTip(
-            m_processCleanupUnresolved ? cleanupBlockedHint : QString());
+        m_reloadAction->setEnabled(
+            !packageActionsBlocked && !hasEndpointCanvasDrafts);
+        const QString reloadHint = hasEndpointCanvasDrafts
+            ? endpointDraftOperationHint(
+                  QStringLiteral("Reload Packages"))
+            : m_processCleanupUnresolved ? cleanupBlockedHint : QString();
+        m_reloadAction->setToolTip(reloadHint);
+        m_reloadAction->setStatusTip(reloadHint);
     }
 
     if (m_saveAction) {
         m_saveAction->setEnabled(
-            hasDesign && (m_dirty || hasPendingDrafts) && !m_operationBusy);
+            hasDesign && (m_dirty || hasPendingDrafts) && !m_operationBusy
+            && !hasEndpointCanvasDrafts);
+        const QString hint = endpointDraftOperationHint(
+            QStringLiteral("Save"));
+        m_saveAction->setToolTip(hint);
+        m_saveAction->setStatusTip(hint);
     }
     if (m_saveAsAction) {
-        m_saveAsAction->setEnabled(hasDesign && !m_operationBusy);
+        m_saveAsAction->setEnabled(
+            hasDesign && !m_operationBusy && !hasEndpointCanvasDrafts);
+        const QString hint = endpointDraftOperationHint(
+            QStringLiteral("Save As"));
+        m_saveAsAction->setToolTip(hint);
+        m_saveAsAction->setStatusTip(hint);
     }
     if (m_validateAction) {
         m_validateAction->setEnabled(
-            hasDesignRuntime && !packageActionsBlocked);
-        m_validateAction->setToolTip(
-            m_processCleanupUnresolved ? cleanupBlockedHint : QString());
-        m_validateAction->setStatusTip(
-            m_processCleanupUnresolved ? cleanupBlockedHint : QString());
+            hasDesignRuntime && !packageActionsBlocked
+            && !hasEndpointCanvasDrafts);
+        const QString validationHint = hasEndpointCanvasDrafts
+            ? endpointDraftOperationHint(QStringLiteral("Validate"))
+            : m_processCleanupUnresolved ? cleanupBlockedHint : QString();
+        m_validateAction->setToolTip(validationHint);
+        m_validateAction->setStatusTip(validationHint);
     }
     if (m_generateAction) {
         m_generateAction->setEnabled(
-            hasDesignRuntime && hasOutputRoot && !packageActionsBlocked);
-        const QString generationHint = m_processCleanupUnresolved
+            hasDesignRuntime && hasOutputRoot && !packageActionsBlocked
+            && !hasEndpointCanvasDrafts);
+        const QString generationHint = hasEndpointCanvasDrafts
+            ? endpointDraftOperationHint(QStringLiteral("Generate RTL"))
+            : m_processCleanupUnresolved
             ? cleanupBlockedHint
             : hasOutputRoot
             ? QStringLiteral(
@@ -2944,7 +2995,13 @@ void FinepaperMainWindow::updateUiState() {
         m_generateAction->setStatusTip(generationHint);
     }
     if (m_resizeMeshAction) {
-        m_resizeMeshAction->setEnabled(hasDesignMetadata && !m_operationBusy);
+        m_resizeMeshAction->setEnabled(
+            hasDesignMetadata && !m_operationBusy
+            && !hasEndpointCanvasDrafts);
+        const QString hint = endpointDraftOperationHint(
+            QStringLiteral("Resize"));
+        m_resizeMeshAction->setToolTip(hint);
+        m_resizeMeshAction->setStatusTip(hint);
     }
     updateCommandBarPresentation();
     if (m_designExtensionsWorkspace) {
@@ -2968,8 +3025,13 @@ void FinepaperMainWindow::updateUiState() {
         m_inspectorDesignSettings->setVisible(hasDesign);
     }
     if (m_resizeMeshButton) {
-        m_resizeMeshButton->setEnabled(hasDesignMetadata && !m_operationBusy);
-        if (!hasDesign) {
+        m_resizeMeshButton->setEnabled(
+            hasDesignMetadata && !m_operationBusy
+            && !hasEndpointCanvasDrafts);
+        if (hasEndpointCanvasDrafts) {
+            m_resizeMeshButton->setToolTip(
+                endpointDraftOperationHint(QStringLiteral("Resize")));
+        } else if (!hasDesign) {
             m_resizeMeshButton->setToolTip(
                 QStringLiteral("Create or open a design before resizing its Mesh."));
         } else if (!hasDesignMetadata) {
@@ -2979,6 +3041,7 @@ void FinepaperMainWindow::updateUiState() {
             m_resizeMeshButton->setToolTip(
                 QStringLiteral("Preview topology changes and configure Domain assignments for new Routers."));
         }
+        m_resizeMeshButton->setStatusTip(m_resizeMeshButton->toolTip());
     }
     if (m_applyParametersButton) {
         m_applyParametersButton->setEnabled(
@@ -3016,15 +3079,19 @@ void FinepaperMainWindow::updateUiState() {
     }
     if (m_generateButton) {
         m_generateButton->setEnabled(
-            hasDesignRuntime && hasOutputRoot && !packageActionsBlocked);
-        m_generateButton->setToolTip(
-            m_processCleanupUnresolved
+            hasDesignRuntime && hasOutputRoot && !packageActionsBlocked
+            && !hasEndpointCanvasDrafts);
+        const QString generationHint = hasEndpointCanvasDrafts
+            ? endpointDraftOperationHint(QStringLiteral("Generate RTL"))
+            : m_processCleanupUnresolved
                 ? cleanupBlockedHint
                 : hasOutputRoot
                 ? QStringLiteral(
                       "Validate the design, then generate RTL in the selected output root.")
                 : QStringLiteral(
-                      "Choose an output root before generating RTL."));
+                      "Choose an output root before generating RTL.");
+        m_generateButton->setToolTip(generationHint);
+        m_generateButton->setStatusTip(generationHint);
     }
     if (m_outputRoot) {
         m_outputRoot->setEnabled(!m_operationBusy);
@@ -5393,6 +5460,7 @@ void FinepaperMainWindow::setCanvasFocusMode(bool enabled) {
         }
         if (!focusWasActive) {
             m_canvasFocusRestoreCenterViewId = restoreCenterViewId;
+            ++m_canvasFocusGeneration;
         }
         selectCenterView(workbench::editorViewId);
         updateCanvasFocusActionPresentation(true);
@@ -5540,10 +5608,57 @@ void FinepaperMainWindow::updateResponsiveWorkbenchPresentation(
 
     updateCommandBarPresentation();
     updateWorkspaceNavigationPresentation();
+    updateEndpointDraftTaskFocus();
     requestResultsDockReadabilityUpdate();
     if (focusWasInTabs && m_workspaceSelector) {
         m_workspaceSelector->setFocus(Qt::OtherFocusReason);
     }
+}
+
+void FinepaperMainWindow::updateEndpointDraftTaskFocus() {
+    if (!m_nodeEditor) {
+        return;
+    }
+
+    const bool hasEndpointCanvasDrafts =
+        !m_nodeEditor->endpointCanvasDraftState().empty();
+    if (!hasEndpointCanvasDrafts) {
+        const std::optional<quint64> canvasFocusGeneration =
+            std::exchange(
+                m_endpointDraftCanvasFocusGeneration,
+                std::nullopt);
+        m_endpointDraftTaskFocusApplied = false;
+        if (canvasFocusGeneration
+            && *canvasFocusGeneration == m_canvasFocusGeneration
+            && m_workbenchLayoutController
+            && m_workbenchLayoutController->canvasFocusActive()) {
+            setCanvasFocusMode(false);
+        }
+        return;
+    }
+
+    if (m_endpointDraftTaskFocusApplied
+        || !m_compactWorkbenchPresentation) {
+        return;
+    }
+
+    m_endpointDraftTaskFocusApplied = true;
+    const bool canvasFocusWasActive = m_workbenchLayoutController
+        && m_workbenchLayoutController->canvasFocusActive();
+    if (!canvasFocusWasActive) {
+        setCanvasFocusMode(true);
+        if (m_workbenchLayoutController
+            && m_workbenchLayoutController->canvasFocusActive()) {
+            m_endpointDraftCanvasFocusGeneration =
+                m_canvasFocusGeneration;
+        }
+    }
+    QTimer::singleShot(0, this, [this] {
+        if (m_endpointDraftTaskFocusApplied && m_nodeEditor
+            && !m_nodeEditor->endpointCanvasDraftState().empty()) {
+            m_nodeEditor->reviewEndpointCanvasDrafts();
+        }
+    });
 }
 
 void FinepaperMainWindow::updateWorkspaceNavigationPresentation() {

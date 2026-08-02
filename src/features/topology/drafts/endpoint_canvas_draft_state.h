@@ -68,6 +68,14 @@ private:
 namespace endpoint_canvas_draft_text {
 
 [[nodiscard]] QString notice(const EndpointCanvasDraftState& state);
+[[nodiscard]] QString taskTitle(const EndpointCanvasDraftState& state);
+[[nodiscard]] QString reviewAction(const EndpointCanvasDraftState& state);
+[[nodiscard]] QString discardAction(const EndpointCanvasDraftState& state);
+[[nodiscard]] QString taskDiscardConfirmation(
+    const EndpointCanvasDraftState& state);
+[[nodiscard]] QString operationUnavailableHint(
+    const EndpointCanvasDraftState& state,
+    const QString& operation);
 [[nodiscard]] QString operationBlocker(
     const EndpointCanvasDraftState& state,
     const QString& operation);

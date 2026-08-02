@@ -31,11 +31,12 @@ using NodeId = unsigned int;
 class QEvent;
 class QGraphicsItem;
 class QGraphicsPathItem;
-class QLabel;
+class QMenu;
 
 namespace finepaper {
 
 class AnimatedGraphicsView;
+class EndpointDraftTaskBar;
 enum class EndpointDragTarget;
 enum class NocCanvasCommand;
 
@@ -161,6 +162,7 @@ public:
     [[nodiscard]] TopologyWorkspaceRegularizeResult regularizeLayout();
     void zoomToFit();
     void focusCanvas(Qt::FocusReason reason = Qt::ShortcutFocusReason);
+    void reviewEndpointCanvasDrafts();
     void setDomainPresentation(DomainPresentationSnapshot presentation);
     [[nodiscard]] const DomainPresentationSnapshot& domainPresentation() const;
     [[nodiscard]] const EndpointCanvasDraftState&
@@ -231,6 +233,19 @@ private:
         QGraphicsPathItem* graphicsItem = nullptr;
     };
 
+    struct EndpointDraftRouterTarget {
+        QString id;
+        RouterPosition router;
+        QPointF scenePosition;
+    };
+
+    struct EndpointDraftRouterSpatialNode {
+        EndpointDraftRouterTarget target;
+        int lesserChild = -1;
+        int greaterChild = -1;
+        bool splitOnX = true;
+    };
+
     void rebuildGraph(bool zoomToContents = true);
     void discardTransientProjectionHistory();
     void applyDesign(const NocDesign* design, attachment::Policy policy);
@@ -264,7 +279,16 @@ private:
     void clearEndpointCanvasDrafts();
     void rebuildEndpointCanvasDraftState();
     void notifyEndpointCanvasDraftStateChanged();
-    void updateEndpointCanvasDraftNotice();
+    void rebuildEndpointDraftRouterIndex();
+    void updateEndpointDraftTaskBar();
+    void rebuildEndpointDraftRouterMenu();
+    [[nodiscard]] QVector<EndpointDraftRouterTarget>
+    nearestEndpointDraftRouterTargets(
+        QPointF scenePosition, qsizetype limit) const;
+    [[nodiscard]] std::optional<SelectionIdentity>
+    selectedEndpointCanvasDraft() const;
+    bool connectSelectedEndpointCanvasDraft(RouterPosition router);
+    void discardEndpointCanvasDraftsFromTaskBar();
     bool attachNodeToRouter(QtNodes::NodeId nodeId, NocAttachmentTarget target);
     bool detachEndpoint(QtNodes::NodeId nodeId,
                         bool restoreProjectionOnFailure = false);
@@ -338,11 +362,17 @@ private:
     std::unique_ptr<QtNodes::DataFlowGraphModel> m_graphModel;
     QtNodes::DataFlowGraphicsScene* m_scene = nullptr;
     AnimatedGraphicsView* m_view = nullptr;
-    QLabel* m_endpointCanvasDraftNotice = nullptr;
+    EndpointDraftTaskBar* m_endpointDraftTaskBar = nullptr;
+    QMenu* m_endpointDraftRouterMenu = nullptr;
     EndpointCanvasDraftState m_endpointCanvasDraftState;
     QHash<QtNodes::NodeId, NodeMetadata> m_metadata;
     QHash<QString, QtNodes::NodeId> m_pendingEndpointNodes;
     QHash<QString, QtNodes::NodeId> m_routerNodes;
+    QVector<EndpointDraftRouterSpatialNode>
+        m_endpointDraftRouterSpatialIndex;
+    int m_endpointDraftRouterSpatialRoot = -1;
+    qsizetype m_availableEndpointDraftRouterCount = 0;
+    QHash<int, qsizetype> m_endpointDraftRouterRejectionCounts;
     QHash<ElementRef, QtNodes::NodeId> m_elementNodes;
     QHash<ElementRef, QtNodes::ConnectionId> m_elementConnections;
     QSet<QtNodes::NodeId> m_stackingNodeIds;

@@ -43,6 +43,87 @@ QString inventoryText(const EndpointCanvasDraftState& state) {
     return parts.join(QStringLiteral(" and "));
 }
 
+QString operationName(const QString& operation) {
+    const QString normalized = operation.trimmed();
+    return normalized.isEmpty() ? QStringLiteral("This operation")
+                                : normalized;
+}
+
+QString unresolvedInventoryText(const EndpointCanvasDraftState& state) {
+    return inventoryText(state)
+        + (state.size() == 1 ? QStringLiteral(" remains unresolved")
+                             : QStringLiteral(" remain unresolved"));
+}
+
+QString pendingResolutionText(const EndpointCanvasDraftState& state) {
+    if (state.pendingNewCount() == 0) {
+        return {};
+    }
+    return state.pendingNewCount() == 1
+        ? QStringLiteral(
+              "Connect the new draft to a Router to add it to the design, "
+              "or discard it.")
+        : QStringLiteral(
+              "Connect each new draft to a Router to add it to the design, "
+              "or discard the drafts.");
+}
+
+QString detachedResolutionText(const EndpointCanvasDraftState& state) {
+    if (state.detachedCount() == 0) {
+        return {};
+    }
+    return state.detachedCount() == 1
+        ? QStringLiteral(
+              "Reconnect the disconnected Endpoint to restore it, or delete "
+              "it permanently.")
+        : QStringLiteral(
+              "Reconnect the disconnected Endpoints to restore them, or "
+              "delete them permanently.");
+}
+
+QString resolutionText(const EndpointCanvasDraftState& state) {
+    QStringList instructions;
+    const QString pending = pendingResolutionText(state);
+    const QString detached = detachedResolutionText(state);
+    if (!pending.isEmpty()) {
+        instructions.append(pending);
+    }
+    if (!detached.isEmpty()) {
+        instructions.append(detached);
+    }
+    return instructions.join(QLatin1Char(' '));
+}
+
+QString pendingDiscardImpact(const EndpointCanvasDraftState& state) {
+    if (state.pendingNewCount() == 0) {
+        return {};
+    }
+    return state.pendingNewCount() == 1
+        ? QStringLiteral(
+              "The new Endpoint draft has not been added to the design. "
+              "Discarding it removes it from the canvas.")
+        : QStringLiteral(
+              "The new Endpoint drafts have not been added to the design. "
+              "Discarding them removes them from the canvas.");
+}
+
+QString detachedDiscardImpact(const EndpointCanvasDraftState& state) {
+    if (state.detachedCount() == 0) {
+        return {};
+    }
+    return state.detachedCount() == 1
+        ? QStringLiteral(
+              "The disconnected Endpoint is recoverable in this session. "
+              "Continuing permanently deletes it from the current design. "
+              "Its preserved Domain assignments, attachment settings, and "
+              "configuration will be lost.")
+        : QStringLiteral(
+              "The disconnected Endpoints are recoverable in this session. "
+              "Continuing permanently deletes them from the current design. "
+              "Their preserved Domain assignments, attachment settings, and "
+              "configuration will be lost.");
+}
+
 } // namespace
 
 EndpointCanvasDraftState::EndpointCanvasDraftState(
@@ -93,31 +174,98 @@ QString notice(const EndpointCanvasDraftState& state) {
             + (state.pendingNewCount() == 1
                    ? QStringLiteral(" is not in the design. ")
                    : QStringLiteral(" are not in the design. "))
-            + (state.pendingNewCount() == 1
-                   ? QStringLiteral(
-                         "Connect it to a Router to add it, or discard it. ")
-                   : QStringLiteral(
-                         "Connect each to a Router to add it, or discard it. "));
+            + pendingResolutionText(state) + QLatin1Char(' ');
     } else if (state.pendingNewCount() == 0) {
         text = inventoryText(state)
             + (state.detachedCount() == 1
                    ? QStringLiteral(" is preserved for this session: ")
                    : QStringLiteral(" are preserved for this session: "))
             + compactDetachedIds(state)
-            + QStringLiteral(". Reconnect to keep, or delete permanently. ");
+            + QStringLiteral(". ") + detachedResolutionText(state)
+            + QLatin1Char(' ');
     } else {
         text = inventoryText(state)
-            + QStringLiteral(
-                " need attention. Connect new drafts; reconnect or delete "
-                "disconnected Endpoints. ");
+            + QStringLiteral(" need attention. ") + resolutionText(state)
+            + QLatin1Char(' ');
     }
-    text += QStringLiteral("Save, Validate, Generate, and Resize are paused.");
+    text += QStringLiteral(
+        "Save, Validate, Generate, and Resize remain unavailable until this "
+        "canvas work is resolved.");
     return text;
+}
+
+QString taskTitle(const EndpointCanvasDraftState& state) {
+    if (state.empty()) {
+        return {};
+    }
+    return QStringLiteral("Resolve ") + inventoryText(state);
+}
+
+QString reviewAction(const EndpointCanvasDraftState& state) {
+    if (state.empty()) {
+        return {};
+    }
+    if (state.size() > 1) {
+        return QStringLiteral("Review drafts");
+    }
+    return state.pendingNewCount() == 1
+        ? QStringLiteral("Review draft")
+        : QStringLiteral("Review Endpoint");
+}
+
+QString discardAction(const EndpointCanvasDraftState& state) {
+    if (state.empty()) {
+        return {};
+    }
+    if (state.detachedCount() == 0) {
+        return state.pendingNewCount() == 1
+            ? QStringLiteral("Discard draft")
+            : QStringLiteral("Discard drafts");
+    }
+    if (state.pendingNewCount() == 0) {
+        return state.detachedCount() == 1
+            ? QStringLiteral("Delete Endpoint…")
+            : QStringLiteral("Delete Endpoints…");
+    }
+    return QStringLiteral("Discard / Delete…");
+}
+
+QString taskDiscardConfirmation(const EndpointCanvasDraftState& state) {
+    if (state.empty()) {
+        return {};
+    }
+
+    QStringList impacts;
+    const QString pending = pendingDiscardImpact(state);
+    const QString detached = detachedDiscardImpact(state);
+    if (!pending.isEmpty()) {
+        impacts.append(pending);
+    }
+    if (!detached.isEmpty()) {
+        impacts.append(detached);
+    }
+    return QStringLiteral("The canvas contains ") + inventoryText(state)
+        + QStringLiteral(".\n\n")
+        + impacts.join(QStringLiteral("\n\n"));
+}
+
+QString operationUnavailableHint(const EndpointCanvasDraftState& state,
+                                 const QString& operation) {
+    if (state.empty()) {
+        return {};
+    }
+    return operationName(operation) + QStringLiteral(" is unavailable while ")
+        + unresolvedInventoryText(state) + QStringLiteral(". ")
+        + resolutionText(state);
 }
 
 QString operationBlocker(const EndpointCanvasDraftState& state,
                          const QString& operation) {
-    QString text = operation + QStringLiteral(" cannot continue while ")
+    if (state.empty()) {
+        return {};
+    }
+    QString text = operationName(operation)
+        + QStringLiteral(" cannot continue while ")
         + inventoryText(state)
         + (state.size() == 1
                ? QStringLiteral(" remains on the canvas.")
@@ -126,27 +274,35 @@ QString operationBlocker(const EndpointCanvasDraftState& state,
         text += QStringLiteral(" Disconnected Endpoint IDs: ")
             + compactDetachedIds(state) + QLatin1Char('.');
     }
-    text += QStringLiteral(
-        "\n\nConnect new drafts to a Router to create them. Reconnect "
-        "disconnected Endpoints to restore them, or use their canvas menu "
-        "to discard or delete them. The requested operation did not start.");
+    text += QStringLiteral("\n\n") + resolutionText(state)
+        + QStringLiteral(" The requested operation did not start.");
     return text;
 }
 
 QString discardConfirmation(const EndpointCanvasDraftState& state,
                             bool discardsOtherUnsavedChanges) {
+    if (state.empty()) {
+        return {};
+    }
     QString text = QStringLiteral("The canvas contains ")
         + inventoryText(state)
-        + QStringLiteral(
-            ". These drafts exist only in the current editing session and "
-            "cannot be saved in their unresolved state.\n\n");
+        + (state.size() == 1
+               ? QStringLiteral(
+                     ". This draft exists only in the current editing "
+                     "session and cannot be saved in its unresolved "
+                     "state.\n\n")
+               : QStringLiteral(
+                     ". These drafts exist only in the current editing "
+                     "session and cannot be saved in their unresolved "
+                     "state.\n\n"));
+    const QString draftReference = state.size() == 1
+        ? QStringLiteral("this Endpoint draft")
+        : QStringLiteral("these Endpoint drafts");
+    text += QStringLiteral("Continuing will discard ") + draftReference;
     text += discardsOtherUnsavedChanges
         ? QStringLiteral(
-              "Continuing will discard these Endpoint drafts and every other "
-              "unsaved change in the current design.")
-        : QStringLiteral(
-              "Continuing will discard these Endpoint drafts. The durable "
-              "design is unchanged.");
+              " and every other unsaved change in the current design.")
+        : QStringLiteral(". The durable design is unchanged.");
     return text;
 }
 

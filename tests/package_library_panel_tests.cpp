@@ -356,6 +356,20 @@ void missingAndInterlockedStatesRemainSpecific() {
                      QStringLiteral("missing.fabric@9.0.0")),
           QStringLiteral(
               "cleanup failure blocks Package mutation without conflating creation or missing active metadata"));
+
+    state.interlocks.cleanupUnresolved = false;
+    state.interlocks.cleanupBlockedReason.clear();
+    state.interlocks.endpointDraftsUnresolved = true;
+    state.interlocks.endpointDraftBlockedReason = QStringLiteral(
+        "Package maintenance is unavailable while an Endpoint draft remains unresolved.");
+    panel.setState(state);
+    check(install && !install->isEnabled()
+              && reload && !reload->isEnabled()
+              && install->toolTip().contains(
+                  QStringLiteral("Endpoint draft"))
+              && reload->toolTip() == install->toolTip(),
+          QStringLiteral(
+              "Endpoint drafts consistently interlock both Package maintenance routes with a recovery reason"));
 }
 
 void emptyCatalogAndZeroEndpointTypesExplainRecovery() {

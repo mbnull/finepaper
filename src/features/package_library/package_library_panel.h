@@ -74,7 +74,9 @@ struct EndpointLibraryViewState final {
 struct PackageLibraryInterlocks final {
     bool operationBusy = false;
     bool cleanupUnresolved = false;
+    bool endpointDraftsUnresolved = false;
     QString cleanupBlockedReason;
+    QString endpointDraftBlockedReason;
 
     bool operator==(const PackageLibraryInterlocks&) const = default;
 };

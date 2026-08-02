@@ -406,6 +406,31 @@ target("finepaper-topology-workspace-store-tests")
         trim_output = true
     })
 
+target("finepaper-endpoint-draft-task-bar-tests")
+    add_rules("qt.widgetapp")
+    add_frameworks("QtTest")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/endpoint_draft_task_bar_tests.cpp")
+    add_files("src/features/topology/drafts/endpoint_canvas_draft_state.cpp")
+    add_files("src/features/topology/endpoint_draft_task_bar.cpp")
+    add_files("src/features/topology/endpoint_draft_task_bar.h")
+    add_files("src/ui/layouts/responsive_action_layout.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+    add_tests("minimum-maximum-font", {
+        trim_output = true,
+        runenvs = {
+            QT_QPA_PLATFORM = "offscreen",
+            FINEPAPER_ENDPOINT_DRAFT_TASK_BAR_FONT_SCALE = "2.0"
+        }
+    })
+
 target("finepaper-endpoint-attachment-rules-tests")
     add_rules("qt.console")
     set_kind("binary")
@@ -515,6 +540,7 @@ target("finepaper-gui-smoke")
     add_files("src/features/topology/animated_graphics_view.cpp")
     add_files("src/features/topology/canvas_command_policy.cpp")
     add_files("src/features/topology/drafts/endpoint_canvas_draft_state.cpp")
+    add_files("src/features/topology/endpoint_draft_task_bar.cpp")
     add_files("src/features/domain/domain_configuration_dialog.cpp")
     add_files("src/features/domain/domain_configuration_workspace.cpp")
     add_files("src/features/domain/domain_instance_dialog.cpp")

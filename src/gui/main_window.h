@@ -250,6 +250,7 @@ private:
     void updateCommandBarPresentation();
     void updateResponsiveWorkbenchPresentation(
         ui::WorkbenchWidthMode mode);
+    void updateEndpointDraftTaskFocus();
     void updateWorkspaceNavigationPresentation();
     void updateCanvasControlsPresentation();
     void rebuildCompactDomainLayerMenu();
@@ -336,6 +337,8 @@ private:
     QComboBox* m_workspaceSelector = nullptr;
     QLabel* m_workspaceLabel = nullptr;
     bool m_compactWorkbenchPresentation = false;
+    bool m_endpointDraftTaskFocusApplied = false;
+    std::optional<quint64> m_endpointDraftCanvasFocusGeneration = std::nullopt;
 
     QFutureWatcher<ValidationResult>* m_validationWatcher = nullptr;
     QFutureWatcher<GenerationResult>* m_generationWatcher = nullptr;
@@ -383,6 +386,7 @@ private:
     ui::WorkbenchLayoutController* m_workbenchLayoutController = nullptr;
     ui::WorkbenchPanelNavigator* m_panelNavigator = nullptr;
     QString m_canvasFocusRestoreCenterViewId;
+    quint64 m_canvasFocusGeneration = 0;
     QTabWidget* m_resultTabs = nullptr;
     QWidget* m_diagnosticsResultsPage = nullptr;
     QWidget* m_generationResultsPage = nullptr;

@@ -131,6 +131,12 @@ struct FinepaperMainWindowSmokeAccess final {
     static void refreshDesignProjection(FinepaperMainWindow& window) {
         window.refreshDesignViews();
     }
+
+    static bool endpointCanvasDraftOperationAllowed(
+        FinepaperMainWindow& window,
+        const QString& operation) {
+        return window.ensureEndpointCanvasDraftsResolved(operation);
+    }
 };
 
 } // namespace finepaper
@@ -274,7 +280,8 @@ void captureSmokeScreenshot(QWidget& window,
             .arg(screenshotRoot));
         return;
     }
-    if (phase != QStringLiteral("no-design")) {
+    if (phase != QStringLiteral("no-design")
+        && phase != QStringLiteral("endpoint-draft")) {
         auto* editor = dynamic_cast<finepaper::NocNodeEditor*>(
             window.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor")));
         if (editor) {
@@ -4581,8 +4588,12 @@ int main(int argc, char** argv) {
               && inspectorSelectionMetadata->text().contains(
                   QStringLiteral("Disconnected from")),
           QStringLiteral("line-menu Disconnect removes the attachment and keeps the Endpoint draft"));
+    check(saveAsAction && !saveAsAction->isEnabled()
+              && initialValidateAction && !initialValidateAction->isEnabled(),
+          QStringLiteral(
+              "detached Endpoint drafts visibly pause Save As and Validate before invocation"));
     bool sawEndpointCanvasDraftBlocker = false;
-    if (saveAsAction) {
+    {
         QTimer::singleShot(0, [&] {
             auto* dialog = qobject_cast<QDialog*>(
                 QApplication::activeModalWidget());
@@ -4601,7 +4612,13 @@ int main(int argc, char** argv) {
                 dialog->reject();
             }
         });
-        saveAsAction->trigger();
+        const bool saveAsAllowed =
+            finepaper::FinepaperMainWindowSmokeAccess::
+                endpointCanvasDraftOperationAllowed(
+                    window, QStringLiteral("Save As"));
+        check(!saveAsAllowed,
+              QStringLiteral(
+                  "the Save As defensive boundary rejects detached Endpoint drafts"));
         application.processEvents();
     }
     check(sawEndpointCanvasDraftBlocker
@@ -4611,7 +4628,7 @@ int main(int argc, char** argv) {
                      == QStringList{exposedEndpointId},
           QStringLiteral("saving is blocked while a durable Endpoint survives only as a detached draft"));
     bool sawDetachedValidationBlocker = false;
-    if (initialValidateAction) {
+    {
         QTimer::singleShot(0, [&] {
             auto* messageBox = qobject_cast<QMessageBox*>(
                 QApplication::activeModalWidget());
@@ -4624,7 +4641,13 @@ int main(int argc, char** argv) {
                 messageBox->accept();
             }
         });
-        initialValidateAction->trigger();
+        const bool validationAllowed =
+            finepaper::FinepaperMainWindowSmokeAccess::
+                endpointCanvasDraftOperationAllowed(
+                    window, QStringLiteral("Validate"));
+        check(!validationAllowed,
+              QStringLiteral(
+                  "the Validate defensive boundary rejects detached Endpoint drafts"));
         application.processEvents();
     }
     check(sawDetachedValidationBlocker && !window.operationBusy()
@@ -5733,6 +5756,61 @@ int main(int argc, char** argv) {
             *capacityRouter,
             finepaper::portIndex(finepaper::RouterInputPort::Endpoint) + 1U,
         });
+    capacityProjectionEditor.setEndpointTypes({
+        {QStringLiteral("master"), QStringLiteral("Master endpoint")}});
+    QMimeData capacityDraftMime;
+    capacityDraftMime.setData(
+        finepaper::workbench::endpointTypeMime,
+        QByteArrayLiteral("master"));
+    const QPoint capacityBlankPosition = blankViewportPosition(
+        capacityProjectionView);
+    if (capacityProjectionView) {
+        QDragEnterEvent dragEnter(
+            capacityBlankPosition,
+            Qt::CopyAction,
+            &capacityDraftMime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            capacityProjectionView->viewport(), &dragEnter);
+        QDropEvent drop(
+            QPointF(capacityBlankPosition),
+            Qt::CopyAction,
+            &capacityDraftMime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            capacityProjectionView->viewport(), &drop);
+        application.processEvents();
+    }
+    auto* capacityConnect =
+        capacityProjectionEditor.findChild<QToolButton*>(
+            QStringLiteral("finepaper.endpointDraftConnect"));
+    QMenu* capacityRouterMenu = capacityConnect
+        ? capacityConnect->menu() : nullptr;
+    if (capacityRouterMenu) {
+        QMetaObject::invokeMethod(
+            capacityRouterMenu, "aboutToShow", Qt::DirectConnection);
+    }
+    const bool capacityReasonVisible = capacityRouterMenu
+        && std::any_of(
+            capacityRouterMenu->actions().cbegin(),
+            capacityRouterMenu->actions().cend(),
+            [](const QAction* action) {
+                return action
+                    && (action->text().contains(
+                            QStringLiteral("capacity"),
+                            Qt::CaseInsensitive)
+                        || action->toolTip().contains(
+                            QStringLiteral("capacity"),
+                            Qt::CaseInsensitive));
+            });
+    check(capacityConnect && capacityConnect->isEnabled()
+              && capacityReasonVisible,
+          QStringLiteral(
+              "Connect remains reviewable and exposes the exact rejection when every Router is full"));
+    capacityProjectionEditor.beginDocumentSession(
+        QStringLiteral("capacity-projection-cleanup-session"));
     finepaper::attachment::Policy invalidProjectionPolicy =
         finepaper::attachment::policyFromPackage(singleAttachment);
     invalidProjectionPolicy.maxPerRouter = 2;
@@ -7859,6 +7937,7 @@ int main(int argc, char** argv) {
     check(writeEndpointDraftLifecycleDesign(quickAddDesignPath),
           QStringLiteral("quick-add regression design is writable"));
     finepaper::FinepaperMainWindow quickAddWindow(locations);
+    quickAddWindow.resize(798, 720);
     quickAddWindow.show();
     application.processEvents();
     check(quickAddWindow.openDesignFile(quickAddDesignPath),
@@ -7882,12 +7961,38 @@ int main(int argc, char** argv) {
     }
     QAction* quickSave = actionWithText(
         quickAddWindow, QStringLiteral("Save"));
+    QAction* quickSaveAs = actionWithText(
+        quickAddWindow, QStringLiteral("Save As…"));
+    QAction* quickInstall = actionWithText(
+        quickAddWindow, QStringLiteral("Install Package Directory…"));
+    QAction* quickReload = actionWithText(
+        quickAddWindow, QStringLiteral("Reload Packages"));
     QAction* quickValidate = actionWithText(
         quickAddWindow, QStringLiteral("Validate / DRC"));
     QAction* quickGenerate = actionWithText(
         quickAddWindow, QStringLiteral("Generate RTL"));
     QAction* quickResize = quickAddWindow.findChild<QAction*>(
         QStringLiteral("finepaper.resizeMeshAction"));
+    auto* quickResultsGenerate = quickAddWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.generateButton"));
+    auto* quickLibraryInstall = quickAddWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.installPackage"));
+    auto* quickLibraryReload = quickAddWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.reloadPackages"));
+    auto* quickResultsDock = quickAddWindow.findChild<QDockWidget*>(
+        finepaper::workbench::resultsDockName);
+    auto* quickInspectorDock = quickAddWindow.findChild<QDockWidget*>(
+        finepaper::workbench::inspectorDockName);
+    auto* quickCanvasFocus = quickAddWindow.findChild<QAction*>(
+        finepaper::workbench::canvasFocusActionName);
+    if (quickResultsDock) {
+        quickResultsDock->show();
+        application.processEvents();
+    }
+    const bool quickResultsWereVisible = quickResultsDock
+        && quickResultsDock->isVisible();
+    const bool quickInspectorWasVisible = quickInspectorDock
+        && quickInspectorDock->isVisible();
     QMimeData quickPendingMime;
     quickPendingMime.setData(
         finepaper::workbench::endpointTypeMime,
@@ -7910,22 +8015,140 @@ int main(int argc, char** argv) {
         QApplication::sendEvent(quickView->viewport(), &drop);
         application.processEvents();
     }
+    const bool quickResultsAutoHidden = waitUntil([quickResultsDock] {
+        return !quickResultsDock || !quickResultsDock->isVisible();
+    });
+    const bool quickInspectorAutoHidden = waitUntil([quickInspectorDock] {
+        return !quickInspectorDock || !quickInspectorDock->isVisible();
+    });
     const auto quickPendingEndpoint = nodeIdWithCaptionPrefix(
         quickScene, QStringLiteral("New Endpoint draft\nMaster endpoint"));
     auto* quickDraftNotice = quickEditor
         ? quickEditor->findChild<QLabel*>(
               QStringLiteral("finepaper.endpointCanvasDraftNotice"))
         : nullptr;
+    auto* quickDraftTaskBar = quickEditor
+        ? quickEditor->findChild<QWidget*>(
+              QStringLiteral("finepaper.endpointDraftTaskBar"))
+        : nullptr;
+    auto* quickDraftReview = quickEditor
+        ? quickEditor->findChild<QPushButton*>(
+              QStringLiteral("finepaper.endpointDraftReview"))
+        : nullptr;
+    auto* quickDraftConnect = quickEditor
+        ? quickEditor->findChild<QToolButton*>(
+              QStringLiteral("finepaper.endpointDraftConnect"))
+        : nullptr;
+    auto* quickDraftDiscard = quickEditor
+        ? quickEditor->findChild<QPushButton*>(
+              QStringLiteral("finepaper.endpointDraftDiscard"))
+        : nullptr;
     check(quickPendingEndpoint && quickEditor
               && quickEditor->endpointCanvasDraftState().pendingNewCount() == 1
-              && quickAddWindow.isWindowModified()
-              && quickSave && quickSave->isEnabled()
-              && quickDraftNotice && quickDraftNotice->isVisible(),
+              && quickAddWindow.isWindowModified(),
           QStringLiteral(
               "an unattached new Endpoint draft alone marks the clean document modified and discoverable"));
-    check(quickValidate && quickValidate->isEnabled(),
+    check((!quickResultsWereVisible || quickResultsAutoHidden)
+              && (!quickInspectorWasVisible || quickInspectorAutoHidden)
+              && quickCanvasFocus && quickCanvasFocus->isChecked(),
           QStringLiteral(
-              "validation remains available so unresolved Endpoint drafts can explain the blocker"));
+              "compact Endpoint draft work enters reversible Canvas Focus and releases secondary-panel space"));
+    check(quickDraftTaskBar && quickDraftTaskBar->isVisible()
+              && quickDraftNotice && quickDraftNotice->isVisible()
+              && widgetIsFullyVisibleWithin(quickEditor, quickDraftTaskBar)
+              && quickDraftReview && quickDraftReview->isVisible()
+              && !quickDraftReview->size().isEmpty()
+              && widgetIsFullyVisibleWithin(
+                  quickDraftTaskBar, quickDraftReview)
+              && quickDraftConnect && quickDraftConnect->isVisible()
+              && !quickDraftConnect->size().isEmpty()
+              && widgetIsFullyVisibleWithin(
+                  quickDraftTaskBar, quickDraftConnect)
+              && quickDraftDiscard && quickDraftDiscard->isVisible()
+              && !quickDraftDiscard->size().isEmpty()
+              && widgetIsFullyVisibleWithin(
+                  quickDraftTaskBar, quickDraftDiscard),
+          QStringLiteral(
+              "the Endpoint draft task bar keeps Review, Connect, and Discard visible on the canvas"));
+    check(quickDraftReview && quickDraftReview->isEnabled()
+              && quickDraftReview->focusPolicy() == Qt::StrongFocus
+              && !quickDraftReview->accessibleName().trimmed().isEmpty()
+              && quickDraftConnect && quickDraftConnect->isEnabled()
+              && quickDraftConnect->focusPolicy() == Qt::StrongFocus
+              && !quickDraftConnect->accessibleName().trimmed().isEmpty()
+              && quickDraftDiscard && quickDraftDiscard->isEnabled()
+              && quickDraftDiscard->focusPolicy() == Qt::StrongFocus
+              && !quickDraftDiscard->accessibleName().trimmed().isEmpty(),
+          QStringLiteral(
+              "Endpoint draft task actions expose enabled keyboard and accessibility routes"));
+    check(quickSave && !quickSave->isEnabled()
+              && quickSaveAs && !quickSaveAs->isEnabled()
+              && quickInstall && !quickInstall->isEnabled()
+              && quickReload && !quickReload->isEnabled()
+              && quickLibraryInstall && !quickLibraryInstall->isEnabled()
+              && quickLibraryReload && !quickLibraryReload->isEnabled()
+              && quickValidate && !quickValidate->isEnabled()
+              && quickGenerate && !quickGenerate->isEnabled()
+              && quickResize && !quickResize->isEnabled()
+              && quickResultsGenerate && !quickResultsGenerate->isEnabled(),
+          QStringLiteral(
+              "unresolved Endpoint drafts consistently pause persistence, Package maintenance, validation, generation, and topology resize routes"));
+    const auto hasUnavailableDraftHint = [](const auto* control) {
+        return control
+            && (control->toolTip().contains(
+                    QStringLiteral("unavailable"), Qt::CaseInsensitive)
+                || control->statusTip().contains(
+                    QStringLiteral("unavailable"), Qt::CaseInsensitive));
+    };
+    check(hasUnavailableDraftHint(quickSave)
+              && hasUnavailableDraftHint(quickSaveAs)
+              && hasUnavailableDraftHint(quickInstall)
+              && hasUnavailableDraftHint(quickReload)
+              && hasUnavailableDraftHint(quickLibraryInstall)
+              && hasUnavailableDraftHint(quickLibraryReload)
+              && hasUnavailableDraftHint(quickValidate)
+              && hasUnavailableDraftHint(quickGenerate)
+              && hasUnavailableDraftHint(quickResize)
+              && hasUnavailableDraftHint(quickResultsGenerate),
+          QStringLiteral(
+              "paused persistent actions explain that Endpoint drafts make them unavailable"));
+
+    if (quickDraftReview) {
+        quickDraftReview->setFocus(Qt::TabFocusReason);
+        QTest::keyClick(quickDraftReview, Qt::Key_Space);
+        application.processEvents();
+    }
+    auto* quickPendingGraphics = quickPendingEndpoint && quickScene
+        ? quickScene->nodeGraphicsObject(*quickPendingEndpoint)
+        : nullptr;
+    check(quickView && focusIsWithin(quickView)
+              && quickPendingGraphics
+              && quickPendingGraphics->isSelected(),
+          QStringLiteral(
+              "keyboard Review selects and focuses the unresolved Endpoint draft"));
+
+    QMenu* quickDraftRouterMenu = quickDraftConnect
+        ? quickDraftConnect->menu() : nullptr;
+    bool quickConnectMenuOpened = false;
+    bool quickConnectMenuHasTarget = false;
+    if (quickDraftConnect && quickDraftRouterMenu) {
+        QTimer::singleShot(0, [&] {
+            quickConnectMenuOpened = quickDraftRouterMenu->isVisible();
+            for (QAction* action : quickDraftRouterMenu->actions()) {
+                quickConnectMenuHasTarget = quickConnectMenuHasTarget
+                    || (action->isEnabled()
+                        && action->text().startsWith(
+                            QStringLiteral("Router ")));
+            }
+            quickDraftRouterMenu->close();
+        });
+        quickDraftConnect->setFocus(Qt::TabFocusReason);
+        QTest::keyClick(quickDraftConnect, Qt::Key_Space);
+        application.processEvents();
+    }
+    check(quickConnectMenuOpened && quickConnectMenuHasTarget,
+          QStringLiteral(
+              "keyboard Connect opens a menu with an available Router target"));
     captureSmokeScreenshot(
         quickAddWindow, QStringLiteral("endpoint-draft"), requestedTheme);
     chooseMessageBoxButton(QMessageBox::Cancel);
@@ -7935,73 +8158,206 @@ int main(int argc, char** argv) {
               && quickEditor->endpointCanvasDraftState().pendingNewCount() == 1,
           QStringLiteral(
               "cancelling Close preserves an unresolved Endpoint canvas draft"));
-    const auto operationWasBlocked = [&](QAction* action,
-                                         const QString& operation) {
-        if (!action) {
-            return false;
-        }
-        waitUntil([&] {
-            return action->isEnabled()
-                && !quickAddWindow.operationBusy();
-        });
-        if (!action->isEnabled() || quickAddWindow.operationBusy()) {
-            return false;
-        }
-        bool sawBlocker = false;
-        QTimer::singleShot(0, [&] {
-            for (QWidget* widget : QApplication::topLevelWidgets()) {
-                auto* messageBox = qobject_cast<QMessageBox*>(widget);
-                if (!messageBox || !messageBox->isVisible()
-                    || messageBox->objectName()
-                        != QStringLiteral(
-                            "finepaper.endpointCanvasDraftBlocker")) {
-                    continue;
-                }
-                sawBlocker = messageBox->text().startsWith(operation);
-                messageBox->accept();
-                break;
-            }
-        });
-        action->trigger();
+    const auto defensiveBoundaryWasBlocked = [&](const QString& operation) {
+        chooseMessageBoxButton(QMessageBox::Ok);
+        const bool operationAllowed =
+            finepaper::FinepaperMainWindowSmokeAccess::
+                endpointCanvasDraftOperationAllowed(
+                    quickAddWindow, operation);
         application.processEvents();
-        return sawBlocker && !quickAddWindow.operationBusy();
+        return !operationAllowed;
     };
-    const bool quickSaveBlocked = operationWasBlocked(
-        quickSave, QStringLiteral("Save"));
+    const bool quickSaveBlocked = defensiveBoundaryWasBlocked(
+        QStringLiteral("Save"));
+    const bool quickSaveAsBlocked = defensiveBoundaryWasBlocked(
+        QStringLiteral("Save As"));
     check(!quickAddWindow.operationBusy(),
           QStringLiteral("Save draft preflight leaves the workbench idle"));
-    const bool quickValidateBlocked = operationWasBlocked(
-        quickValidate, QStringLiteral("Validate"));
-    const bool quickGenerateBlocked = operationWasBlocked(
-        quickGenerate, QStringLiteral("Generate"));
-    const bool quickResizeBlocked = operationWasBlocked(
-        quickResize, QStringLiteral("Resize"));
+    const bool quickValidateBlocked = defensiveBoundaryWasBlocked(
+        QStringLiteral("Validate"));
+    const bool quickGenerateBlocked = defensiveBoundaryWasBlocked(
+        QStringLiteral("Generate"));
+    const bool quickResizeBlocked = defensiveBoundaryWasBlocked(
+        QStringLiteral("Resize"));
     check(quickSaveBlocked,
           QStringLiteral("Save uses the Endpoint canvas draft preflight"));
+    check(quickSaveAsBlocked,
+          QStringLiteral("Save As uses the Endpoint canvas draft preflight"));
     check(quickValidateBlocked,
           QStringLiteral("Validate uses the Endpoint canvas draft preflight"));
     check(quickGenerateBlocked,
           QStringLiteral("Generate uses the Endpoint canvas draft preflight"));
     check(quickResizeBlocked,
           QStringLiteral("Resize uses the Endpoint canvas draft preflight"));
+    check(!quickAddWindow.operationBusy(),
+          QStringLiteral(
+              "Endpoint draft defensive preflights leave the workbench idle"));
     check(quickEditor
               && quickEditor->endpointCanvasDraftState().pendingNewCount() == 1,
           QStringLiteral(
               "blocked persistent operations preserve the Endpoint canvas draft"));
-    if (quickScene && quickPendingEndpoint && quickAnimatedView) {
-        quickScene->clearSelection();
-        quickScene->nodeGraphicsObject(*quickPendingEndpoint)->setSelected(true);
-        quickScene->nodeSelected(*quickPendingEndpoint);
+    if (quickDraftDiscard) {
         chooseMessageBoxButton(QMessageBox::Yes);
-        quickAnimatedView->deleteSelectionAction()->trigger();
+        quickDraftDiscard->click();
         application.processEvents();
     }
     check(quickEditor && quickEditor->endpointCanvasDraftState().empty()
               && !quickAddWindow.isWindowModified()
               && quickSave && !quickSave->isEnabled()
-              && quickDraftNotice && !quickDraftNotice->isVisible(),
+              && quickSaveAs && quickSaveAs->isEnabled()
+              && quickInstall && quickInstall->isEnabled()
+              && quickReload && quickReload->isEnabled()
+              && quickLibraryInstall && quickLibraryInstall->isEnabled()
+              && quickLibraryReload && quickLibraryReload->isEnabled()
+              && quickValidate && quickValidate->isEnabled()
+              && quickGenerate && quickGenerate->isEnabled()
+              && quickResize && quickResize->isEnabled()
+              && quickResultsGenerate && quickResultsGenerate->isEnabled()
+              && quickDraftTaskBar && !quickDraftTaskBar->isVisible()
+              && quickDraftNotice && !quickDraftNotice->isVisible()
+              && (!quickResultsWereVisible
+                  || (quickResultsDock && quickResultsDock->isVisible()))
+              && (!quickInspectorWasVisible
+                  || (quickInspectorDock && quickInspectorDock->isVisible()))
+              && quickCanvasFocus && !quickCanvasFocus->isChecked(),
           QStringLiteral(
-              "discarding the only new Endpoint draft restores the clean document state"));
+              "task-bar Discard restores the clean document, persistent actions, and prior panel layout"));
+
+    if (quickEditor) {
+        quickEditor->beginDocumentSession(
+            QStringLiteral(
+                "smoke-endpoint-draft-discard-source-session"));
+    }
+    if (quickView) {
+        QDragEnterEvent dragEnter(
+            quickBlankPosition,
+            Qt::CopyAction,
+            &quickPendingMime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(quickView->viewport(), &dragEnter);
+        QDropEvent drop(
+            QPointF(quickBlankPosition),
+            Qt::CopyAction,
+            &quickPendingMime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(quickView->viewport(), &drop);
+        application.processEvents();
+    }
+    const bool secondDraftEnteredCanvasFocus = waitUntil([
+        quickEditor, quickCanvasFocus] {
+        return quickEditor
+            && quickEditor->endpointCanvasDraftState().pendingNewCount() == 1
+            && quickCanvasFocus && quickCanvasFocus->isChecked();
+    });
+    if (quickCanvasFocus && quickCanvasFocus->isChecked()) {
+        quickCanvasFocus->trigger();
+        application.processEvents();
+        quickCanvasFocus->trigger();
+        application.processEvents();
+    }
+    const bool userReenteredCanvasFocus = quickCanvasFocus
+        && quickCanvasFocus->isChecked();
+    const QString staleDiscardDraftId = quickEditor
+            && !quickEditor->endpointCanvasDraftState().empty()
+        ? quickEditor->endpointCanvasDraftState().items().front().id.value
+        : QString();
+    bool discardConfirmationReplacedSession = false;
+    bool replacementReusedDraftIdentity = false;
+    if (quickEditor && quickView
+        && quickDraftDiscard && quickDraftDiscard->isVisible()) {
+        QTimer::singleShot(0, [&] {
+            auto* confirmation = qobject_cast<QMessageBox*>(
+                QApplication::activeModalWidget());
+            if (!confirmation
+                || confirmation->objectName()
+                    != QStringLiteral(
+                        "finepaper.discardEndpointDraftsConfirmation")) {
+                chooseMessageBoxButton(QMessageBox::Yes);
+                return;
+            }
+
+            quickEditor->beginDocumentSession(
+                QStringLiteral(
+                    "smoke-reentrant-endpoint-draft-session"));
+            QDragEnterEvent dragEnter(
+                quickBlankPosition,
+                Qt::CopyAction,
+                &quickPendingMime,
+                Qt::LeftButton,
+                Qt::NoModifier);
+            QApplication::sendEvent(quickView->viewport(), &dragEnter);
+            QDropEvent drop(
+                QPointF(quickBlankPosition),
+                Qt::CopyAction,
+                &quickPendingMime,
+                Qt::LeftButton,
+                Qt::NoModifier);
+            QApplication::sendEvent(quickView->viewport(), &drop);
+
+            const finepaper::EndpointCanvasDraftState replacementState =
+                quickEditor->endpointCanvasDraftState();
+            discardConfirmationReplacedSession =
+                replacementState.pendingNewCount() == 1;
+            replacementReusedDraftIdentity =
+                replacementState.items().size() == 1
+                && replacementState.items().front().id.value
+                    == staleDiscardDraftId;
+            if (QAbstractButton* confirm =
+                    confirmation->button(QMessageBox::Yes)) {
+                confirm->click();
+            }
+        });
+        quickDraftDiscard->click();
+        application.processEvents();
+    }
+    check(discardConfirmationReplacedSession
+              && replacementReusedDraftIdentity
+              && quickEditor
+              && quickEditor->endpointCanvasDraftState().pendingNewCount() == 1
+              && nodeGraphicsWithCaptionPrefix(
+                  quickScene,
+                  QStringLiteral("New Endpoint draft\nMaster endpoint")),
+          QStringLiteral(
+              "an old Discard confirmation cannot remove an indistinguishable Endpoint draft created by a replacement document session"));
+    if (quickEditor) {
+        quickEditor->setEditingEnabled(false);
+        application.processEvents();
+    }
+    check(quickDraftReview && quickDraftReview->isEnabled()
+              && quickDraftDiscard && quickDraftDiscard->isEnabled()
+              && quickDraftConnect && !quickDraftConnect->isEnabled()
+              && quickDraftConnect->toolTip().contains(
+                  QStringLiteral("read-only"),
+                  Qt::CaseInsensitive),
+          QStringLiteral(
+              "a read-only design still lets users review and discard local new Endpoint drafts while explaining why Connect is unavailable"));
+    if (quickDraftDiscard && quickDraftDiscard->isVisible()) {
+        chooseMessageBoxButton(QMessageBox::Yes);
+        quickDraftDiscard->click();
+        application.processEvents();
+    }
+    if (quickEditor) {
+        quickEditor->setEditingEnabled(true);
+    }
+    check(secondDraftEnteredCanvasFocus && userReenteredCanvasFocus
+              && quickEditor
+              && quickEditor->endpointCanvasDraftState().empty()
+              && quickCanvasFocus && quickCanvasFocus->isChecked(),
+          QStringLiteral(
+              "resolving a draft does not exit a newer user-owned Canvas Focus session"));
+    if (quickCanvasFocus && quickCanvasFocus->isChecked()) {
+        quickCanvasFocus->trigger();
+        application.processEvents();
+    }
+    check(quickCanvasFocus && !quickCanvasFocus->isChecked()
+              && (!quickResultsWereVisible
+                  || (quickResultsDock && quickResultsDock->isVisible()))
+              && (!quickInspectorWasVisible
+                  || (quickInspectorDock && quickInspectorDock->isVisible())),
+          QStringLiteral(
+              "exiting the newer user-owned Canvas Focus restores its own panel snapshot"));
     const auto quickRouter = nodeIdWithCaption(
         quickScene, QStringLiteral("r-0-0"));
     if (quickScene && quickRouter) {
