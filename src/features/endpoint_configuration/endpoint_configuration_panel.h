@@ -2,7 +2,7 @@
 
 #include "application/endpoint_configuration.h"
 #include "application/endpoint_domain_assignment.h"
-#include "gui/package_parameter_form.h"
+#include "features/endpoint_configuration/package_parameter_form.h"
 #include "noc/model.h"
 #include "package/package.h"
 

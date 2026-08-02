@@ -5,7 +5,7 @@
 #include "features/operations/design_run_state.h"
 #include "features/package_library/runtime_package_cache.h"
 #include "features/topology/noc_node_editor.h"
-#include "gui/package_parameter_form.h"
+#include "features/endpoint_configuration/package_parameter_form.h"
 #include "gui/workbench_view_registry.h"
 
 #include <QJsonValue>

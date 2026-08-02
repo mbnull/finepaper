@@ -1,4 +1,4 @@
-#include "gui/package_parameter_form.h"
+#include "features/endpoint_configuration/package_parameter_form.h"
 
 #include "package/parameter_schema_identity.h"
 #include "ui/common/schema_value_editor.h"

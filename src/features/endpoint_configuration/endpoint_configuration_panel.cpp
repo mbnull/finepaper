@@ -1,7 +1,7 @@
-#include "gui/endpoint_configuration_panel.h"
+#include "features/endpoint_configuration/endpoint_configuration_panel.h"
 
 #include "features/domain/endpoint_domain_assignment_dialog.h"
-#include "gui/package_parameter_form.h"
+#include "features/endpoint_configuration/package_parameter_form.h"
 #include "package/parameter_schema_identity.h"
 #include "ui/common/focus_target.h"
 #include "ui/theme/ui_tokens.h"

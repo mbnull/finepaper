@@ -1,6 +1,6 @@
 #include "application/endpoint_configuration.h"
-#include "gui/endpoint_configuration_panel.h"
-#include "gui/package_parameter_form.h"
+#include "features/endpoint_configuration/endpoint_configuration_panel.h"
+#include "features/endpoint_configuration/package_parameter_form.h"
 #include "ui/common/schema_value_editor.h"
 
 #include <QAbstractButton>

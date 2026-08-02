@@ -2,7 +2,7 @@
 #include "features/topology/animated_graphics_view.h"
 #include "features/domain/domain_manager_panel.h"
 #include "features/element_configuration/element_configuration_panel.h"
-#include "gui/endpoint_configuration_panel.h"
+#include "features/endpoint_configuration/endpoint_configuration_panel.h"
 #include "features/topology/noc_editor_style.h"
 #include "features/topology/noc_node_editor.h"
 #include "features/topology/topology_workspace_store.h"
