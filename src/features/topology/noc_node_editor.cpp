@@ -127,9 +127,34 @@ constexpr unsigned int visualRouterAttachmentPortOffset(
         ? individualCount : logicalOffset;
 }
 
-QPen draftConnectionPen(const QPalette& palette) {
-    QPen pen(nocEditorColors(palette).accent, 2.5, Qt::DashLine);
-    pen.setDashPattern({7.0, 5.0});
+enum class DraftConnectionFeedback {
+    Neutral,
+    Allowed,
+    Blocked,
+};
+
+QPen draftConnectionPen(const QPalette& palette,
+                        DraftConnectionFeedback feedback =
+                            DraftConnectionFeedback::Neutral) {
+    const NocEditorColors colors = nocEditorColors(palette);
+    QColor color = colors.accent;
+    Qt::PenStyle style = Qt::DashLine;
+    switch (feedback) {
+    case DraftConnectionFeedback::Neutral:
+        break;
+    case DraftConnectionFeedback::Allowed:
+        color = colors.success;
+        style = Qt::SolidLine;
+        break;
+    case DraftConnectionFeedback::Blocked:
+        color = colors.error;
+        style = Qt::DashDotLine;
+        break;
+    }
+    QPen pen(color, 2.5, style);
+    if (feedback == DraftConnectionFeedback::Neutral) {
+        pen.setDashPattern({7.0, 5.0});
+    }
     pen.setCapStyle(Qt::RoundCap);
     pen.setJoinStyle(Qt::RoundJoin);
     return pen;
@@ -2559,9 +2584,22 @@ void NocNodeEditor::updateEndpointAttachmentDraft(const QPoint& viewportPosition
     if (!graphicsItem) {
         return;
     }
+    const QPointF targetPosition = m_view->mapToScene(viewportPosition);
+    DraftConnectionFeedback feedback = DraftConnectionFeedback::Neutral;
+    if (const std::optional<QtNodes::NodeId> routerNode = routerNodeAt(
+            targetPosition)) {
+        feedback = resolveAttachmentTargetAt(
+                       *routerNode,
+                       targetPosition,
+                       m_endpointAttachmentDraft->endpointNode)
+                       .decision.allowed
+            ? DraftConnectionFeedback::Allowed
+            : DraftConnectionFeedback::Blocked;
+    }
+    graphicsItem->setPen(draftConnectionPen(palette(), feedback));
     graphicsItem->setPath(orthogonalConnectionPath(
         m_endpointAttachmentDraft->startScenePosition,
-        m_view->mapToScene(viewportPosition)));
+        targetPosition));
 }
 
 bool NocNodeEditor::completeEndpointAttachmentDraft(const QPoint& viewportPosition) {
@@ -2717,9 +2755,29 @@ void NocNodeEditor::updateRouterEndpointDraft(const QPoint& viewportPosition) {
     if (!graphicsItem) {
         return;
     }
+    const QPointF targetPosition = m_view->mapToScene(viewportPosition);
+    DraftConnectionFeedback feedback = DraftConnectionFeedback::Neutral;
+    if (const std::optional<QtNodes::NodeId> targetNode = nodeAtScene(
+            targetPosition, m_routerEndpointDraft->routerNode)) {
+        const NodeMetadata target = m_metadata.value(*targetNode);
+        if (target.kind == NocEditorSelection::Kind::Endpoint
+            || target.kind == NocEditorSelection::Kind::PendingEndpoint) {
+            feedback = resolveAttachmentTarget(
+                           m_routerEndpointDraft->routerNode,
+                           attachment::RouterHitKind::AttachmentPort,
+                           m_routerEndpointDraft->portIndex,
+                           *targetNode)
+                           .decision.allowed
+                ? DraftConnectionFeedback::Allowed
+                : DraftConnectionFeedback::Blocked;
+        } else {
+            feedback = DraftConnectionFeedback::Blocked;
+        }
+    }
+    graphicsItem->setPen(draftConnectionPen(palette(), feedback));
     graphicsItem->setPath(orthogonalConnectionPath(
         m_routerEndpointDraft->startScenePosition,
-        m_view->mapToScene(viewportPosition)));
+        targetPosition));
 }
 
 bool NocNodeEditor::completeRouterEndpointDraft(const QPoint& viewportPosition) {
