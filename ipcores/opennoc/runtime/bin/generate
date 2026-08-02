@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+"""Finepaper runtime adapter for the vendored OpenNoC CHI Mesh generator."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+SOURCE = "org.opennoc.chi-mesh"
+NODE_TYPES = {"rnf": "RNF", "rni": "RNI", "hnf": "HNF", "hni": "HNI", "snf": "SNF"}
+
+
+def write_result(path: Path, success: bool, artifacts: list[dict] | None = None,
+                 diagnostics: list[dict] | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"success": success, "artifacts": artifacts or [],
+                                "diagnostics": diagnostics or []}, indent=2) + "\n",
+                    encoding="utf-8")
+
+
+def fail(message: str, result: Path | None, path: str = "") -> int:
+    if result:
+        diagnostic = {"severity": "error", "code": "opennoc.adapter_failed",
+                      "message": message, "source": SOURCE}
+        if path:
+            diagnostic["path"] = path
+        write_result(result, False, diagnostics=[diagnostic])
+    print(f"error: {message}", file=sys.stderr)
+    return 1
+
+
+def require_integer(values: dict, key: str, path: str) -> int:
+    value = values.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{path}/{key} must be an integer")
+    return value
+
+
+def router_position(endpoint: dict) -> tuple[int, int]:
+    attachment = endpoint.get("attachment")
+    router = attachment.get("router") if isinstance(attachment, dict) else None
+    if not isinstance(router, dict):
+        raise ValueError(f"endpoint {endpoint.get('id', '<unknown>')} has no attached Router")
+    x, y = router.get("x"), router.get("y")
+    if isinstance(x, bool) or isinstance(y, bool) or not isinstance(x, int) or not isinstance(y, int):
+        raise ValueError(f"endpoint {endpoint.get('id', '<unknown>')} has an invalid Router position")
+    return x, y
+
+
+def validate_design(design: dict) -> tuple[dict, dict[str, dict]]:
+    topology = design.get("topology")
+    if not isinstance(topology, dict) or topology.get("type") != "mesh":
+        raise ValueError("OpenNoC adapter supports only topology.type = mesh")
+    rows = require_integer(topology, "rows", "/topology")
+    columns = require_integer(topology, "columns", "/topology")
+    if not (2 <= rows <= 8 and 2 <= columns <= 8):
+        raise ValueError("OpenNoC Mesh generator supports rectangular 2..8 by 2..8 Meshes")
+    parameters = design.get("parameters")
+    if not isinstance(parameters, dict):
+        raise ValueError("/parameters must be an object")
+    configuration = {"rows": rows, "columns": columns}
+    for parameter in ("reqFlitWidth", "rspFlitWidth", "datFlitWidth", "snpFlitWidth"):
+        value = require_integer(parameters, parameter, "/parameters")
+        if value < 1:
+            raise ValueError(f"/parameters/{parameter} must be positive")
+        configuration[parameter] = value
+    endpoints = design.get("endpoints")
+    if not isinstance(endpoints, list):
+        raise ValueError("/endpoints must be an array")
+    by_router: dict[tuple[int, int], list[dict]] = {}
+    for endpoint in endpoints:
+        if not isinstance(endpoint, dict) or endpoint.get("type") not in NODE_TYPES:
+            raise ValueError("OpenNoC endpoints must be RN-F, RN-I, HN-F, HN-I, or SN-F types")
+        position = router_position(endpoint)
+        if not (0 <= position[0] < columns and 0 <= position[1] < rows):
+            raise ValueError(f"endpoint {endpoint.get('id', '<unknown>')} attaches outside the Mesh")
+        by_router.setdefault(position, []).append(endpoint)
+    for position, attached in by_router.items():
+        if len(attached) > 2:
+            raise ValueError(f"Router r-{position[0]}-{position[1]} exceeds OpenNoC's two XP local ports")
+        attached.sort(key=lambda endpoint: endpoint.get("id", ""))
+    return configuration, {f"{x},{y}": {"P0": NODE_TYPES[attached[0]["type"]] if attached else "NONE",
+                                                "P1": NODE_TYPES[attached[1]["type"]] if len(attached) > 1 else "NONE"}
+                           for (x, y), attached in by_router.items()}
+
+
+def mesh_configuration(configuration: dict, attached: dict[str, dict]) -> dict:
+    nodes = {}
+    for y in range(configuration["rows"]):
+        for x in range(configuration["columns"]):
+            ports = attached.get(f"{x},{y}", {"P0": "NONE", "P1": "NONE"})
+            nodes[f"XP{x}_{y}"] = {"X": x, "Y": y, **ports}
+    return nodes
+
+
+def generate(output: Path, configuration: dict, attached: dict[str, dict]) -> list[dict]:
+    package_root = Path(__file__).resolve().parents[2]
+    tool_root = package_root / "vendor" / "OpenNoC" / "tools" / "mesh_generator"
+    source_node = tool_root / "chi_xp_node.sv"
+    source_channel = package_root / "vendor" / "OpenNoC" / "rtl" / "misc" / "chi_xp_channel.v"
+    if not all(path.is_file() for path in (tool_root / "mesh_gen.py", source_node, source_channel)):
+        raise ValueError("vendored OpenNoC Mesh generator or RTL support files are missing")
+    output.mkdir(parents=True, exist_ok=True)
+    mesh_path = output / "opennoc_mesh.json"
+    mesh_path.write_text(json.dumps(mesh_configuration(configuration, attached), indent=2) + "\n",
+                         encoding="utf-8")
+    with tempfile.TemporaryDirectory(prefix="finepaper-opennoc-") as temporary:
+        staging = Path(temporary)
+        shutil.copy2(tool_root / "mesh_gen.py", staging / "mesh_gen.py")
+        shutil.copytree(tool_root / "template", staging / "template")
+        completed = subprocess.run([sys.executable, "mesh_gen.py", "--file", str(mesh_path)],
+                                   cwd=staging, text=True, capture_output=True, check=False)
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip() or "mesh_gen.py failed"
+            raise ValueError(detail)
+        wrapper_name = f"mesh_wrapper_{configuration['columns']}x{configuration['rows']}.sv"
+        generated_wrapper = staging / wrapper_name
+        if not generated_wrapper.is_file():
+            raise ValueError("OpenNoC Mesh generator did not produce its wrapper RTL")
+        wrapper_path = output / wrapper_name
+        shutil.copy2(generated_wrapper, wrapper_path)
+    node_path = output / "chi_xp_node.sv"
+    channel_path = output / "chi_xp_channel.v"
+    shutil.copy2(source_node, node_path)
+    shutil.copy2(source_channel, channel_path)
+    filelist_path = output / "opennoc_mesh.f"
+    filelist_path.write_text("\n".join(str(path) for path in (wrapper_path, node_path, channel_path)) + "\n",
+                            encoding="utf-8")
+    return [
+        {"id": "opennoc-mesh-wrapper", "type": "rtl", "path": wrapper_path.name,
+         "primary": True},
+        {"id": "opennoc-mesh-filelist", "type": "filelist", "path": filelist_path.name},
+        {"id": "opennoc-mesh-configuration", "type": "configuration", "path": mesh_path.name},
+    ]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", choices=("validate", "generate"))
+    parser.add_argument("--design", required=True)
+    parser.add_argument("--result", required=True)
+    parser.add_argument("--output")
+    args = parser.parse_args()
+    result = Path(args.result)
+    if args.command == "generate" and not args.output:
+        return fail("--output is required for generate", result)
+    try:
+        design = json.loads(Path(args.design).read_text(encoding="utf-8"))
+        if not isinstance(design, dict):
+            raise ValueError("design must be a JSON object")
+        configuration, attached = validate_design(design)
+        artifacts = generate(Path(args.output), configuration, attached) if args.command == "generate" else []
+        write_result(result, True, artifacts=artifacts)
+        return 0
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return fail(str(error), result)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

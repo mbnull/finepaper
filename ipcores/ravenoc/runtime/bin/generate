@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Finepaper runtime adapter for the vendored RaveNoC Mesh release."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+
+SOURCE = "org.ravenoc.mesh"
+HDL_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def write_result(path: Path, success: bool, artifacts: list[dict] | None = None,
+                 diagnostics: list[dict] | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"success": success, "artifacts": artifacts or [],
+                                "diagnostics": diagnostics or []}, indent=2) + "\n",
+                    encoding="utf-8")
+
+
+def fail(message: str, result: Path | None, path: str = "") -> int:
+    if result:
+        diagnostic = {"severity": "error", "code": "ravenoc.adapter_failed",
+                      "message": message, "source": SOURCE}
+        if path:
+            diagnostic["path"] = path
+        write_result(result, False, diagnostics=[diagnostic])
+    print(f"error: {message}", file=sys.stderr)
+    return 1
+
+
+def require_integer(values: dict, key: str, path: str) -> int:
+    value = values.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{path}/{key} must be an integer")
+    return value
+
+
+def require_bool(values: dict, key: str, path: str) -> bool:
+    value = values.get(key)
+    if not isinstance(value, bool):
+        raise ValueError(f"{path}/{key} must be a boolean")
+    return value
+
+
+def router_key(endpoint: dict) -> tuple[int, int]:
+    attachment = endpoint.get("attachment")
+    if not isinstance(attachment, dict):
+        raise ValueError(f"endpoint {endpoint.get('id', '<unknown>')} has no attachment")
+    router = attachment.get("router")
+    if not isinstance(router, dict):
+        raise ValueError(f"endpoint {endpoint.get('id', '<unknown>')} has no attached Router")
+    x, y = router.get("x"), router.get("y")
+    if isinstance(x, bool) or isinstance(y, bool) or not isinstance(x, int) or not isinstance(y, int):
+        raise ValueError(f"endpoint {endpoint.get('id', '<unknown>')} has an invalid Router position")
+    return x, y
+
+
+def validate_design(design: dict) -> dict:
+    topology = design.get("topology")
+    if not isinstance(topology, dict) or topology.get("type") != "mesh":
+        raise ValueError("RaveNoC adapter supports only topology.type = mesh")
+    rows = require_integer(topology, "rows", "/topology")
+    columns = require_integer(topology, "columns", "/topology")
+    if not (1 <= rows <= 16 and 1 <= columns <= 16) or (rows == 1 and columns == 1):
+        raise ValueError("RaveNoC requires a 1..16 rectangular Mesh with at least two Routers")
+    parameters = design.get("parameters")
+    if not isinstance(parameters, dict):
+        raise ValueError("/parameters must be an object")
+    flit_width = parameters.get("flitWidth")
+    if flit_width not in ("32", "64"):
+        raise ValueError("/parameters/flitWidth must be one of 32 or 64")
+    buffer_depth = require_integer(parameters, "bufferDepth", "/parameters")
+    if buffer_depth < 1 or buffer_depth & (buffer_depth - 1):
+        raise ValueError("/parameters/bufferDepth must be a positive power of two")
+    virtual_channels = require_integer(parameters, "virtualChannels", "/parameters")
+    if not 1 <= virtual_channels <= 32:
+        raise ValueError("/parameters/virtualChannels must be between 1 and 32")
+    max_packet = require_integer(parameters, "maxPacketFlits", "/parameters")
+    if max_packet < 1:
+        raise ValueError("/parameters/maxPacketFlits must be positive")
+    routing = parameters.get("routing")
+    if routing not in ("xy", "yx"):
+        raise ValueError("/parameters/routing must be xy or yx")
+    axi_cdc = require_bool(parameters, "axiCdc", "/parameters")
+    endpoints = design.get("endpoints")
+    if not isinstance(endpoints, list):
+        raise ValueError("/endpoints must be an array")
+    used_routers: set[tuple[int, int]] = set()
+    for endpoint in endpoints:
+        if not isinstance(endpoint, dict) or endpoint.get("type") != "axi4":
+            raise ValueError("RaveNoC accepts only axi4 Endpoint types")
+        position = router_key(endpoint)
+        if not (0 <= position[0] < columns and 0 <= position[1] < rows):
+            raise ValueError(f"endpoint {endpoint.get('id', '<unknown>')} attaches outside the Mesh")
+        if position in used_routers:
+            raise ValueError("RaveNoC exposes one AXI4 interface per Router")
+        used_routers.add(position)
+    design_id = design.get("id")
+    if not isinstance(design_id, str) or not HDL_IDENTIFIER.fullmatch(design_id):
+        raise ValueError("/id must be a Verilog identifier")
+    return {"rows": rows, "columns": columns, "flitWidth": int(flit_width),
+            "bufferDepth": buffer_depth, "virtualChannels": virtual_channels,
+            "maxPacketFlits": max_packet, "routing": routing, "axiCdc": axi_cdc,
+            "designId": design_id}
+
+
+def ravenoc_sources(vendor: Path) -> list[Path]:
+    core = vendor / "ravenoc.core"
+    if not core.is_file():
+        raise ValueError("vendored ravenoc.core is missing")
+    sources: list[Path] = []
+    in_rtl = False
+    for raw in core.read_text(encoding="utf-8").splitlines():
+        if raw.startswith("  rtl:"):
+            in_rtl = True
+            continue
+        if in_rtl and raw.startswith("  tb:"):
+            break
+        if in_rtl:
+            match = re.match(r"\s*-\s+([^:]+)", raw)
+            if match and match.group(1).endswith(".sv"):
+                source = vendor / match.group(1)
+                if not source.is_file():
+                    raise ValueError(f"vendored RaveNoC source is missing: {source.name}")
+                sources.append(source)
+    if not sources:
+        raise ValueError("ravenoc.core did not declare an RTL source set")
+    return sources
+
+
+def generate(output: Path, configuration: dict) -> list[dict]:
+    package_root = Path(__file__).resolve().parents[2]
+    vendor = package_root / "vendor" / "ravenoc"
+    source_list = ravenoc_sources(vendor)
+    output.mkdir(parents=True, exist_ok=True)
+    config_path = output / f"{configuration['designId']}_ravenoc_config.json"
+    filelist_path = output / f"{configuration['designId']}_ravenoc.f"
+    config_path.write_text(json.dumps(configuration, indent=2) + "\n", encoding="utf-8")
+    defines = [
+        f"+define+FLIT_DATA_WIDTH={configuration['flitWidth']}",
+        f"+define+FLIT_BUFF={configuration['bufferDepth']}",
+        f"+define+N_VIRT_CHN={configuration['virtualChannels']}",
+        f"+define+NOC_CFG_SZ_ROWS={configuration['rows']}",
+        f"+define+NOC_CFG_SZ_COLS={configuration['columns']}",
+        f"+define+ROUTING_ALG={'XYAlg' if configuration['routing'] == 'xy' else 'YXAlg'}",
+        f"+define+MAX_SZ_PKT={configuration['maxPacketFlits']}",
+        f"+define+AXI_CDC_REQ={'1' if configuration['axiCdc'] else '0'}",
+        f"+incdir+{vendor / 'src' / 'include'}",
+    ]
+    filelist_path.write_text("\n".join(defines + [str(source) for source in source_list]) + "\n",
+                            encoding="utf-8")
+    return [
+        {"id": "ravenoc-filelist", "type": "filelist", "path": filelist_path.name,
+         "primary": True},
+        {"id": "ravenoc-configuration", "type": "configuration", "path": config_path.name},
+    ]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", choices=("validate", "generate"))
+    parser.add_argument("--design", required=True)
+    parser.add_argument("--result", required=True)
+    parser.add_argument("--output")
+    args = parser.parse_args()
+    result = Path(args.result)
+    if args.command == "generate" and not args.output:
+        return fail("--output is required for generate", result)
+    try:
+        design = json.loads(Path(args.design).read_text(encoding="utf-8"))
+        if not isinstance(design, dict):
+            raise ValueError("design must be a JSON object")
+        configuration = validate_design(design)
+        artifacts = generate(Path(args.output), configuration) if args.command == "generate" else []
+        write_result(result, True, artifacts=artifacts)
+        return 0
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return fail(str(error), result)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

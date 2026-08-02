@@ -1,0 +1,32 @@
+{
+  "format": "finepaper.noc-package",
+  "formatVersion": 1,
+  "id": "org.opennoc.chi-mesh",
+  "name": "OpenNoC CHI Mesh",
+  "version": "4f57dda",
+  "mesh": {
+    "rows": { "min": 2, "max": 8, "default": 2 },
+    "columns": { "min": 2, "max": 8, "default": 2 }
+  },
+  "parameters": [
+    { "id": "reqFlitWidth", "label": "REQ flit width", "unit": "bits", "category": "CHI", "type": "integer", "default": 176, "minimum": 1, "maximum": 2048 },
+    { "id": "rspFlitWidth", "label": "RSP flit width", "unit": "bits", "category": "CHI", "type": "integer", "default": 64, "minimum": 1, "maximum": 2048 },
+    { "id": "datFlitWidth", "label": "DAT flit width", "unit": "bits", "category": "CHI", "type": "integer", "default": 256, "minimum": 1, "maximum": 4096 },
+    { "id": "snpFlitWidth", "label": "SNP flit width", "unit": "bits", "category": "CHI", "type": "integer", "default": 128, "minimum": 1, "maximum": 2048 }
+  ],
+  "endpointTypes": [
+    { "id": "rnf", "label": "RN-F", "parameters": [] },
+    { "id": "rni", "label": "RN-I", "parameters": [] },
+    { "id": "hnf", "label": "HN-F", "parameters": [] },
+    { "id": "hni", "label": "HN-I", "parameters": [] },
+    { "id": "snf", "label": "SN-F", "parameters": [] }
+  ],
+  "attachment": { "maxPerRouter": 2, "slotMode": "automatic" },
+  "generator": {
+    "name": "opennoc-chi-mesh-adapter",
+    "version": "4f57dda",
+    "executable": "runtime/bin/generate",
+    "supportsValidate": true,
+    "timeoutSeconds": 60
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "ravenoc_demo",
+  "name": "RaveNoC 2x2 demo",
+  "package": { "id": "org.ravenoc.mesh", "version": "1.0.1" },
+  "topology": { "type": "mesh", "rows": 2, "columns": 2 },
+  "endpoints": [
+    { "id": "cpu", "type": "axi4", "router": [0, 0] },
+    { "id": "memory", "type": "axi4", "router": [1, 1] }
+  ]
+}

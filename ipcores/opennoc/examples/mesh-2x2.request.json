@@ -1,0 +1,12 @@
+{
+  "id": "opennoc_demo",
+  "name": "OpenNoC CHI 2x2 demo",
+  "package": { "id": "org.opennoc.chi-mesh", "version": "4f57dda" },
+  "topology": { "type": "mesh", "rows": 2, "columns": 2 },
+  "endpoints": [
+    { "id": "cpu_cluster", "type": "rnf", "router": [0, 0] },
+    { "id": "io", "type": "hni", "router": [0, 1] },
+    { "id": "home", "type": "hnf", "router": [1, 0] },
+    { "id": "memory", "type": "snf", "router": [1, 1] }
+  ]
+}

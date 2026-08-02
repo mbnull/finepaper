@@ -1,0 +1,36 @@
+{
+  "format": "finepaper.noc-package",
+  "formatVersion": 1,
+  "id": "org.ravenoc.mesh",
+  "name": "RaveNoC Mesh",
+  "version": "1.0.1",
+  "mesh": {
+    "rows": { "min": 1, "max": 16, "default": 2 },
+    "columns": { "min": 1, "max": 16, "default": 2 }
+  },
+  "parameters": [
+    { "id": "flitWidth", "label": "Flit and AXI data width", "description": "RaveNoC uses one width for NoC flits and AXI data", "unit": "bits", "category": "Fabric", "type": "enum", "default": "32", "values": ["32", "64"] },
+    { "id": "bufferDepth", "label": "Virtual-channel buffer depth", "description": "Flits stored by every virtual-channel FIFO; must be a power of two", "unit": "flits", "category": "Buffers", "type": "integer", "default": 2, "minimum": 1, "maximum": 1024 },
+    { "id": "virtualChannels", "label": "Virtual channels", "description": "Independent wormhole flow-control channels per router port", "unit": "channels", "category": "Fabric", "type": "integer", "default": 3, "minimum": 1, "maximum": 32 },
+    { "id": "routing", "label": "Routing order", "description": "Dimension-order routing used by the RaveNoC router", "category": "Routing", "type": "enum", "default": "xy", "values": ["xy", "yx"] },
+    { "id": "maxPacketFlits", "label": "Maximum packet length", "description": "Maximum packet size accepted by the network interface", "unit": "flits", "category": "Buffers", "type": "integer", "default": 256, "minimum": 1, "maximum": 65536 },
+    { "id": "axiCdc", "label": "Enable AXI clock-domain crossing", "description": "Instantiate the vendor asynchronous FIFO between every AXI interface and the NoC clock", "category": "Clocking", "type": "boolean", "default": true }
+  ],
+  "endpointTypes": [
+    {
+      "id": "axi4",
+      "label": "AXI4 network interface",
+      "parameters": [
+        { "id": "addressWidth", "label": "Address width", "unit": "bits", "category": "AXI", "type": "integer", "default": 32, "minimum": 8, "maximum": 64 }
+      ]
+    }
+  ],
+  "attachment": { "maxPerRouter": 1, "slotMode": "automatic" },
+  "generator": {
+    "name": "ravenoc-mesh-adapter",
+    "version": "1.0.1",
+    "executable": "runtime/bin/generate",
+    "supportsValidate": true,
+    "timeoutSeconds": 60
+  }
+}
