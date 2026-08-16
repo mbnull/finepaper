@@ -437,11 +437,77 @@ QJsonObject artifactToJson(const Artifact& artifact) {
 
 PackageCatalogReloadResult FinepaperApplication::reloadPackages(
     const QStringList& roots) {
+    const std::lock_guard lock(*m_catalogMutex);
     return m_catalog.reload(roots);
 }
 
 const QVector<PackageDefinition>& FinepaperApplication::packages() const {
     return m_catalog.packages();
+}
+
+std::optional<PackageDefinition> FinepaperApplication::resolvePackage(
+    const PackageReference& reference) const {
+    const std::lock_guard lock(*m_catalogMutex);
+    return m_catalog.resolve(reference);
+}
+
+PackageCheckResult FinepaperApplication::checkPackage(
+    const QString& packageRoot,
+    const PackageCheckOptions& options) const {
+    PackageCheckResult result;
+    const PackageLoadResult loaded = loadPackage(packageRoot);
+    if (!loaded.success || !loaded.package) {
+        result.diagnostics = loaded.diagnostics;
+        return result;
+    }
+    result.package = *loaded.package;
+
+    FinepaperApplication conformanceApplication;
+    PackageCatalogReloadResult reload =
+        conformanceApplication.reloadPackages(QStringList{packageRoot});
+    result.diagnostics += reload.diagnostics;
+    if (!reload.committed()) {
+        return result;
+    }
+
+    const PackageDefinition& package = *result.package;
+    const DesignResult created = conformanceApplication.createDesign(
+        DesignCreationRequest{
+            QStringLiteral("Package check %1").arg(package.id),
+            PackageReference{package.id, package.version},
+            TopologySpec{
+                QStringLiteral("mesh"),
+                package.mesh.defaultRows,
+                package.mesh.defaultColumns}});
+    result.diagnostics += created.diagnostics;
+    if (!created.success) {
+        return result;
+    }
+
+    if (options.smokeGeneration) {
+        if (options.smokeOutputRoot.trimmed().isEmpty()) {
+            appendDiagnostic(
+                result.diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.check_output_required"),
+                QStringLiteral(
+                    "Package smoke generation requires an output root"),
+                QStringLiteral("/smokeOutputRoot"));
+            return result;
+        }
+        result.generation = conformanceApplication.generate(
+            created.design,
+            GenerationOptions{options.smokeOutputRoot});
+        result.diagnostics += result.generation->diagnostics;
+        result.success = result.generation->success;
+        return result;
+    }
+
+    result.validation = conformanceApplication.validate(
+        created.design, true);
+    result.diagnostics += result.validation->diagnostics;
+    result.success = result.validation->success;
+    return result;
 }
 
 DesignResult FinepaperApplication::createDesign(
@@ -496,7 +562,7 @@ DesignResult FinepaperApplication::createDesign(const QJsonObject& request) cons
     if (hasErrors(result.diagnostics)) {
         return result;
     }
-    const auto package = m_catalog.resolve(reference);
+    const auto package = resolvePackage(reference);
     if (!package) {
         appendDiagnostic(result.diagnostics,
                          QStringLiteral("error"),
@@ -756,7 +822,7 @@ DesignResult FinepaperApplication::validateEditedDesign(const NocDesign& design)
     DesignResult result;
     result.design = design;
     result.diagnostics = validateDesignStructure(design);
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         appendDiagnostic(result.diagnostics,
                          QStringLiteral("error"),
@@ -776,7 +842,7 @@ DesignResult FinepaperApplication::resizeMesh(
     int columns,
     const QVector<DomainMembership>& newRouterMemberships,
     const MeshResizeImpactConfirmation& confirmation) const {
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
@@ -804,7 +870,7 @@ DesignResult FinepaperApplication::addEndpoint(
     const QVector<DomainEdgeOverride>& attachmentOverrides,
     const QVector<ElementConfiguration>& attachmentConfigurations) const {
     endpoint.id = endpoint.id.trimmed();
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
@@ -969,7 +1035,7 @@ EndpointTypeChangePlan FinepaperApplication::planEndpointTypeChange(
     const QString& targetType,
     EndpointParameterMigration migration,
     const QJsonObject& parameterPatch) const {
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         EndpointTypeChangePlan plan;
         plan.endpointId = endpointId;
@@ -1020,7 +1086,7 @@ DesignResult FinepaperApplication::changeEndpointType(
     EndpointParameterMigration migration,
     const QJsonObject& parameterPatch,
     const EndpointTypeChangeImpactConfirmation& confirmation) const {
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
@@ -1069,7 +1135,7 @@ DesignResult FinepaperApplication::setDesignExtension(
     const NocDesign& design,
     const QString& extensionId,
     const QJsonValue& value) const {
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
@@ -1114,7 +1180,7 @@ DesignResult FinepaperApplication::setDesignExtension(
 DesignResult FinepaperApplication::removeDesignExtension(
     const NocDesign& design,
     const QString& extensionId) const {
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
@@ -1147,7 +1213,7 @@ DesignResult FinepaperApplication::setElementConfiguration(
     ElementRef element,
     const QString& propertySet,
     const QJsonObject& properties) const {
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
@@ -1168,7 +1234,7 @@ DesignResult FinepaperApplication::clearElementConfiguration(
     const NocDesign& design,
     ElementRef element,
     const QString& propertySet) const {
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
@@ -1209,7 +1275,7 @@ DesignResult FinepaperApplication::replaceDomainConfiguration(
 
 DesignResult FinepaperApplication::addDomain(const NocDesign& design,
                                               DomainDefinition domain) const {
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
@@ -1242,7 +1308,7 @@ DesignResult FinepaperApplication::updateDomain(const NocDesign& design,
 
 DesignResult FinepaperApplication::removeDomain(const NocDesign& design,
                                                  const QString& domainId) const {
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
@@ -1281,7 +1347,7 @@ DesignResult FinepaperApplication::patchDomainAssignments(
     const QVector<ElementRef>& elements,
     const QString& domainType,
     DomainAssignmentPatch patch) const {
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
@@ -1302,7 +1368,7 @@ DesignResult FinepaperApplication::clearDomainAssignment(
     const NocDesign& design,
     const QVector<ElementRef>& elements,
     const QString& domainType) const {
-    const auto package = m_catalog.resolve(design.package);
+    const auto package = resolvePackage(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
@@ -1708,6 +1774,17 @@ ValidationResult FinepaperApplication::validate(
     const NocDesign& design,
     bool includePackageValidation,
     const CancellationToken& cancellation) const {
+    const std::optional<PackageDefinition> package =
+        resolvePackage(design.package);
+    return validateWithPackage(
+        design, package, includePackageValidation, cancellation);
+}
+
+ValidationResult FinepaperApplication::validateWithPackage(
+    const NocDesign& design,
+    const std::optional<PackageDefinition>& package,
+    bool includePackageValidation,
+    const CancellationToken& cancellation) const {
     ValidationResult result;
     const auto finishCancelled = [&] {
         if (!appendCancellationIfRequested(
@@ -1732,7 +1809,6 @@ ValidationResult FinepaperApplication::validate(
     if (finishCancelled()) {
         return result;
     }
-    const auto package = m_catalog.resolve(design.package);
     if (!package) {
         appendDiagnostic(result.diagnostics,
                          QStringLiteral("error"),
@@ -1799,7 +1875,13 @@ GenerationResult FinepaperApplication::generate(
         return result;
     }
 
-    const ValidationResult validation = validate(design, true, cancellation);
+    // Resolve exactly once at operation start. The value copy is the immutable
+    // LoadedPackage for both validation and generation, even if a catalog
+    // reload commits while the Package validator is running.
+    const std::optional<PackageDefinition> package =
+        resolvePackage(design.package);
+    const ValidationResult validation = validateWithPackage(
+        design, package, true, cancellation);
     result.diagnostics = validation.diagnostics;
     result.cleanupUnresolved = validation.cleanupUnresolved;
     result.processCleanupUnresolved =
@@ -1815,13 +1897,8 @@ GenerationResult FinepaperApplication::generate(
     if (finishCancelled()) {
         return result;
     }
-    const auto package = m_catalog.resolve(design.package);
     if (!package) {
-        appendDiagnostic(result.diagnostics,
-                         QStringLiteral("error"),
-                         QStringLiteral("package.not_found"),
-                         QStringLiteral("design Package is not loaded"),
-                         QStringLiteral("/package"));
+        // validateWithPackage already reported the unresolved Package.
         return result;
     }
 

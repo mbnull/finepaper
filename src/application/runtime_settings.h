@@ -12,9 +12,18 @@ struct RuntimeLocations {
     QString defaultOutputRoot;
 };
 
+inline const QString installedPackageRootsSetting =
+    QStringLiteral("runtime/installedPackageRoots");
+
 RuntimeLocations resolveRuntimeLocations(
     const QStringList& explicitPackageRoots = {},
+    const QStringList& configuredPackageRoots = {},
     const QString& workingDirectory = QString());
+
+inline RuntimeLocations resolveRuntimeLocations(const QStringList& explicitPackageRoots,
+                                                const QString& workingDirectory) {
+    return resolveRuntimeLocations(explicitPackageRoots, {}, workingDirectory);
+}
 
 void appendPackageRoots(RuntimeLocations& locations,
                         const QStringList& additionalPackageRoots,

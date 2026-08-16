@@ -349,7 +349,6 @@ bool hasOnlyDomainConfigurationErrors(
 FinepaperMainWindow::FinepaperMainWindow(RuntimeLocations locations, QWidget* parent)
     : QMainWindow(parent),
       m_locations(std::move(locations)) {
-    loadInstalledPackageRoots();
     createUi();
     restoreWorkbenchState();
     reloadPackages();
@@ -2278,13 +2277,6 @@ void FinepaperMainWindow::closeEvent(QCloseEvent* event) {
     QMainWindow::closeEvent(event);
 }
 
-void FinepaperMainWindow::loadInstalledPackageRoots() {
-    QSettings settings;
-    appendPackageRoots(
-        m_locations,
-        settings.value(workbench::packageRootsSetting).toStringList());
-}
-
 void FinepaperMainWindow::reloadPackages() {
     if (m_operationBusy || m_processCleanupUnresolved) {
         return;
@@ -2559,7 +2551,7 @@ bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
     const QString selectedRoot =
         normalizedPackageRootPath(package.package->rootPath);
     const QStringList installed =
-        settings.value(workbench::packageRootsSetting).toStringList();
+        settings.value(installedPackageRootsSetting).toStringList();
     QStringList updatedInstalled;
     QSet<QString> seenRoots;
     for (const QString& installedRoot : installed) {
@@ -2575,7 +2567,7 @@ bool FinepaperMainWindow::installPackageDirectory(const QString& directory) {
     if (!seenRoots.contains(selectedRoot)) {
         updatedInstalled.append(selectedRoot);
     }
-    settings.setValue(workbench::packageRootsSetting, updatedInstalled);
+    settings.setValue(installedPackageRootsSetting, updatedInstalled);
 
     if (m_design) {
         refreshDesignViews();

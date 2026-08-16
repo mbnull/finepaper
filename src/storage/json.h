@@ -11,6 +11,8 @@
 
 namespace finepaper {
 
+inline constexpr qsizetype kMaximumDesignJsonBytes = 16 * 1024 * 1024;
+
 struct JsonObjectLoadResult {
     bool success = false;
     QJsonObject object;

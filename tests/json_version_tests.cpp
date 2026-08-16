@@ -2,7 +2,12 @@
 #include "storage/json.h"
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QTemporaryDir>
 #include <QTextStream>
 
 #include <algorithm>
@@ -37,6 +42,35 @@ bool hasDiagnostic(const QVector<Diagnostic>& diagnostics,
     return std::any_of(diagnostics.cbegin(), diagnostics.cend(), [&](const Diagnostic& diagnostic) {
         return diagnostic.code == code && (path.isEmpty() || diagnostic.path == path);
     });
+}
+
+bool writeBytes(const QString& path, const QByteArray& bytes) {
+    if (!QDir().mkpath(QFileInfo(path).absolutePath())) {
+        return false;
+    }
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        && file.write(bytes) == bytes.size();
+}
+
+QJsonObject withUnknownRecordField(QJsonObject document,
+                                   const QString& arrayField,
+                                   const QString& nestedObjectField = {}) {
+    QJsonArray records = document.value(arrayField).toArray();
+    if (records.isEmpty() || !records.at(0).isObject()) {
+        return document;
+    }
+    QJsonObject record = records.at(0).toObject();
+    if (nestedObjectField.isEmpty()) {
+        record.insert(QStringLiteral("futureField"), true);
+    } else {
+        QJsonObject nested = record.value(nestedObjectField).toObject();
+        nested.insert(QStringLiteral("futureField"), true);
+        record.insert(nestedObjectField, nested);
+    }
+    records[0] = record;
+    document.insert(arrayField, records);
+    return document;
 }
 
 NocDesign versionOneDesign() {
@@ -221,6 +255,35 @@ int main(int argc, char** argv) {
               QStringLiteral("V2 serialization is stable after a full round-trip"));
     }
 
+    for (const QString& field : QStringList{
+             QStringLiteral("domainRelations"),
+             QStringLiteral("crossingPolicies"),
+             QStringLiteral("edgeOverrides")}) {
+        const DesignLoadResult unknownRecord = designFromJson(
+            withUnknownRecordField(v2Json, field));
+        check(!unknownRecord.success
+                  && hasDiagnostic(
+                      unknownRecord.diagnostics,
+                      QStringLiteral("json.unknown_field"),
+                      QLatin1Char('/') + field
+                          + QStringLiteral("/0/futureField")),
+              QStringLiteral(
+                  "V2 rejects future fields in %1 records").arg(field));
+    }
+    const DesignLoadResult unknownOverrideElement = designFromJson(
+        withUnknownRecordField(
+            v2Json,
+            QStringLiteral("edgeOverrides"),
+            QStringLiteral("edge")));
+    check(!unknownOverrideElement.success
+              && hasDiagnostic(
+                  unknownOverrideElement.diagnostics,
+                  QStringLiteral("json.unknown_field"),
+                  QStringLiteral(
+                      "/edgeOverrides/0/edge/futureField")),
+          QStringLiteral(
+              "V2 rejects future fields in nested ElementRef records"));
+
     for (const QString& field : kDomainArrayFields) {
         QJsonObject incompleteV2 = v2Json;
         incompleteV2.remove(field);
@@ -263,6 +326,17 @@ int main(int argc, char** argv) {
         check(designToJson(v3Reloaded.design) == v3Json,
               QStringLiteral("V3 serialization is stable after a full round-trip"));
     }
+    const DesignLoadResult unknownElementConfiguration = designFromJson(
+        withUnknownRecordField(
+            v3Json, QStringLiteral("elementConfigurations")));
+    check(!unknownElementConfiguration.success
+              && hasDiagnostic(
+                  unknownElementConfiguration.diagnostics,
+                  QStringLiteral("json.unknown_field"),
+                  QStringLiteral(
+                      "/elementConfigurations/0/futureField")),
+          QStringLiteral(
+              "V3 rejects future fields in element configuration records"));
 
     QJsonObject missingV3ElementConfigurations = v3Json;
     missingV3ElementConfigurations.remove(kElementConfigurationsField);
@@ -294,6 +368,151 @@ int main(int argc, char** argv) {
                                QStringLiteral("design.unsupported_version"),
                                QStringLiteral("/formatVersion")),
           QStringLiteral("formatVersion 4 is rejected"));
+
+    QTemporaryDir resourceFixture(
+        QStringLiteral("/tmp/finepaper-design-json-budget-XXXXXX"));
+    check(resourceFixture.isValid(),
+          QStringLiteral("Design JSON resource fixture is available"));
+    if (resourceFixture.isValid()) {
+        const QString oversizedPath = QDir(resourceFixture.path()).filePath(
+            QStringLiteral("oversized.fpnoc"));
+        check(writeBytes(
+                  oversizedPath,
+                  QByteArray(kMaximumDesignJsonBytes + 1, 'x')),
+              QStringLiteral("oversized Design JSON fixture is writable"));
+        const DesignLoadResult oversized = loadDesign(oversizedPath);
+        check(!oversized.success
+                  && hasDiagnostic(
+                      oversized.diagnostics,
+                      QStringLiteral("json.document_too_large"),
+                      oversizedPath),
+              QStringLiteral(
+                  "Design JSON byte budget is enforced before parsing"));
+
+        QJsonArray excessiveItems;
+        for (int index = 0; index <= 65'536; ++index) {
+            excessiveItems.append(index);
+        }
+        const QString arrayPath = QDir(resourceFixture.path()).filePath(
+            QStringLiteral("array.fpnoc"));
+        check(writeBytes(
+                  arrayPath,
+                  QJsonDocument(QJsonObject{
+                      {QStringLiteral("value"), excessiveItems}})
+                      .toJson(QJsonDocument::Compact)),
+              QStringLiteral("oversized Design JSON array is writable"));
+        const DesignLoadResult excessiveArray = loadDesign(arrayPath);
+        check(!excessiveArray.success
+                  && hasDiagnostic(
+                      excessiveArray.diagnostics,
+                      QStringLiteral("json.array_too_large"),
+                      arrayPath + QStringLiteral("/value")),
+              QStringLiteral("Design JSON array budget is enforced"));
+
+        const QString stringPath = QDir(resourceFixture.path()).filePath(
+            QStringLiteral("string.fpnoc"));
+        check(writeBytes(
+                  stringPath,
+                  QJsonDocument(QJsonObject{
+                      {QStringLiteral("value"),
+                       QString(65'537, QLatin1Char('s'))}})
+                      .toJson(QJsonDocument::Compact)),
+              QStringLiteral("oversized Design JSON string is writable"));
+        const DesignLoadResult excessiveString = loadDesign(stringPath);
+        check(!excessiveString.success
+                  && hasDiagnostic(
+                      excessiveString.diagnostics,
+                      QStringLiteral("json.string_too_long"),
+                      stringPath + QStringLiteral("/value")),
+              QStringLiteral("Design JSON string budget is enforced"));
+
+        QByteArray deepJson("{\"value\":");
+        for (int index = 0; index < 65; ++index) {
+            deepJson.append('[');
+        }
+        deepJson.append("null");
+        for (int index = 0; index < 65; ++index) {
+            deepJson.append(']');
+        }
+        deepJson.append('}');
+        const QString depthPath = QDir(resourceFixture.path()).filePath(
+            QStringLiteral("depth.fpnoc"));
+        check(writeBytes(depthPath, deepJson),
+              QStringLiteral("deep Design JSON fixture is writable"));
+        const DesignLoadResult excessiveDepth = loadDesign(depthPath);
+        const QString depthPointer = QStringLiteral("/value")
+            + QStringLiteral("/0").repeated(64);
+        check(!excessiveDepth.success
+                  && hasDiagnostic(
+                      excessiveDepth.diagnostics,
+                      QStringLiteral("json.depth_exceeded"),
+                      depthPath + depthPointer),
+              QStringLiteral("Design JSON nesting budget is enforced"));
+
+        QJsonObject excessiveMembers;
+        for (int index = 0; index <= 65'536; ++index) {
+            excessiveMembers.insert(QStringLiteral("member%1").arg(index),
+                                    QJsonValue::Null);
+        }
+        const QString membersPath = QDir(resourceFixture.path()).filePath(
+            QStringLiteral("object-members.fpnoc"));
+        check(writeBytes(
+                  membersPath,
+                  QJsonDocument(QJsonObject{
+                      {QStringLiteral("value"), excessiveMembers}})
+                      .toJson(QJsonDocument::Compact)),
+              QStringLiteral("oversized Design JSON object fixture is writable"));
+        const DesignLoadResult excessiveMembersResult = loadDesign(membersPath);
+        check(!excessiveMembersResult.success
+                  && hasDiagnostic(excessiveMembersResult.diagnostics,
+                                   QStringLiteral("json.object_too_large"),
+                                   membersPath + QStringLiteral("/value")),
+              QStringLiteral("Design JSON object member budget is enforced"));
+
+        const QString longKey(4'097, QLatin1Char('k'));
+        const QString keyPath = QDir(resourceFixture.path()).filePath(
+            QStringLiteral("object-key.fpnoc"));
+        check(writeBytes(
+                  keyPath,
+                  QJsonDocument(QJsonObject{
+                      {QStringLiteral("value"),
+                       QJsonObject{{longKey, QJsonValue::Null}}}})
+                      .toJson(QJsonDocument::Compact)),
+              QStringLiteral("oversized Design JSON object key fixture is writable"));
+        const DesignLoadResult excessiveKey = loadDesign(keyPath);
+        check(!excessiveKey.success
+                  && hasDiagnostic(excessiveKey.diagnostics,
+                                   QStringLiteral("json.object_key_too_long"),
+                                   keyPath + QStringLiteral("/value/") + longKey),
+              QStringLiteral("Design JSON object key budget is enforced"));
+
+        QJsonObject valueBuckets;
+        for (int bucket = 0; bucket < 16; ++bucket) {
+            QJsonArray values;
+            for (int index = 0; index < 65'536; ++index) {
+                values.append(QJsonValue::Null);
+            }
+            valueBuckets.insert(
+                QStringLiteral("bucket%1")
+                    .arg(bucket, 2, 10, QLatin1Char('0')),
+                values);
+        }
+        const QString valuesPath = QDir(resourceFixture.path()).filePath(
+            QStringLiteral("value-budget.fpnoc"));
+        check(writeBytes(
+                  valuesPath,
+                  QJsonDocument(QJsonObject{
+                      {QStringLiteral("value"), valueBuckets}})
+                      .toJson(QJsonDocument::Compact)),
+              QStringLiteral("Design JSON value budget fixture is writable"));
+        const DesignLoadResult excessiveValues = loadDesign(valuesPath);
+        check(!excessiveValues.success
+                  && hasDiagnostic(excessiveValues.diagnostics,
+                                   QStringLiteral("json.value_budget_exceeded"),
+                                   valuesPath + QStringLiteral(
+                                       "/value/bucket15/16942")),
+              QStringLiteral("Design JSON total value budget is enforced"));
+    }
 
     if (failures == 0) {
         QTextStream(stdout) << "JSON version tests passed" << Qt::endl;

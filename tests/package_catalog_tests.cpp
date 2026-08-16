@@ -1,11 +1,14 @@
 #include "application/application.h"
+#include "package/package.h"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTextStream>
 
@@ -42,6 +45,31 @@ bool writeInvalidManifest(const QString& packageRoot) {
         return false;
     }
     return manifest.write(QJsonDocument(QJsonObject{}).toJson()) >= 0;
+}
+
+bool writeManifestBytes(const QString& packageRoot, const QByteArray& bytes) {
+    if (!QDir().mkpath(packageRoot)) {
+        return false;
+    }
+    QFile manifest(QDir(packageRoot).filePath(QStringLiteral("package.json")));
+    return manifest.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        && manifest.write(bytes) == bytes.size();
+}
+
+void checkManifestRejected(const QString& packageRoot,
+                           const QString& code,
+                           const QString& path,
+                           const QString& label) {
+    const PackageLoadResult result = loadPackage(packageRoot);
+    check(!result.success && hasDiagnosticCode(result.diagnostics, code), label);
+    if (!path.isEmpty()) {
+        check(std::any_of(result.diagnostics.cbegin(), result.diagnostics.cend(),
+                          [&](const Diagnostic& diagnostic) {
+                              return diagnostic.code == code
+                                  && diagnostic.path == path;
+                          }),
+              label + QStringLiteral(" (diagnostic path)"));
+    }
 }
 
 bool copyDirectory(const QString& sourcePath, const QString& destinationPath) {
@@ -195,6 +223,125 @@ int main(int argc, char** argv) {
               && !explicitClear.catalogFatal()
               && catalog.packages().isEmpty(),
           QStringLiteral("an empty roots list retains explicit catalog-clear semantics"));
+
+    QTemporaryDir resourceFixture(
+        QStringLiteral("/tmp/finepaper-manifest-resources-XXXXXX"));
+    const QString resourceRoot = resourceFixture.path();
+    check(resourceFixture.isValid(), QStringLiteral("manifest resource fixture is available"));
+    if (!resourceFixture.isValid()) {
+        return 1;
+    }
+    check(writeManifestBytes(
+              QDir(resourceRoot).filePath(QStringLiteral("too-large")),
+              QByteArray(kMaximumPackageManifestBytes + 1, 'x')),
+          QStringLiteral("oversized manifest fixture is writable"));
+    checkManifestRejected(
+        QDir(resourceRoot).filePath(QStringLiteral("too-large")),
+        QStringLiteral("package.manifest_too_large"),
+        QDir(resourceRoot).filePath(QStringLiteral("too-large/package.json")),
+        QStringLiteral("manifest byte budget is enforced before parsing"));
+
+    QJsonArray oversizedArray;
+    for (int index = 0; index <= 65'536; ++index) {
+        oversizedArray.append(index);
+    }
+    QJsonObject oversizedArrayObject;
+    oversizedArrayObject.insert(QStringLiteral("value"), oversizedArray);
+    check(writeManifestBytes(
+              QDir(resourceRoot).filePath(QStringLiteral("array")),
+              QJsonDocument(oversizedArrayObject).toJson()),
+          QStringLiteral("oversized array fixture is writable"));
+    checkManifestRejected(
+        QDir(resourceRoot).filePath(QStringLiteral("array")),
+        QStringLiteral("package.manifest_array_too_large"),
+        QStringLiteral("/value"),
+        QStringLiteral("manifest array budget is enforced"));
+
+    check(writeManifestBytes(
+              QDir(resourceRoot).filePath(QStringLiteral("string")),
+              QJsonDocument(QJsonObject{{QStringLiteral("value"),
+                                         QString(65'537, QLatin1Char('s'))}})
+                  .toJson()),
+          QStringLiteral("oversized string fixture is writable"));
+    checkManifestRejected(
+        QDir(resourceRoot).filePath(QStringLiteral("string")),
+        QStringLiteral("package.manifest_string_too_long"),
+        QStringLiteral("/value"),
+        QStringLiteral("manifest string budget is enforced"));
+
+    QByteArray deepManifest("{\"value\":");
+    for (int index = 0; index < 65; ++index) {
+        deepManifest.append('[');
+    }
+    deepManifest.append("null");
+    for (int index = 0; index < 65; ++index) {
+        deepManifest.append(']');
+    }
+    deepManifest.append("}");
+    check(writeManifestBytes(QDir(resourceRoot).filePath(QStringLiteral("depth")),
+                             deepManifest),
+          QStringLiteral("deep manifest fixture is writable"));
+    const QString depthPointer = QStringLiteral("/value")
+        + QStringLiteral("/0").repeated(64);
+    checkManifestRejected(
+        QDir(resourceRoot).filePath(QStringLiteral("depth")),
+        QStringLiteral("package.manifest_depth_exceeded"),
+        depthPointer,
+        QStringLiteral("manifest nesting budget is enforced"));
+
+    QJsonObject excessiveMembers;
+    for (int index = 0; index <= 65'536; ++index) {
+        excessiveMembers.insert(QStringLiteral("member%1").arg(index),
+                                QJsonValue::Null);
+    }
+    check(writeManifestBytes(
+              QDir(resourceRoot).filePath(QStringLiteral("object-members")),
+              QJsonDocument(QJsonObject{
+                  {QStringLiteral("value"), excessiveMembers}})
+                  .toJson(QJsonDocument::Compact)),
+          QStringLiteral("oversized manifest object fixture is writable"));
+    checkManifestRejected(
+        QDir(resourceRoot).filePath(QStringLiteral("object-members")),
+        QStringLiteral("package.manifest_object_too_large"),
+        QStringLiteral("/value"),
+        QStringLiteral("manifest object member budget is enforced"));
+
+    const QString longKey(4'097, QLatin1Char('k'));
+    check(writeManifestBytes(
+              QDir(resourceRoot).filePath(QStringLiteral("object-key")),
+              QJsonDocument(QJsonObject{
+                  {QStringLiteral("value"),
+                   QJsonObject{{longKey, QJsonValue::Null}}}})
+                  .toJson(QJsonDocument::Compact)),
+          QStringLiteral("oversized manifest object key fixture is writable"));
+    checkManifestRejected(
+        QDir(resourceRoot).filePath(QStringLiteral("object-key")),
+        QStringLiteral("package.manifest_object_key_too_long"),
+        QStringLiteral("/value/") + longKey,
+        QStringLiteral("manifest object key budget is enforced"));
+
+    QJsonObject valueBuckets;
+    for (int bucket = 0; bucket < 16; ++bucket) {
+        QJsonArray values;
+        for (int index = 0; index < 65'536; ++index) {
+            values.append(QJsonValue::Null);
+        }
+        valueBuckets.insert(
+            QStringLiteral("bucket%1")
+                .arg(bucket, 2, 10, QLatin1Char('0')),
+            values);
+    }
+    check(writeManifestBytes(
+              QDir(resourceRoot).filePath(QStringLiteral("value-budget")),
+              QJsonDocument(QJsonObject{
+                  {QStringLiteral("value"), valueBuckets}})
+                  .toJson(QJsonDocument::Compact)),
+          QStringLiteral("manifest value budget fixture is writable"));
+    checkManifestRejected(
+        QDir(resourceRoot).filePath(QStringLiteral("value-budget")),
+        QStringLiteral("package.manifest_value_budget_exceeded"),
+        QStringLiteral("/value/bucket15/16942"),
+        QStringLiteral("manifest total value budget is enforced"));
 
     if (failures == 0) {
         QTextStream(stdout) << "All Package catalog tests passed" << Qt::endl;

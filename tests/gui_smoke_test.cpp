@@ -203,9 +203,45 @@ void applyRequestedSmokePalette(QApplication& application,
         return;
     }
     if (theme != QStringLiteral("light")
-        && theme != QStringLiteral("dark")) {
+        && theme != QStringLiteral("dark")
+        && theme != QStringLiteral("high-contrast")) {
         check(false, QStringLiteral(
-            "FINEPAPER_GUI_SMOKE_THEME must be light or dark."));
+            "FINEPAPER_GUI_SMOKE_THEME must be light, dark, or high-contrast."));
+        return;
+    }
+
+    if (theme == QStringLiteral("high-contrast")) {
+        QPalette palette;
+        const QColor background(QStringLiteral("#000000"));
+        const QColor text(QStringLiteral("#ffffff"));
+        const QColor highlight(QStringLiteral("#ffff00"));
+        const QColor highlightedText(QStringLiteral("#000000"));
+        palette.setColor(QPalette::Window, background);
+        palette.setColor(QPalette::WindowText, text);
+        palette.setColor(QPalette::Base, background);
+        palette.setColor(QPalette::AlternateBase, QColor(QStringLiteral("#202020")));
+        palette.setColor(QPalette::ToolTipBase, background);
+        palette.setColor(QPalette::ToolTipText, text);
+        palette.setColor(QPalette::Text, text);
+        palette.setColor(QPalette::Button, QColor(QStringLiteral("#202020")));
+        palette.setColor(QPalette::ButtonText, text);
+        palette.setColor(QPalette::BrightText, highlight);
+        palette.setColor(QPalette::Highlight, highlight);
+        palette.setColor(QPalette::HighlightedText, highlightedText);
+        palette.setColor(QPalette::Link, highlight);
+        palette.setColor(QPalette::LinkVisited, highlight);
+        palette.setColor(QPalette::PlaceholderText, QColor(QStringLiteral("#d0d0d0")));
+        palette.setColor(QPalette::Disabled, QPalette::WindowText,
+                         QColor(QStringLiteral("#b0b0b0")));
+        palette.setColor(QPalette::Disabled, QPalette::Text,
+                         QColor(QStringLiteral("#b0b0b0")));
+        palette.setColor(QPalette::Disabled, QPalette::ButtonText,
+                         QColor(QStringLiteral("#b0b0b0")));
+        application.setPalette(palette);
+        check(finepaper::ui::contrastRatio(text, background) >= 7.0,
+              QStringLiteral("high-contrast body text and background are distinguishable"));
+        check(finepaper::ui::contrastRatio(highlight, highlightedText) >= 7.0,
+              QStringLiteral("high-contrast highlight and highlighted text are distinguishable"));
         return;
     }
 
@@ -258,6 +294,7 @@ QString smokeVariantName(const QString& requestedTheme,
                          double devicePixelRatio) {
     const QString theme = requestedTheme == QStringLiteral("light")
             || requestedTheme == QStringLiteral("dark")
+            || requestedTheme == QStringLiteral("high-contrast")
         ? requestedTheme : QStringLiteral("system");
     return QStringLiteral("%1_%2x%3_font%4_dpr%5")
         .arg(theme)

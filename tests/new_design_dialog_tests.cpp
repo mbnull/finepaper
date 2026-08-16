@@ -157,7 +157,7 @@ void packageProjectionAndTypedDraftRoundTrip() {
     package.name = QStringLiteral("Projection Test");
     package.mesh = MeshDefinition{1, 6, 2, 2, 7, 3};
     package.endpointTypes = {
-        EndpointTypeDefinition{QStringLiteral("io"), QStringLiteral("I/O")}};
+        EndpointTypeDefinition{QStringLiteral("io-%2"), QStringLiteral("I/O %2")}};
     DomainTypeDefinition customDomain;
     customDomain.id = QStringLiteral("thermal-zone");
     customDomain.label = QStringLiteral("Thermal zone");
@@ -174,7 +174,7 @@ void packageProjectionAndTypedDraftRoundTrip() {
               && projected.defaultTopology.rows == 2
               && projected.defaultTopology.columns == 3
               && projected.endpointTypes
-                     == QStringList{QStringLiteral("I/O (io)")}
+                     == QStringList{QStringLiteral("I/O %2 (io-%2)")}
               && projected.domainTypeCount == 7
               && projected.domainTypes.size() == 4
               && projected.domainTypes.constFirst()
@@ -191,6 +191,19 @@ void packageProjectionAndTypedDraftRoundTrip() {
                      QStringLiteral("Extra domain 4")),
           QStringLiteral(
               "large Package capability lists use a bounded preview with an exact remaining count"));
+
+    DesignCreationPackageOption previewOption = projected;
+    previewOption.endpointTypes = {
+        QStringLiteral("Capability %2"), QStringLiteral("Second capability")};
+    previewOption.endpointTypeCount = 3;
+    NewDesignDialog previewDialog(
+        {previewOption}, previewOption.key(), QStringLiteral("Text preview"));
+    auto* previewDetails = previewDialog.findChild<QLabel*>(
+        QStringLiteral("finepaper.newDesignPackageDetails"));
+    check(previewDetails
+              && previewDetails->text().contains(
+                     QStringLiteral("Endpoint types: Capability %2, Second capability (+1 more)")),
+          QStringLiteral("external percent placeholders remain literal in capability previews"));
 }
 
 void packageSwitchPreservesIndependentTopologyDrafts() {

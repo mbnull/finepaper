@@ -1,4 +1,5 @@
 #include "storage/json.h"
+#include "storage/json_resource_limits.h"
 
 #include <QDir>
 #include <QFile>
@@ -24,6 +25,20 @@ void appendError(QVector<Diagnostic>& diagnostics,
         path,
         QStringLiteral("storage")
     });
+}
+
+void rejectUnknownFields(const QJsonObject& object,
+                         const QStringList& allowed,
+                         const QString& path,
+                         QVector<Diagnostic>& diagnostics) {
+    for (const QString& key : object.keys()) {
+        if (!allowed.contains(key)) {
+            appendError(diagnostics,
+                        QStringLiteral("json.unknown_field"),
+                        QStringLiteral("unknown field %1").arg(key),
+                        path + QLatin1Char('/') + jsonPointerToken(key));
+        }
+    }
 }
 
 QString stringValue(const QJsonObject& object,
@@ -100,6 +115,10 @@ std::optional<ElementRef> elementRefFromJson(
         return std::nullopt;
     }
     const QJsonObject object = value.toObject();
+    rejectUnknownFields(object,
+                        {QStringLiteral("kind"), QStringLiteral("id")},
+                        path,
+                        diagnostics);
     const QString kindId = stringValue(
         object, QStringLiteral("kind"), path, diagnostics);
     const ElementKind kind = elementKindFromId(kindId);
@@ -406,13 +425,40 @@ JsonObjectLoadResult loadJsonObject(const QString& path) {
                     path);
         return result;
     }
+    if (file.size() > kMaximumDesignJsonBytes) {
+        appendError(result.diagnostics,
+                    QStringLiteral("json.document_too_large"),
+                    QStringLiteral("JSON document exceeds %1 bytes")
+                        .arg(kMaximumDesignJsonBytes),
+                    path);
+        return result;
+    }
+    const QByteArray bytes = file.read(kMaximumDesignJsonBytes + 1);
+    if (bytes.size() > kMaximumDesignJsonBytes || !file.atEnd()) {
+        appendError(result.diagnostics,
+                    QStringLiteral("json.document_too_large"),
+                    QStringLiteral("JSON document exceeds %1 bytes")
+                        .arg(kMaximumDesignJsonBytes),
+                    path);
+        return result;
+    }
     QJsonParseError error;
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &error);
+    const QJsonDocument document = QJsonDocument::fromJson(bytes, &error);
     if (error.error != QJsonParseError::NoError || !document.isObject()) {
         appendError(result.diagnostics,
                     QStringLiteral("json.parse_failed"),
                     error.errorString(),
                     path);
+        return result;
+    }
+    if (const auto violation = firstJsonResourceViolation(QJsonValue(document.object()))) {
+        appendError(result.diagnostics,
+                    QStringLiteral("json.%1")
+                        .arg(jsonResourceViolationCode(violation->kind)),
+                    jsonResourceViolationMessage(*violation),
+                    path + (violation->pointer.isEmpty()
+                                ? QString()
+                                : violation->pointer));
         return result;
     }
     result.success = true;
@@ -480,6 +526,12 @@ ElementConfigurationsParseResult parseElementConfigurations(
         }
         const QJsonObject configurationObject =
             configurations.at(index).toObject();
+        rejectUnknownFields(configurationObject,
+                            {QStringLiteral("element"),
+                             QStringLiteral("propertySet"),
+                             QStringLiteral("properties")},
+                            base,
+                            result.diagnostics);
         ElementConfiguration configuration;
         if (const auto element = elementRefFromJson(
                 configurationObject.value(QStringLiteral("element")),
@@ -947,6 +999,11 @@ DesignLoadResult designFromJson(const QJsonObject& object) {
                 continue;
             }
             const QJsonObject relationObject = relations->at(index).toObject();
+            rejectUnknownFields(relationObject,
+                                {QStringLiteral("type"), QStringLiteral("from"),
+                                 QStringLiteral("to"), QStringLiteral("properties")},
+                                base,
+                                result.diagnostics);
             design.domainRelations.append(DomainRelation{
                 stringValue(relationObject,
                             QStringLiteral("type"),
@@ -980,6 +1037,12 @@ DesignLoadResult designFromJson(const QJsonObject& object) {
                 continue;
             }
             const QJsonObject policyObject = policies->at(index).toObject();
+            rejectUnknownFields(policyObject,
+                                {QStringLiteral("id"), QStringLiteral("domainType"),
+                                 QStringLiteral("from"), QStringLiteral("to"),
+                                 QStringLiteral("properties")},
+                                base,
+                                result.diagnostics);
             design.crossingPolicies.append(DomainCrossingPolicy{
                 stringValue(policyObject,
                             QStringLiteral("id"),
@@ -1017,6 +1080,11 @@ DesignLoadResult designFromJson(const QJsonObject& object) {
                 continue;
             }
             const QJsonObject overrideObject = edgeOverrides->at(index).toObject();
+            rejectUnknownFields(overrideObject,
+                                {QStringLiteral("edge"), QStringLiteral("domainType"),
+                                 QStringLiteral("policy"), QStringLiteral("properties")},
+                                base,
+                                result.diagnostics);
             DomainEdgeOverride edgeOverride;
             if (const auto edge = elementRefFromJson(
                     overrideObject.value(QStringLiteral("edge")),

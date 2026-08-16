@@ -1,6 +1,7 @@
 #include "package/package.h"
 
 #include "package/design_extension_schema.h"
+#include "storage/json_resource_limits.h"
 
 #include <QDir>
 #include <QFile>
@@ -45,14 +46,43 @@ std::optional<QJsonObject> readObject(const QString& path, QVector<Diagnostic>& 
                          path);
         return std::nullopt;
     }
+    if (file.size() > kMaximumPackageManifestBytes) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.manifest_too_large"),
+                         QStringLiteral("manifest exceeds the %1-byte limit")
+                             .arg(kMaximumPackageManifestBytes),
+                         path);
+        return std::nullopt;
+    }
+    const QByteArray bytes = file.read(kMaximumPackageManifestBytes + 1);
+    if (bytes.size() > kMaximumPackageManifestBytes || !file.atEnd()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.manifest_too_large"),
+                         QStringLiteral("manifest exceeds the %1-byte limit")
+                             .arg(kMaximumPackageManifestBytes),
+                         path);
+        return std::nullopt;
+    }
     QJsonParseError error;
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &error);
+    const QJsonDocument document = QJsonDocument::fromJson(bytes, &error);
     if (error.error != QJsonParseError::NoError || !document.isObject()) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("error"),
                          QStringLiteral("package.invalid_json"),
                          error.errorString(),
                          path);
+        return std::nullopt;
+    }
+    if (const auto violation = firstJsonResourceViolation(QJsonValue(document.object()))) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.manifest_%1")
+                             .arg(jsonResourceViolationCode(violation->kind)),
+                         jsonResourceViolationMessage(*violation),
+                         violation->pointer.isEmpty() ? QStringLiteral("/")
+                                                      : violation->pointer);
         return std::nullopt;
     }
     return document.object();

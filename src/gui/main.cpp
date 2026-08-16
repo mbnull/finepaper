@@ -2,6 +2,7 @@
 #include "ui/theme/workbench_style.h"
 
 #include <QApplication>
+#include <QSettings>
 
 namespace {
 
@@ -22,8 +23,11 @@ int main(int argc, char** argv) {
     QCoreApplication::setOrganizationName(QStringLiteral("Finepaper"));
     QCoreApplication::setApplicationName(QStringLiteral("finepaper"));
     finepaper::ui::applyWorkbenchStyle(application);
+    const QStringList configuredPackageRoots = QSettings().value(
+        finepaper::installedPackageRootsSetting).toStringList();
     finepaper::FinepaperMainWindow window(
-        finepaper::resolveRuntimeLocations(explicitPackageRoots(QCoreApplication::arguments())));
+        finepaper::resolveRuntimeLocations(
+            explicitPackageRoots(QCoreApplication::arguments()), configuredPackageRoots));
     window.show();
     return application.exec();
 }

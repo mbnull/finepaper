@@ -23,6 +23,7 @@ inline constexpr int
 inline constexpr int kMaximumDesignExtensionDomainReferencePointerTokens = 64;
 inline constexpr int kMaximumDesignExtensionSchemaBytes = 1 * 1024 * 1024;
 inline constexpr int kMaximumDesignExtensionSchemaTotalBytes = 8 * 1024 * 1024;
+inline constexpr qsizetype kMaximumPackageManifestBytes = 8 * 1024 * 1024;
 inline constexpr int kMinimumPackageFormatVersion = 1;
 inline constexpr int kMaximumPackageFormatVersion = 3;
 

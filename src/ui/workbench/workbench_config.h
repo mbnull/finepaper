@@ -1,5 +1,7 @@
 #pragma once
 
+#include "application/runtime_settings.h"
+
 #include <QString>
 
 namespace finepaper::workbench {
@@ -13,7 +15,7 @@ inline constexpr int minimumCanvasTextLines = 7;
 
 inline const QString endpointTypeMime = QStringLiteral("application/x-finepaper-noc-endpoint-type");
 
-inline const QString packageRootsSetting = QStringLiteral("runtime/installedPackageRoots");
+inline const QString& packageRootsSetting = finepaper::installedPackageRootsSetting;
 inline const QString geometrySetting = QStringLiteral("workbench/geometry");
 inline const QString windowStateSetting = QStringLiteral("workbench/windowState");
 inline const QString panelVisibilitySetting =

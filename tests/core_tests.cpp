@@ -1038,19 +1038,50 @@ int main(int argc, char** argv) {
     }
 #endif
 
+    QTemporaryDir runtimeRoots(QStringLiteral("/tmp/finepaper-runtime-roots-XXXXXX"));
+    const QByteArray previousPackagePath = qgetenv("FINEPAPER_PACKAGE_PATH");
+    if (runtimeRoots.isValid()) {
+        const QDir rootsDirectory(runtimeRoots.path());
+        rootsDirectory.mkpath(QStringLiteral("explicit"));
+        rootsDirectory.mkpath(QStringLiteral("configured"));
+        rootsDirectory.mkpath(QStringLiteral("environment"));
+        rootsDirectory.mkpath(QStringLiteral("fallback"));
+        qputenv("FINEPAPER_PACKAGE_PATH",
+                 rootsDirectory.filePath(QStringLiteral("environment")).toUtf8());
+        const QString explicitRoot = rootsDirectory.filePath(QStringLiteral("explicit"));
+        const QString configuredRoot = rootsDirectory.filePath(QStringLiteral("configured"));
+        const RuntimeLocations locations = resolveRuntimeLocations(
+            QStringList{explicitRoot, explicitRoot + QStringLiteral("/.")},
+            QStringList{configuredRoot}, runtimeRoots.path());
+        const QStringList roots = locations.packageRoots;
+        check(roots.size() >= 6 && roots.at(0) == QFileInfo(explicitRoot).canonicalFilePath()
+                  && roots.at(1) == QFileInfo(configuredRoot).canonicalFilePath()
+                  && roots.at(2) == QFileInfo(rootsDirectory.filePath(
+                      QStringLiteral("environment"))).canonicalFilePath(),
+              QStringLiteral("runtime Package roots merge in source order with canonical deduplication"));
+        check(roots.contains(QDir(QCoreApplication::applicationDirPath()).filePath(
+                  QStringLiteral("../share/finepaper/packages")))
+                  || roots.contains(QFileInfo(QDir(QCoreApplication::applicationDirPath()).filePath(
+                      QStringLiteral("../share/finepaper/packages"))).absoluteFilePath()),
+              QStringLiteral("runtime resolver includes application share Package fallback"));
+        RuntimeLocations installedLocations = locations;
+        const QString fixtureRoot = QDir(projectRoot).filePath(QStringLiteral("tests/fixtures"));
+        appendPackageRoots(installedLocations, QStringList{fixtureRoot, fixtureRoot}, projectRoot);
+        check(installedLocations.packageRoots.size() == locations.packageRoots.size() + 1,
+              QStringLiteral("manually added Package roots merge centrally without duplicates"));
+    }
+    if (previousPackagePath.isNull()) {
+        qunsetenv("FINEPAPER_PACKAGE_PATH");
+    } else {
+        qputenv("FINEPAPER_PACKAGE_PATH", previousPackagePath);
+    }
     const RuntimeLocations locations = resolveRuntimeLocations(
         QStringList{QDir(projectRoot).filePath(QStringLiteral("packages"))}, projectRoot);
-    check(locations.packageRoots == QStringList{QDir(projectRoot).filePath(QStringLiteral("packages"))},
+    check(locations.packageRoots.first() == QFileInfo(QDir(projectRoot).filePath(
+              QStringLiteral("packages"))).canonicalFilePath(),
           QStringLiteral("explicit Package roots use the shared runtime resolver"));
     check(locations.defaultOutputRoot == QDir(projectRoot).filePath(QStringLiteral("output")),
           QStringLiteral("default output root comes from the shared runtime resolver"));
-    RuntimeLocations installedLocations = locations;
-    const QString fixtureRoot = QDir(projectRoot).filePath(QStringLiteral("tests/fixtures"));
-    appendPackageRoots(installedLocations, QStringList{fixtureRoot, fixtureRoot}, projectRoot);
-    check(installedLocations.packageRoots.size() == 2 &&
-              installedLocations.packageRoots.contains(fixtureRoot),
-          QStringLiteral("manually added Package roots merge centrally without duplicates"));
-
     FinepaperApplication finepaper;
     const QString bundledPackageRoot = QDir(projectRoot).filePath(
         QStringLiteral("packages"));

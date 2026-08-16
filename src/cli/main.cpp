@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcessEnvironment>
+#include <QSettings>
 #include <QTextStream>
 
 #include <algorithm>
@@ -50,7 +51,11 @@ bool hasOption(const QStringList& arguments, const QString& option) {
 }
 
 QStringList packageRoots(const QStringList& arguments) {
-    return resolveRuntimeLocations(optionValues(arguments, QStringLiteral("--package-root"))).packageRoots;
+    const QStringList configuredRoots = QSettings().value(
+        installedPackageRootsSetting).toStringList();
+    return resolveRuntimeLocations(
+        optionValues(arguments, QStringLiteral("--package-root")),
+        configuredRoots).packageRoots;
 }
 
 void printJson(const QJsonObject& object) {
@@ -118,7 +123,7 @@ void printUsage() {
         << "Finepaper runtime NoC tool\n\n"
         << "Commands:\n"
         << "  finepaper package list [--package-root PATH] [--json]\n"
-        << "  finepaper package check PACKAGE_PATH [--json]\n"
+        << "  finepaper package check PACKAGE_PATH [--smoke-generate --output ROOT] [--json]\n"
         << "  finepaper design create --input REQUEST --output DESIGN [--package-root PATH] [--json]\n"
         << "  finepaper design validate DESIGN [--package-root PATH] [--json]\n"
         << "  finepaper design generate DESIGN --output ROOT [--result FILE] [--package-root PATH] [--json]\n"
@@ -145,18 +150,42 @@ int packageCommand(const QStringList& arguments) {
             printUsage();
             return kInputError;
         }
-        const PackageLoadResult result = loadPackage(arguments.at(3));
-        const QJsonObject output{
+        const bool smokeGeneration = hasOption(
+            arguments, QStringLiteral("--smoke-generate"));
+        const QString smokeOutputRoot = optionValue(
+            arguments, QStringLiteral("--output"));
+        if (smokeGeneration && smokeOutputRoot.isEmpty()) {
+            printUsage();
+            return kInputError;
+        }
+        FinepaperApplication application;
+        const PackageCheckResult result = application.checkPackage(
+            arguments.at(3),
+            PackageCheckOptions{smokeGeneration, smokeOutputRoot});
+        QJsonObject output{
             {QStringLiteral("success"), result.success},
             {QStringLiteral("package"),
              result.package ? packageToJson(*result.package) : QJsonObject()},
+            {QStringLiteral("smokeGenerationRequested"), smokeGeneration},
             {QStringLiteral("diagnostics"), diagnosticsToJson(result.diagnostics)}
         };
+        if (result.validation) {
+            output.insert(
+                QStringLiteral("validation"),
+                validationResultToJson(*result.validation));
+        }
+        if (result.generation) {
+            output.insert(
+                QStringLiteral("generation"),
+                generationResultToJson(*result.generation));
+        }
         if (hasOption(arguments, QStringLiteral("--json"))) {
             printJson(output);
         } else {
             printDiagnostics(result.diagnostics);
-            QTextStream(stdout) << (result.success ? "Package is valid" : "Package is invalid")
+            QTextStream(stdout) << (result.success
+                                      ? "Package conformance check passed"
+                                      : "Package conformance check failed")
                                 << Qt::endl;
         }
         return result.success ? kSuccess : kPackageError;
@@ -416,6 +445,7 @@ int runCommand(const QStringList& arguments) {
 
 int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
+    QCoreApplication::setOrganizationName(QStringLiteral("Finepaper"));
     QCoreApplication::setApplicationName(QStringLiteral("finepaper"));
     const QStringList arguments = QCoreApplication::arguments();
     if (arguments.size() < 2 ||

@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.3'
+          host: 'linux'
+          target: 'desktop'
+          arch: 'linux_gcc_64'
+          modules: 'qtwaylandcompositor'
+          cache: true
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '2.9.9'
+      - name: Install native GUI and RTL tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ruby-full verilator weston
+      - name: Require toolchain
+        run: |
+          ruby --version
+          verilator --version
+          weston --version
+          xmake --version
+      - name: Build and run the complete xmake test suite
+        run: xmake test -vD -g test -j 4
+      - name: Run V1 legacy generator regression
+        run: ruby packages/finepaper-noc/runtime/legacy-generator/test/test_generator.rb
+      - name: Run V3 runtime regression
+        run: xmake test -vD 'finepaper-v3-runtime-tests/*'
+      - name: Run V1/V3 generator sync regression target
+        run: xmake test -vD 'finepaper-legacy-generator-sync-tests/*'
+      - name: Build GUI smoke test
+        run: xmake build -vD finepaper-gui-smoke
+      - name: Run native Wayland GUI smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/gui-smoke/{normal,maximized,high-contrast}
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/wayland-runtime"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          export WAYLAND_DISPLAY=wayland-99
+          weston --backend=headless-backend.so \
+            --socket="$WAYLAND_DISPLAY" \
+            --idle-time=0 \
+            --log="$RUNNER_TEMP/weston.log" &
+          weston_pid=$!
+          trap 'kill "$weston_pid" 2>/dev/null || true; wait "$weston_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 50); do
+            test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" && break
+            sleep 0.1
+          done
+          test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+          export QT_QPA_PLATFORM=wayland
+          export FINEPAPER_GUI_SMOKE_REQUIRE_PLATFORM=wayland
+          export FINEPAPER_GUI_SMOKE_SCREENSHOT_DIR="$PWD/artifacts/gui-smoke/normal"
+          xmake run -vD finepaper-gui-smoke
+          export FINEPAPER_GUI_SMOKE_MAXIMIZED=1
+          export FINEPAPER_GUI_SMOKE_SCREENSHOT_DIR="$PWD/artifacts/gui-smoke/maximized"
+          xmake run -vD finepaper-gui-smoke
+          unset FINEPAPER_GUI_SMOKE_MAXIMIZED
+          export FINEPAPER_GUI_SMOKE_THEME=high-contrast
+          export FINEPAPER_GUI_SMOKE_SCREENSHOT_DIR="$PWD/artifacts/gui-smoke/high-contrast"
+          xmake run -vD finepaper-gui-smoke
+          for dir in artifacts/gui-smoke/normal artifacts/gui-smoke/maximized artifacts/gui-smoke/high-contrast; do
+            test -n "$(find "$dir" -type f -name '*.png' -size +0c -print -quit)"
+          done
+      - name: Upload GUI screenshots and Weston log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-smoke-artifacts
+          path: |
+            artifacts/gui-smoke
+            ${{ runner.temp }}/weston.log
+          if-no-files-found: error

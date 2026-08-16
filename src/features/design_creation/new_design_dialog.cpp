@@ -26,7 +26,7 @@ QString definitionDisplayText(const QString& id, const QString& label) {
     if (normalizedLabel.isEmpty() || normalizedLabel == id) {
         return id;
     }
-    return QStringLiteral("%1 (%2)").arg(normalizedLabel).arg(id);
+    return QStringLiteral("%1 (%2)").arg(normalizedLabel, id);
 }
 
 template <typename Definition>
@@ -67,7 +67,8 @@ QString capabilityListText(const QStringList& values, qsizetype declaredCount) {
     }
     const qsizetype remaining = totalCount - previewCount;
     return remaining > 0
-        ? QStringLiteral("%1 (+%2 more)").arg(preview).arg(remaining)
+        ? QStringLiteral("%1 (+%2 more)")
+              .arg(preview, QString::number(remaining))
         : preview;
 }
 

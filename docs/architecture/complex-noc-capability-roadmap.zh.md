@@ -41,19 +41,21 @@ Router 不开放为自由图节点。当前产品边界继续固定为矩形 Mes
 | Clock Domain RTL | **已闭环（当前 V3 Package 范围）** | Package mapping、逐 Domain clock、本地 reset release、双向 async ready/valid FIFO、结构/仿真及 implementation evidence 已存在 | 扩展 recipe 时仍要求逐项 hierarchy evidence |
 | Power Domain / Power Intent | **已有通用模型，Runtime 未完整物化** | 已有 Power Type、Package-owned extension/compiler、UPF/plan/evidence；组合 CDC+Power 边、基础设施供电归属、安全关断和 power-aware routing 仍明确 deferred | 补充基础设施 ownership、组合边 lowering、关断/连通性证明和 EDA 语义验证回执 |
 | DTC、DN、security、voltage 等自定义 Domain | **已有通用模型，Runtime 未物化** | 通用模型和 UI 可承载任意名称；当前 bundled Runtime 没有这些产品的完整 mapping/renderer | 每个 Package 显式声明 realization 与 Engine DRC；未映射必须失败，不能静默忽略 |
-| Router/Link 局部实现参数 | **已有通用模型，Runtime 未完整物化** | V3 `elementPropertySets` 和 sparse override 已有；当前 Router forwarding shell 会读取部分配置，但不构成完整 routing/VC NoC | 建立资源、pipeline、VC、route 的真实 RTL 与证据闭环 |
+| Router/Link 局部实现参数 | **已有通用模型，Runtime 未完整物化** | bundled V3 的 `elementPropertySets` 和 sparse override 已有；bundled V3 Router forwarding shell 会读取部分配置，但不构成完整 routing/VC NoC。该判断只约束 bundled V3，不外推到 `ipcores/ravenoc/opennoc` 或其他参考 IP、Package | 建立资源、pipeline、VC、route 的真实 RTL 与证据闭环 |
 | global → node type → node instance → interface 的分层参数 | **缺失** | 当前全局、Endpoint 和 element schema 分属不同平面，尚无继承、override 来源、依赖条件与批量矩阵的统一契约 | 先定义层级、优先级、effective value 与来源追踪，再做通用表格编辑器 |
 | 异构 node type、固定端口与嵌套 interface/adapter | **缺失** | Endpoint type 只能覆盖基础端点实例；尚不能表达 CMN 一类 HNF/RND/HND/CCG 及其 p0/p1、ADB/CAL 等组合 | Package 声明 node/interface taxonomy；实例只能挂到 Mesh 固定 attachment 位，不开放 Router rewiring |
-| 地址区域、SAM、目标 ID 与路由表 | **缺失** | `addrWidth` 或 `routingAlgorithm` 只是参数，不是地址/路由语义模型；当前 RTL 也明确不是完整 routing 实现 | 建立 typed region/target/map、重叠与覆盖 DRC、确定性 route/SAM artifact 和可追溯 ID map |
+| 地址区域、SAM、目标 ID 与路由表 | **缺失** | 在 bundled V3 中，`addrWidth` 或 `routingAlgorithm` 只是参数，不是地址/路由语义模型；bundled V3 RTL 也明确不是完整 routing 实现。该判断只约束 bundled V3，不外推到 `ipcores/ravenoc/opennoc` 或其他参考 IP、Package | 建立 typed region/target/map、重叠与覆盖 DRC、确定性 route/SAM artifact 和可追溯 ID map |
 | 协议适配与接口协商 | **缺失** | 当前 `protocol=axi4` 和 NI shell 不足以表达 CHI/AXI/CXL 等接口层级、能力协商和 adapter 参数 | 由 Package 声明 interface profile/adapter，Engine 负责兼容性 DRC 和 RTL lowering |
 | QoS/MPAM 与 Security 策略 | **已有通用模型，Runtime 未完整物化（仅载体）** | Endpoint QoS 开关、Domain/extension 可保存部分意图，但没有端到端资源分配、策略冲突 DRC 或完整硬件证据 | 建立 Package-owned typed policy、跨 node 约束、寄存器/RTL 映射与场景验证 |
 | Debug、PMU、Trace | **缺失** | 仓库中存在未启用 trace stub，不等于可配置、可路由、可验证的观测子系统 | 定义事件源、计数器/过滤器、trace route、寄存器和软件可见 artifact |
-| RTL 与 Domain/Power 证据 artifact | **已闭环（已声明范围）** | 当前 V3 可输出 RTL、constraints、implementation plan/evidence、Power artifacts，且 deferred 不冒充完成 | 把同一 receipt 纪律推广到后续复杂能力 |
-| 配置/寄存器、IP-XACT、filelist、ID/address 文档、testbench/UVM/MBIST 等交付 | **缺失** | 参考 IP 展示了完整 collateral 族；Finepaper 当前 artifact 框架能承载，但 bundled Package 未形成相应生成契约 | 先版本化 artifact type/manifest，再由 Package/Engine 分阶段生成与验收 |
+| RTL 与 Domain/Power 证据 artifact | **已闭环（bundled V3 已声明范围）** | bundled V3 已生成 RTL 与 `filelist.f`，并可输出 constraints、implementation plan/evidence、Power artifacts；deferred 不冒充完成 | 把同一 receipt 纪律推广到后续复杂能力 |
+| 配置/寄存器、IP-XACT、ID/address 文档、testbench/UVM/MBIST 等交付 | **缺失** | 参考 IP 展示了完整 collateral 族；bundled V3 虽已生成 RTL 与 `filelist.f`，但配置/寄存器、IP-XACT、ID/address 文档、testbench/UVM/MBIST 尚未形成相应生成与验收契约 | 先版本化 artifact type/manifest，再由 Package/Engine 分阶段生成与验收 |
 
 ## 4. Application “全是硬编码”的实情
 
-`src/application/application.cpp` 当前约 1600 行，观感上的主要问题是**职责集中**，并不是大量厂商语义已经写进 Application。
+`src/application/application.cpp` 在整改前审计为 2087 行；加入 Package conformance
+门面、单次操作固定 Package 快照与 reload 同步后，截至 2026-08-16 为 2164 行。观感上的主要
+问题是**职责集中**，并不是大量厂商语义已经写进 Application。
 
 已经 Package-driven 的内容包括 Mesh 尺寸范围与默认值、全局参数、Endpoint 类型与参数、attachment 容量/slot、Domain schema、element property set、design extension schema、Runtime capability 以及 Generator/Engine 元数据。只读搜索没有发现 Application 根据 `clock`、`power` 或某个 Package ID 改变行为的产品分支。
 
@@ -102,7 +104,7 @@ src/execution/package_operations/     validate/generate runner + receipt
 
 1. 建立 address region、target、ID map、SAM/routing policy 的 typed schema。
 2. 形成覆盖/重叠/不可达/容量 DRC，以及确定性 route/SAM/ID artifacts。
-3. 只有真实 RTL、配置和验证证据齐全后，才把 Router routing/VC 标记为完成。
+3. 只有真实 RTL、配置和验证证据齐全后，才把 bundled V3 的 Router routing/VC 标记为完成。
 
 ### P4：协议、QoS/Security 与可观测性
 

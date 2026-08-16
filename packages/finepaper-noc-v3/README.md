@@ -47,8 +47,10 @@ topology fixed to a rectangular Mesh.
 - Endpoint parameters remain owned by each Endpoint instance. Their labels,
   descriptions, units, categories, and advanced flags are declared by this
   Package so generic editors do not need to recognize parameter ids.
-- The shared generator maps the Router property set into the legacy RTL
-  generator and consumes the materialized Endpoint parameter values.
+- This self-contained runtime maps the Router property set into its legacy RTL
+  generator and consumes the materialized Endpoint parameter values. Its base
+  generator components are byte-synchronized with V1 by a repository gate;
+  V3 semantic extensions and dedicated stubs remain Package-local.
 - Runtime validation strictly parses Domain instances, memberships, relations,
   crossing policies, and edge overrides. Every actual Package-defined Domain
   crossing derived from the rectangular Mesh must resolve to one canonically

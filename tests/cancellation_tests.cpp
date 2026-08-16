@@ -213,6 +213,72 @@ std::thread cancelWhenFileExists(const QString& marker,
     });
 }
 
+bool waitForFile(const QString& path, qint64 timeoutMilliseconds = 3000) {
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < timeoutMilliseconds) {
+        if (QFileInfo::exists(path)) {
+            return true;
+        }
+        QThread::msleep(5);
+    }
+    return QFileInfo::exists(path);
+}
+
+bool prepareSnapshotPackage(const QString& packageRoot,
+                            const QByteArray& variant,
+                            bool holdValidation) {
+    QJsonObject manifest = cancellationPackageManifest();
+    manifest.insert(
+        QStringLiteral("id"), QStringLiteral("test.package-snapshot"));
+    manifest.insert(
+        QStringLiteral("name"), QStringLiteral("Package Snapshot Test"));
+    QJsonObject generator = manifest.value(
+        QStringLiteral("generator")).toObject();
+    generator.insert(
+        QStringLiteral("name"),
+        QStringLiteral("snapshot-%1").arg(QString::fromLatin1(variant)));
+    manifest.insert(QStringLiteral("generator"), generator);
+
+    QByteArray script = R"SCRIPT(#!/bin/sh
+operation="$1"
+shift
+result=""
+output=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --result) result="$2"; shift 2 ;;
+        --output) output="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+package_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+if [ "$operation" = "validate" ]; then
+    : > "$package_root/validate.started"
+    if [ -f "$package_root/hold-validation" ]; then
+        while [ ! -f "$package_root/release-validation" ]; do
+            sleep 0.01
+        done
+    fi
+    printf '%s\n' '{"success":true,"diagnostics":[]}' > "$result"
+    exit 0
+fi
+mkdir -p "$output"
+printf '%s\n' '// snapshot __VARIANT__' > "$output/__VARIANT__.sv"
+printf '%s\n' '{"success":true,"diagnostics":[],"artifacts":[{"id":"rtl-__VARIANT__","type":"rtl","path":"__VARIANT__.sv","primary":true}]}' > "$result"
+)SCRIPT";
+    script.replace("__VARIANT__", variant);
+    const QString executable = QDir(packageRoot).filePath(
+        QStringLiteral("runtime/bin/generate"));
+    return writeExecutable(executable, script)
+        && saveJsonObject(
+            QDir(packageRoot).filePath(QStringLiteral("package.json")),
+            manifest)
+        && (!holdValidation
+            || createEmptyFile(QDir(packageRoot).filePath(
+                QStringLiteral("hold-validation"))));
+}
+
 void verifyProcessCancellation() {
     const CancellationToken inertToken;
     check(!inertToken.isCancellationRequested(),
@@ -925,6 +991,85 @@ void verifyApplicationCancellation() {
               "generation JSON serializes an unresolved process cleanup explicitly"));
 }
 
+void verifyOperationPackageSnapshot() {
+    QTemporaryDir oldPackage(
+        QStringLiteral("/tmp/finepaper-snapshot-old-XXXXXX"));
+    QTemporaryDir newPackage(
+        QStringLiteral("/tmp/finepaper-snapshot-new-XXXXXX"));
+    QTemporaryDir output(
+        QStringLiteral("/tmp/finepaper-snapshot-output-XXXXXX"));
+    check(oldPackage.isValid() && newPackage.isValid() && output.isValid()
+              && prepareSnapshotPackage(
+                  oldPackage.path(), QByteArray("old"), true)
+              && prepareSnapshotPackage(
+                  newPackage.path(), QByteArray("new"), false),
+          QStringLiteral("old and new Package snapshot fixtures are available"));
+    if (!oldPackage.isValid() || !newPackage.isValid()
+        || !output.isValid()) {
+        return;
+    }
+
+    FinepaperApplication application;
+    const PackageCatalogReloadResult oldReload = application.reloadPackages(
+        QStringList{oldPackage.path()});
+    QJsonObject request = cancellationDesignRequest();
+    request.insert(
+        QStringLiteral("package"),
+        QJsonObject{
+            {QStringLiteral("id"),
+             QStringLiteral("test.package-snapshot")},
+            {QStringLiteral("version"), QStringLiteral("1.0.0")}
+        });
+    const DesignResult created = application.createDesign(request);
+    check(oldReload.committed() && created.success,
+          QStringLiteral("the old Package snapshot creates a design"));
+    if (!oldReload.committed() || !created.success) {
+        return;
+    }
+
+    std::optional<GenerationResult> generation;
+    std::thread generationThread([&] {
+        generation = application.generate(
+            created.design, GenerationOptions{output.path()});
+    });
+
+    const QString validationStarted = QDir(oldPackage.path()).filePath(
+        QStringLiteral("validate.started"));
+    const bool validationObserved = waitForFile(validationStarted);
+    PackageCatalogReloadResult newReload;
+    if (validationObserved) {
+        // The operation has already resolved and entered the old validator.
+        // Reload completes before validation is released, so any later catalog
+        // resolve would deterministically observe the new Package.
+        newReload = application.reloadPackages(
+            QStringList{newPackage.path()});
+    }
+    const bool validationReleased = createEmptyFile(
+        QDir(oldPackage.path()).filePath(
+            QStringLiteral("release-validation")));
+    generationThread.join();
+
+    check(validationObserved && validationReleased
+              && newReload.committed(),
+          QStringLiteral(
+              "catalog reload commits while old Package validation is paused"));
+    check(generation && generation->success && generation->tool
+              && generation->tool->name == QStringLiteral("snapshot-old")
+              && generation->artifacts.size() == 1
+              && generation->artifacts.constFirst().path
+                     == QStringLiteral("old.sv")
+              && readFile(QDir(generation->outputDirectory).filePath(
+                     QStringLiteral("old.sv")))
+                     == QByteArray("// snapshot old\n"),
+          QStringLiteral(
+              "one generate operation validates and generates with the same LoadedPackage snapshot"));
+    check(application.packages().size() == 1
+              && application.packages().constFirst().generator.name
+                     == QStringLiteral("snapshot-new"),
+          QStringLiteral(
+              "the committed reload is visible to operations started afterwards"));
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -933,6 +1078,7 @@ int main(int argc, char** argv) {
 #ifdef Q_OS_UNIX
     verifyProcessCancellation();
     verifyApplicationCancellation();
+    verifyOperationPackageSnapshot();
 #else
     QTextStream(stdout)
         << "finepaper-cancellation-tests: process-tree checks require Unix"

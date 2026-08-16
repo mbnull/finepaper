@@ -157,6 +157,68 @@ int main(int argc, char** argv) {
     if (!temporaryDirectory.isValid()) {
         return 1;
     }
+    // CLI intentionally consumes the same installed-Package user setting as
+    // the GUI. Keep this process-level integration test independent of the
+    // developer account that launches it.
+    qputenv("XDG_CONFIG_HOME", temporaryDirectory.path().toUtf8());
+
+    const QString conformancePackage = QDir(projectRoot).filePath(
+        QStringLiteral("tests/fixtures/complex-engine"));
+    const CommandResult packageCheckResult = runCommand(
+        executable,
+        QStringList{
+            QStringLiteral("package"),
+            QStringLiteral("check"),
+            conformancePackage,
+            QStringLiteral("--json")
+        });
+    const QJsonObject packageCheck = parseJsonOutput(
+        packageCheckResult, QStringLiteral("Package conformance validation"));
+    check(packageCheckResult.started && packageCheckResult.finished
+              && packageCheckResult.exitStatus == QProcess::NormalExit
+              && packageCheckResult.exitCode == 0
+              && packageCheck.value(QStringLiteral("success")).toBool()
+              && packageCheck.value(QStringLiteral("validation"))
+                     .toObject().value(QStringLiteral("success")).toBool()
+              && hasDiagnosticCode(
+                  packageCheck, QStringLiteral("mock.engine_used")),
+          QStringLiteral(
+              "package check enters FinepaperApplication and runs the minimal Package validator"));
+
+    const QString smokeOutput = QDir(temporaryDirectory.path()).filePath(
+        QStringLiteral("package-check-smoke"));
+    const CommandResult packageSmokeResult = runCommand(
+        executable,
+        QStringList{
+            QStringLiteral("package"),
+            QStringLiteral("check"),
+            conformancePackage,
+            QStringLiteral("--smoke-generate"),
+            QStringLiteral("--output"),
+            smokeOutput,
+            QStringLiteral("--json")
+        });
+    const QJsonObject packageSmoke = parseJsonOutput(
+        packageSmokeResult, QStringLiteral("Package smoke generation"));
+    const QJsonObject smokeGeneration = packageSmoke.value(
+        QStringLiteral("generation")).toObject();
+    const QJsonArray smokeArtifacts = smokeGeneration.value(
+        QStringLiteral("artifacts")).toArray();
+    check(packageSmokeResult.started && packageSmokeResult.finished
+              && packageSmokeResult.exitStatus == QProcess::NormalExit
+              && packageSmokeResult.exitCode == 0
+              && packageSmoke.value(QStringLiteral("success")).toBool()
+              && smokeGeneration.value(QStringLiteral("success")).toBool()
+              && smokeArtifacts.size() == 1
+              && hasDiagnosticCode(
+                  packageSmoke, QStringLiteral("mock.engine_used"))
+              && hasDiagnosticCode(
+                  packageSmoke, QStringLiteral("mock.generator_used"))
+              && QFileInfo(smokeGeneration.value(
+                     QStringLiteral("outputDirectory")).toString()
+                         + QStringLiteral("/complex_top.sv")).isFile(),
+          QStringLiteral(
+              "package check optionally smoke-generates and validates its result and artifact paths"));
 
     const QString missingPackageRoot = QDir(temporaryDirectory.path()).filePath(
         QStringLiteral("missing-package-root"));

@@ -1,5 +1,6 @@
 #include "application/runtime_settings.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QSet>
@@ -8,7 +9,10 @@ namespace finepaper {
 namespace {
 
 QString normalizedPath(const QDir& workingDirectory, const QString& path) {
-    return QDir::cleanPath(workingDirectory.absoluteFilePath(path));
+    const QString absolutePath = QDir::cleanPath(
+        workingDirectory.absoluteFilePath(path));
+    const QString canonicalPath = QFileInfo(absolutePath).canonicalFilePath();
+    return canonicalPath.isEmpty() ? absolutePath : canonicalPath;
 }
 
 QStringList normalizedPaths(const QStringList& paths, const QDir& workingDirectory) {
@@ -30,21 +34,26 @@ QStringList normalizedPaths(const QStringList& paths, const QDir& workingDirecto
 } // namespace
 
 RuntimeLocations resolveRuntimeLocations(const QStringList& explicitPackageRoots,
+                                         const QStringList& configuredPackageRoots,
                                          const QString& workingDirectory) {
     const QString basePath = workingDirectory.isEmpty()
         ? QDir::currentPath()
         : QFileInfo(workingDirectory).absoluteFilePath();
     const QDir baseDirectory(basePath);
     RuntimeLocations locations;
-    locations.packageRoots = normalizedPaths(explicitPackageRoots, baseDirectory);
-    if (locations.packageRoots.isEmpty()) {
-        const QString environmentRoots = qEnvironmentVariable("FINEPAPER_PACKAGE_PATH");
-        locations.packageRoots = normalizedPaths(
-            environmentRoots.split(QDir::listSeparator(), Qt::SkipEmptyParts), baseDirectory);
-    }
-    if (locations.packageRoots.isEmpty()) {
-        locations.packageRoots.append(baseDirectory.filePath(QStringLiteral("packages")));
-    }
+    const QString environmentRoots = qEnvironmentVariable("FINEPAPER_PACKAGE_PATH");
+    const QString applicationDirectory = QCoreApplication::applicationDirPath();
+    const QDir applicationRoot(applicationDirectory);
+    const QStringList defaultRoots{
+        applicationRoot.filePath(QStringLiteral("packages")),
+        applicationRoot.filePath(QStringLiteral("../share/finepaper/packages")),
+        baseDirectory.filePath(QStringLiteral("packages")),
+    };
+    locations.packageRoots = normalizedPaths(
+        explicitPackageRoots + configuredPackageRoots
+            + environmentRoots.split(QDir::listSeparator(), Qt::SkipEmptyParts)
+            + defaultRoots,
+        baseDirectory);
     locations.defaultOutputRoot = baseDirectory.filePath(QStringLiteral("output"));
     return locations;
 }

@@ -19,6 +19,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include <memory>
+#include <mutex>
 #include <optional>
 
 namespace finepaper {
@@ -66,10 +68,26 @@ struct GenerationResult {
     QStringList retainedRuntimePaths;
 };
 
+struct PackageCheckOptions {
+    bool smokeGeneration = false;
+    QString smokeOutputRoot;
+};
+
+struct PackageCheckResult {
+    bool success = false;
+    std::optional<PackageDefinition> package = std::nullopt;
+    std::optional<ValidationResult> validation = std::nullopt;
+    std::optional<GenerationResult> generation = std::nullopt;
+    QVector<Diagnostic> diagnostics;
+};
+
 class FinepaperApplication {
 public:
     PackageCatalogReloadResult reloadPackages(const QStringList& roots);
     const QVector<PackageDefinition>& packages() const;
+    PackageCheckResult checkPackage(
+        const QString& packageRoot,
+        const PackageCheckOptions& options = {}) const;
 
     DesignResult createDesign(const DesignCreationRequest& request) const;
     DesignResult createDesign(const QJsonObject& request) const;
@@ -179,7 +197,19 @@ private:
         const NocDesign& design,
         const PackageDefinition& package,
         const CancellationToken& cancellation) const;
+    ValidationResult validateWithPackage(
+        const NocDesign& design,
+        const std::optional<PackageDefinition>& package,
+        bool includePackageValidation,
+        const CancellationToken& cancellation) const;
+    std::optional<PackageDefinition> resolvePackage(
+        const PackageReference& reference) const;
 
+    // Application copies intentionally share this narrow catalog gate. That
+    // preserves the existing copyable snapshot workflow while making a reload
+    // on the same instance synchronize with an operation's initial resolve.
+    mutable std::shared_ptr<std::mutex> m_catalogMutex =
+        std::make_shared<std::mutex>();
     PackageCatalog m_catalog;
 };
 

@@ -122,7 +122,6 @@ private:
     [[nodiscard]] int preferredResultsDockHeight() const;
     void resetWorkbenchLayout();
     void restoreWorkbenchState();
-    void loadInstalledPackageRoots();
     void reloadPackages();
     void installPackage();
     RuntimePackageRefreshResult refreshRuntimePackageAvailability(
